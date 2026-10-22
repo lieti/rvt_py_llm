@@ -557,6 +557,134 @@ def horizon_shift_vector(num_directions=16,
     return shift
 
 
+# Number of output-window elements processed at once by the horizon scan (keeps the per-direction buffers in cache).
+_SVF_BLOCK_ELEMS = 32768
+
+
+def _svf_window_ok(height, radius_max, move):
+    """True if np.roll of the padded `height` by every shift in `move` never wraps on the output window."""
+    if height.ndim != 2 or radius_max < 1 or len(move) == 0:
+        return False
+    if height.shape[0] <= 2 * radius_max or height.shape[1] <= 2 * radius_max:
+        return False
+    for direction in move:
+        distance = move[direction]["distance"]
+        if not isinstance(distance, np.ndarray) or distance.dtype != np.float64:
+            return False
+        if len(distance) == 0 or len(move[direction]["shift"]) != len(distance):
+            return False
+        for dy, dx in move[direction]["shift"]:
+            if abs(int(dy)) > radius_max or abs(int(dx)) > radius_max:
+                return False
+    return True
+
+
+def _svf_accumulate(acc, term):
+    """acc + term; in place when acc (a private array) already has the promoted dtype."""
+    if acc.dtype == np.result_type(acc.dtype, term.dtype):
+        return np.add(acc, term, out=acc)
+    return acc + term
+
+
+def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, compute_opns, compute_asvf,
+                        a_main_direction, a_poly_level, a_min_weight):
+    """
+    Horizon scan of sky_view_factor_compute evaluated only on the output window, in blocks of rows.
+
+    Per pixel the arithmetic is that of the full-extent loop: (shifted - height) / radius with the np.float64
+    radius, np.fmax with the float32 -1000 start, np.arctan, then per direction svf + (1 - sin(fmax(angle, 0))),
+    asvf + (1 - sin(fmax(angle, 0))) * weight[i_dir], opns + angle, starting from height * 0. Pixels are
+    independent, so the window is processed in row blocks.
+    """
+    r = radius_max
+    n_rows = height.shape[0] - 2 * r
+    n_cols = height.shape[1] - 2 * r
+
+    if compute_asvf:
+        w_m = a_min_weight
+        w_a = np.deg2rad(a_main_direction)
+        weight = np.arange(num_directions) * (2 * np.pi / num_directions)
+        weight = (1 - w_m) * (np.cos((weight - w_a) / 2)) ** a_poly_level + w_m
+    else:
+        weight = None
+
+    # Per direction: (dy, dx, radius) with the np.float64 radius element of the distance array
+    scan = [[(int(dy), int(dx), radius) for (dy, dx), radius in zip(move[direction]["shift"],
+                                                                    move[direction]["distance"])]
+            for direction in move]
+
+    svf_win = asvf_win = opns_win = None
+    block_rows = max(1, _SVF_BLOCK_ELEMS // max(1, n_cols))
+    for r0 in range(0, n_rows, block_rows):
+        r1 = min(n_rows, r0 + block_rows)
+        h_blk = height[r + r0:r + r1, r:r + n_cols]
+
+        svf_blk = h_blk * 0 if compute_svf else None
+        asvf_blk = h_blk * 0 if compute_asvf else None
+        opns_blk = h_blk * 0 if compute_opns else None
+
+        d_buf = q_buf = None
+        for i_dir, steps in enumerate(scan):
+            max_slope = np.zeros(h_blk.shape, dtype=np.float32) - 1000
+            for i_rad, (dy, dx, radius) in enumerate(steps):
+                # np.roll(height, (dy, dx))[i, j] == height[i - dy, j - dx] (no wrap on the window)
+                shifted = height[r + r0 - dy:r + r1 - dy, r - dx:r - dx + n_cols]
+                if d_buf is None:
+                    # First step of the block: let numpy promote (float32 difference, / np.float64 radius)
+                    d_buf = shifted - h_blk
+                    q_buf = d_buf / radius
+                else:
+                    # Same operand dtypes as the first step (all radii are np.float64), so the same loops run
+                    np.subtract(shifted, h_blk, out=d_buf)
+                    np.divide(d_buf, radius, out=q_buf)
+                if i_rad == 0:
+                    # float32 -1000 start promoted with the slope dtype, as in the full-extent loop
+                    max_slope = np.fmax(max_slope, q_buf)
+                else:
+                    # max_slope already has the promoted dtype, so the in-place fmax is the same operation
+                    np.fmax(max_slope, q_buf, out=max_slope)
+
+            # Convert to angle in radians
+            max_slope = np.arctan(max_slope)
+
+            if compute_svf or compute_asvf:
+                # 1 - sin(fmax(angle, 0)), computed once and used for svf and asvf
+                term = 1 - np.sin(np.fmax(max_slope, 0))
+                if compute_svf:
+                    svf_blk = _svf_accumulate(svf_blk, term)
+                if compute_asvf:
+                    asvf_blk = _svf_accumulate(asvf_blk, term * weight[i_dir])
+            if compute_opns:
+                opns_blk = _svf_accumulate(opns_blk, max_slope)
+
+        if compute_svf:
+            if svf_win is None:
+                svf_win = np.empty((n_rows, n_cols), dtype=svf_blk.dtype)
+            svf_win[r0:r1] = svf_blk
+        if compute_asvf:
+            if asvf_win is None:
+                asvf_win = np.empty((n_rows, n_cols), dtype=asvf_blk.dtype)
+            asvf_win[r0:r1] = asvf_blk
+        if compute_opns:
+            if opns_win is None:
+                opns_win = np.empty((n_rows, n_cols), dtype=opns_blk.dtype)
+            opns_win[r0:r1] = opns_blk
+
+    # Average the directional output over all directions (same expressions as the full-extent path)
+    svf_out = asvf_out = opns_out = None
+    if compute_svf:
+        svf_out = svf_win / num_directions
+    if compute_asvf:
+        asvf_out = asvf_win / np.sum(weight)
+    if compute_opns:
+        opns_out = np.rad2deg(0.5 * np.pi - (opns_win / num_directions))
+
+    dict_svf_asvf_opns = {"svf": svf_out, "asvf": asvf_out, "opns": opns_out}
+    dict_svf_asvf_opns = {k: v for k, v in dict_svf_asvf_opns.items() if v is not None}  # filter out none
+
+    return dict_svf_asvf_opns
+
+
 def sky_view_factor_compute(height_arr,
                             radius_max=10,
                             radius_min=1,
@@ -618,6 +746,13 @@ def sky_view_factor_compute(height_arr,
 
     # Compute the vector of movement and corresponding distances
     move = horizon_shift_vector(num_directions=num_directions, radius_pixels=radius_max, min_radius=radius_min)
+
+    # Fast path: only the output window (the padded array without its radius_max border) is computed. On that
+    # window np.roll never wraps when every shift satisfies |dy|, |dx| <= radius_max, so the rolled array equals a
+    # slice of the padded array there. Otherwise the original full-extent loop below runs.
+    if _svf_window_ok(height, radius_max, move):
+        return _svf_compute_window(height, radius_max, move, num_directions, compute_svf, compute_opns,
+                                   compute_asvf, a_main_direction, a_poly_level, a_min_weight)
 
     # Initiate the output for SVF
     if compute_svf:
