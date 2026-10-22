@@ -1487,7 +1487,7 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
 
     # This outputs float64, which is by design. Change final array to float32 at the end of the function (at return)
     dem_i1 = integral_image(dem_pad)
-    dem_i2 = integral_image(dem_pad ** 2)
+    dem_i2 = integral_image(dem_pad.astype(np.float64) ** 2)
 
     for kernel_radius in range(minimum_radius, maximum_radius + 1, step):
         dev = topographic_dev(dem_pad, dem_i_nr_pixels, dem_i1, dem_i2, kernel_radius)[
