@@ -1050,6 +1050,52 @@ def horizon_generate_pyramids(dem,
     return pyramid
 
 
+def _sky_illum_iadd(acc, term):
+    # acc + term, in place when the promoted dtype equals acc.dtype (same values as acc + term)
+    if np.result_type(acc, term) == acc.dtype:
+        return np.add(acc, term, out=acc)
+    return acc + term
+
+
+def _sky_illum_level_search(height, move, direction, max_slope, inner):
+    # Horizon search of one pyramid level and direction; same arithmetic as
+    #     max_slope = np.maximum(max_slope,
+    #                            np.maximum((np.roll(height, s, axis=(0, 1)) - height) / radius, 0.))
+    # inner=None: full array, np.roll semantics (wrapped values included).
+    # inner=p: only height[p:-p, p:-p] (max_slope has that shape); requires |shift| <= p,
+    # so the shifted window stays inside height and no wrapped value is used.
+    n0, n1 = height.shape
+    if inner is None:
+        out_shape = (n0, n1)
+    else:
+        out_shape = (n0 - 2 * inner, n1 - 2 * inner)
+    diff = np.empty(out_shape, dtype=height.dtype)
+    quot = None
+    for i_rad, radius in enumerate(move[direction]["distance"]):
+        dy, dx = move[direction]["shift"][i_rad]
+        if inner is None:
+            # diff = np.roll(height, (dy, dx), axis=(0, 1)) - height, by blocks
+            dy = int(dy) % n0
+            dx = int(dx) % n1
+            for o0, s0 in ((slice(dy, None), slice(0, n0 - dy)), (slice(0, dy), slice(n0 - dy, None))):
+                for o1, s1 in ((slice(dx, None), slice(0, n1 - dx)), (slice(0, dx), slice(n1 - dx, None))):
+                    np.subtract(height[s0, s1], height[o0, o1], out=diff[o0, o1])
+        else:
+            p = inner
+            np.subtract(height[p - dy:n0 - p - dy, p - dx:n1 - p - dx], height[p:n0 - p, p:n1 - p], out=diff)
+        q_dtype = np.result_type(diff, radius)
+        if q_dtype == diff.dtype:
+            quot = diff
+        elif quot is None or quot.dtype != q_dtype:
+            quot = np.empty(out_shape, dtype=q_dtype)
+        np.divide(diff, radius, out=quot)
+        np.maximum(quot, 0., out=quot)
+        if np.result_type(max_slope, quot) != max_slope.dtype:
+            max_slope = max_slope.astype(np.result_type(max_slope, quot))
+        np.maximum(max_slope, quot, out=max_slope)
+    return max_slope
+
+
 def sky_illumination(dem,
                      resolution,
                      sky_model="overcast",
@@ -1146,15 +1192,28 @@ def sky_illumination(dem,
     # directional halve-resolution for integration limits
     da = np.pi / num_directions
 
+    # Level 0 is searched only on the unpadded extent (the padding is cropped from every output and
+    # nothing tile-wide is taken before the crop). With |shift| <= max_pyramid_radius the shifted
+    # windows stay inside the padded level-0 DEM, so np.roll never wraps there. Coarser levels are
+    # searched on their full extent with np.roll semantics, because the spline reads all of them.
+    pm = max_pyramid_radius
+    shift0 = pyramid[0]["shift"]
+    inner0 = all(abs(int(s[0])) <= pm and abs(int(s[1])) <= pm for d in shift0 for s in shift0[d]["shift"])
+    p_in = pm if inner0 else None
+    if inner0:
+        work_shape = (pyramid[0]["dem"].shape[0] - 2 * pm, pyramid[0]["dem"].shape[1] - 2 * pm)
+        slope = slope[pm:-pm, pm:-pm]
+        aspect = aspect[pm:-pm, pm:-pm]
+    else:
+        work_shape = pyramid[0]["dem"].shape
+
     # init the intermediate results for uniform SI
-    uniform_a = np.zeros((dem.shape[0] + 2 * max_pyramid_radius, dem.shape[1] + 2 * max_pyramid_radius),
-                         dtype=np.float32)
+    uniform_a = np.zeros(work_shape, dtype=np.float32)
     uniform_b = np.copy(uniform_a)
     # init the output for overcast SI
     if compute_overcast:
         overcast_out = np.zeros(dem.shape, dtype=np.float32)
-        overcast_c = np.zeros((dem.shape[0] + 2 * max_pyramid_radius, dem.shape[1] + 2 * max_pyramid_radius),
-                              dtype=np.float32)
+        overcast_c = np.zeros(work_shape, dtype=np.float32)
         overcast_d = np.copy(overcast_c)
     else:
         overcast_out = None
@@ -1186,20 +1245,16 @@ def sky_illumination(dem,
     for i_dir, direction in enumerate(pyramid[0]["shift"]):
         dir_rad = np.radians(direction)
         # reset maximum at each iteration (direction)
-        max_slope = np.zeros(pyramid[n_levels]["dem"].shape, dtype=np.float32) - 1000
+        top_shape = work_shape if n_levels == 0 else pyramid[n_levels]["dem"].shape
+        max_slope = np.zeros(top_shape, dtype=np.float32) - 1000
 
         for i_level in reversed(range(n_levels + 1)):
             height = pyramid[i_level]["dem"]
             move = pyramid[i_level]["shift"]
 
-            # ... and to the search radius
-            for i_rad, radius in enumerate(move[direction]["distance"]):
-                # get shift index from move dictionary
-                shift_indx = move[direction]["shift"][i_rad]
-                # estimate the slope
-                _ = np.maximum((np.roll(height, shift_indx, axis=(0, 1)) - height) / radius, 0.)
-                # compare to the previous max slope and keep the larges
-                max_slope = np.maximum(max_slope, _)
+            # ... and to the search radius (keep the largest slope)
+            max_slope = _sky_illum_level_search(height, move, direction, max_slope,
+                                                p_in if i_level == 0 else None)
 
             # resample the max_slope to a lower pyramid level
             if i_level > 0:
@@ -1207,6 +1262,10 @@ def sky_illumination(dem,
                         conv_from + max_pyramid_radius * pyramid_scale - max_pyramid_radius)
                 col_fine = pyramid[i_level - 1]["i_col"] + (
                         conv_from + max_pyramid_radius * pyramid_scale - max_pyramid_radius)
+                if i_level == 1 and inner0:
+                    # the spline is evaluated point by point: a subset of the points gives the same values
+                    lin_fine = lin_fine[pm:-pm]
+                    col_fine = col_fine[pm:-pm]
                 lin_coarse = pyramid[i_level]["i_lin"] * pyramid_scale
                 col_coarse = pyramid[i_level]["i_col"] * pyramid_scale
                 interp_spline = RectBivariateSpline(lin_coarse, col_coarse, max_slope, kx=1, ky=1)
@@ -1214,26 +1273,60 @@ def sky_illumination(dem,
 
         # convert to angle in radians and compute directional output
         _ = np.arctan(max_slope)
-        uniform_a = uniform_a + (np.cos(_)) ** 2
-        _d_aspect = -2 * np.sin(da) * np.cos(dir_rad - aspect)
-        uniform_b = uniform_b + np.maximum(_d_aspect * (np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.), 0)
-        if compute_overcast:
-            _cos3 = (np.cos(_)) ** 3
-            overcast_c = overcast_c + np.maximum(_cos3, 0)
-            overcast_d = overcast_d + np.maximum(_d_aspect * (2. / 3. - np.cos(_) + _cos3 / 3.), 0)
         if compute_shadow and (direction == shadow_az):
-            horizon_out = np.degrees(_[max_pyramid_radius:-max_pyramid_radius, max_pyramid_radius:-max_pyramid_radius])
+            if inner0:
+                horizon_out = np.degrees(_)
+            else:
+                horizon_out = np.degrees(
+                    _[max_pyramid_radius:-max_pyramid_radius, max_pyramid_radius:-max_pyramid_radius])
             shadow_out = (horizon_out < shadow_el) * 1
             if shadow_horizon_only:
                 return {"shadow": shadow_out, "horizon": horizon_out}
+        _d_aspect = -2 * np.sin(da) * np.cos(dir_rad - aspect)
+        if _.dtype == np.float64 and _d_aspect.dtype == np.float64:
+            # same operations and operand order as the expressions below, in reused buffers
+            cos_ = np.cos(_)
+            buf = np.square(cos_)  # == cos_ ** 2
+            uniform_a = _sky_illum_iadd(uniform_a, buf)
+            # np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.
+            np.multiply(2., _, out=buf)
+            np.sin(buf, out=buf)
+            np.divide(buf, 4., out=buf)
+            np.divide(_, 2., out=_)
+            np.subtract(np.pi / 4., _, out=_)
+            np.subtract(_, buf, out=_)
+            np.multiply(_d_aspect, _, out=_)
+            np.maximum(_, 0, out=_)
+            uniform_b = _sky_illum_iadd(uniform_b, _)
+            if compute_overcast:
+                _cos3 = np.power(cos_, 3, out=buf)  # == cos_ ** 3
+                np.maximum(_cos3, 0, out=_)
+                overcast_c = _sky_illum_iadd(overcast_c, _)
+                # 2. / 3. - np.cos(_) + _cos3 / 3.
+                np.subtract(2. / 3., cos_, out=cos_)
+                np.divide(_cos3, 3., out=_cos3)
+                np.add(cos_, _cos3, out=cos_)
+                np.multiply(_d_aspect, cos_, out=cos_)
+                np.maximum(cos_, 0, out=cos_)
+                overcast_d = _sky_illum_iadd(overcast_d, cos_)
+        else:
+            uniform_a = uniform_a + (np.cos(_)) ** 2
+            uniform_b = uniform_b + np.maximum(_d_aspect * (np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.), 0)
+            if compute_overcast:
+                _cos3 = (np.cos(_)) ** 3
+                overcast_c = overcast_c + np.maximum(_cos3, 0)
+                overcast_d = overcast_d + np.maximum(_d_aspect * (2. / 3. - np.cos(_) + _cos3 / 3.), 0)
 
     # because of numeric stability check if the uniform_b is less then pi
     uniform_out = da * np.cos(slope) * uniform_a + np.sin(slope) * np.minimum(uniform_b, np.pi)
-    uniform_out = uniform_out[max_pyramid_radius:-max_pyramid_radius, max_pyramid_radius:-max_pyramid_radius]
+    if not inner0:
+        uniform_out = uniform_out[max_pyramid_radius:-max_pyramid_radius, max_pyramid_radius:-max_pyramid_radius]
 
     if compute_overcast:
         overcast_out = (2. * da / 3.) * np.cos(slope) * overcast_c + np.sin(slope) * overcast_d
-        overcast_out = overcast_out[max_pyramid_radius:-max_pyramid_radius, max_pyramid_radius:-max_pyramid_radius]
+        if not inner0:
+            overcast_out = overcast_out[max_pyramid_radius:-max_pyramid_radius,
+                                        max_pyramid_radius:-max_pyramid_radius]
         overcast_out = 0.33 * uniform_out + 0.67 * overcast_out
         overcast_out = overcast_out / overcast_out.max()
     if compute_shadow:
