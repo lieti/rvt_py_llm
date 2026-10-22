@@ -859,6 +859,38 @@ def local_dominance(dem,
     distances = (np.outer(np.ones(n_ang), distances)).reshape(n_shifts)
     dist_factor = 2 * distances + rad_inc
 
+    shifts = [(int(round(y_t[i_s])), int(round(x_t[i_s]))) for i_s in range(n_shifts)]
+    if pad_width > 0 and n_shifts > 0 and all(abs(s_y) <= pad_width and abs(s_x) <= pad_width for s_y, s_x in shifts):
+        # Shifts never exceed the padding, so np.roll never wraps for output pixels: the moved DEM over the output
+        # window is a slice of the padded DEM. Pixels are independent, so only the output window is computed,
+        # in row blocks, with the same per-shift float32/float64 arithmetic and order as the loop below.
+        n_rows = dem.shape[0] - 2 * pad_width
+        n_cols = dem.shape[1] - 2 * pad_width
+        dem_in = dem[pad_width:pad_width + n_rows, pad_width:pad_width + n_cols]
+        dem_obs = dem_in + observer_height  # float32, as (dem + observer_height)
+        local_dom_out = dem_in * 0
+        blk_rows = max(1, 32768 // max(1, n_cols))
+        buf_mask = np.empty((blk_rows, n_cols), dtype=bool)
+        buf_diff = np.empty((blk_rows, n_cols), dtype=np.float32)
+        buf_val = np.empty((blk_rows, n_cols), dtype=np.result_type(buf_diff, distances[0], dist_factor[0]))
+        for r0 in range(0, n_rows, blk_rows):
+            r1 = min(r0 + blk_rows, n_rows)
+            nr = r1 - r0
+            obs_b = dem_obs[r0:r1]
+            out_b = local_dom_out[r0:r1]
+            m_b = buf_mask[:nr]
+            d_b = buf_diff[:nr]
+            v_b = buf_val[:nr]
+            for i_s in range(n_shifts):
+                s_y, s_x = shifts[i_s]
+                moved_b = dem[pad_width - s_y + r0:pad_width - s_y + r1, pad_width - s_x:pad_width - s_x + n_cols]
+                np.greater(obs_b, moved_b, out=m_b)
+                np.subtract(obs_b, moved_b, out=d_b)
+                np.divide(d_b, distances[i_s], out=v_b)
+                np.multiply(v_b, dist_factor[i_s], out=v_b)
+                np.add(out_b, v_b, out=out_b, where=m_b, casting="same_kind")
+        return local_dom_out / norma
+
     local_dom_out = dem * 0
     for i_s in range(n_shifts):
         dem_moved = np.roll(dem, int(round(y_t[i_s])), axis=0)
