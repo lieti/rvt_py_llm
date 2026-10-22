@@ -398,36 +398,51 @@ def mean_filter(dem, kernel_radius):
 
     # store nans
     idx_nan_dem = np.isnan(dem)
+    has_nan = bool(idx_nan_dem.any())
 
     # mean filter
     dem_pad = np.pad(dem, (radius_cell + 1, radius_cell), mode="edge")
-    # store nans
-    idx_nan_dem_pad = np.isnan(dem_pad)
-    # change nan to 0
-    dem_pad[idx_nan_dem_pad] = 0
+    if has_nan:
+        # store nans
+        idx_nan_dem_pad = np.isnan(dem_pad)
+        # change nan to 0
+        dem_pad[idx_nan_dem_pad] = 0
 
-    # kernel nr pixel integral image
-    dem_i_nr_pixels = np.ones(dem_pad.shape)
-    dem_i_nr_pixels[idx_nan_dem_pad] = 0
-    dem_i_nr_pixels = integral_image(dem_i_nr_pixels, np.int64)
+    # Box sums over the output window only. With padding (r + 1, r) the four np.roll shifts of the
+    # integral image I never wrap inside the window kept after removing the padding, so they are
+    # plain slices: roll(I, (r, r)) -> I[:h, :w], roll(I, (-r-1, -r-1)) -> I[2r+1:, 2r+1:],
+    # roll(I, (-r-1, r)) -> I[2r+1:, :w], roll(I, (r, -r-1)) -> I[:h, 2r+1:].
+    nr_rows, nr_cols = dem_pad.shape[0] - 2 * radius_cell - 1, dem_pad.shape[1] - 2 * radius_cell - 1
+    off = 2 * radius_cell + 1
 
-    dem_i1 = integral_image(dem_pad)
+    def _box_sum(integral):
+        out = np.add(integral[:nr_rows, :nr_cols], integral[off:, off:])
+        np.subtract(out, integral[off:, :nr_cols], out=out)
+        np.subtract(out, integral[:nr_rows, off:], out=out)
+        return out
 
-    kernel_nr_pix_arr = (np.roll(dem_i_nr_pixels, (radius_cell, radius_cell), axis=(0, 1)) +
-                         np.roll(dem_i_nr_pixels, (-radius_cell - 1, -radius_cell - 1), axis=(0, 1)) -
-                         np.roll(dem_i_nr_pixels, (-radius_cell - 1, radius_cell), axis=(0, 1)) -
-                         np.roll(dem_i_nr_pixels, (radius_cell, -radius_cell - 1), axis=(0, 1)))
-    mean_out = (np.roll(dem_i1, (radius_cell, radius_cell), axis=(0, 1)) +
-                np.roll(dem_i1, (-radius_cell - 1, -radius_cell - 1), axis=(0, 1)) -
-                np.roll(dem_i1, (-radius_cell - 1, radius_cell), axis=(0, 1)) -
-                np.roll(dem_i1, (radius_cell, -radius_cell - 1), axis=(0, 1)))
+    # integral image (same values as integral_image(dem_pad), cumsum done in place)
+    dem_i1 = dem_pad.astype(np.float64, copy=dem_pad.dtype != np.float64)
+    np.cumsum(dem_i1, axis=0, out=dem_i1)
+    np.cumsum(dem_i1, axis=1, out=dem_i1)
+    mean_out = _box_sum(dem_i1)
+    del dem_i1
+
+    if has_nan:
+        # kernel nr pixel integral image
+        dem_i_nr_pixels = integral_image(~idx_nan_dem_pad, np.int64)
+        kernel_nr_pix_arr = _box_sum(dem_i_nr_pixels)
+        del dem_i_nr_pixels
+    else:
+        # no nan: every window holds exactly (2r + 1)^2 pixels (exact int64, as the integral sums)
+        kernel_nr_pix_arr = np.int64(off * off)
     # Ignore warnings for dividing with nan
     with np.errstate(divide='ignore', invalid='ignore'):
-        mean_out = mean_out / kernel_nr_pix_arr
+        np.divide(mean_out, kernel_nr_pix_arr, out=mean_out)
     mean_out = mean_out.astype(np.float32)
-    mean_out = mean_out[radius_cell:-(radius_cell + 1), radius_cell:-(radius_cell + 1)]  # remove padding
     # nan back to nan
-    mean_out[idx_nan_dem] = np.nan
+    if has_nan:
+        mean_out[idx_nan_dem] = np.nan
 
     return mean_out
 
