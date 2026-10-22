@@ -1480,32 +1480,83 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
     # change nan to 0
     dem_pad[idx_nan_dem_pad] = 0
 
-    # number of pixels for summed area table
-    dem_i_nr_pixels = np.ones(dem_pad.shape)
-    dem_i_nr_pixels[idx_nan_dem_pad] = 0
-    dem_i_nr_pixels = integral_image(dem_i_nr_pixels, np.int64)
+    # number of pixels for summed area table; without nan the count inside a kernel is (2 * r + 1) ** 2
+    if idx_nan_dem_pad.any():
+        dem_i_nr_pixels = np.ones(dem_pad.shape)
+        dem_i_nr_pixels[idx_nan_dem_pad] = 0
+        dem_i_nr_pixels = integral_image(dem_i_nr_pixels, np.int64)
+    else:
+        dem_i_nr_pixels = None
+    del idx_nan_dem_pad
 
-    # This outputs float64, which is by design. Change final array to float32 at the end of the function (at return)
-    dem_i1 = integral_image(dem_pad)
-    dem_i2 = integral_image(dem_pad.astype(np.float64) ** 2)
+    # Summed area tables of dem and of dem squared (squares in float64), as integral_image computes them, but
+    # accumulated in place. This outputs float64, which is by design. Change final array to float32 at the end of the
+    # function (at return)
+    dem_i1 = dem_pad.astype(np.float64)
+    np.cumsum(dem_i1, axis=0, out=dem_i1)
+    np.cumsum(dem_i1, axis=1, out=dem_i1)
+    dem_i2 = dem_pad.astype(np.float64)
+    np.square(dem_i2, out=dem_i2)
+    np.cumsum(dem_i2, axis=0, out=dem_i2)
+    np.cumsum(dem_i2, axis=1, out=dem_i2)
+
+    # topographic_dev evaluated only on the output window: with output row i = maximum_radius + k the rolled tables
+    # of topographic_dev are slices starting at maximum_radius -/+ ..., and np.roll(dem_pad, (-1, -1)) is the
+    # window starting at maximum_radius + 1 (no wrap-around reaches the output window)
+    n_rows, n_cols = idx_nan_dem.shape
+    dem_centre = dem_pad[maximum_radius + 1:maximum_radius + 1 + n_rows, maximum_radius + 1:maximum_radius + 1 + n_cols]
+    dev_in_place = np.result_type(dem_centre.dtype, np.float64) == np.float64
 
     for kernel_radius in range(minimum_radius, maximum_radius + 1, step):
-        dev = topographic_dev(dem_pad, dem_i_nr_pixels, dem_i1, dem_i2, kernel_radius)[
-              maximum_radius:-(maximum_radius + 1),
-              maximum_radius:-(maximum_radius + 1)]
+        if kernel_radius <= 0:
+            # topographic_dev returns the padded dem itself
+            dev = dem_pad[maximum_radius:-(maximum_radius + 1), maximum_radius:-(maximum_radius + 1)]
+        else:
+            lo = maximum_radius - kernel_radius
+            hi = maximum_radius + kernel_radius + 1
+            if dem_i_nr_pixels is None:
+                kernel_nr_pix = float((2 * kernel_radius + 1) ** 2)
+            else:
+                kernel_nr_pix = _mstp_box_sum(dem_i_nr_pixels, lo, hi, n_rows, n_cols)
+            with np.errstate(divide='ignore', invalid='ignore'):  # Suppress warning for dividing by zero
+                dem_mean = _mstp_box_sum(dem_i1, lo, hi, n_rows, n_cols)
+                dem_mean /= kernel_nr_pix
+                dem_std = _mstp_box_sum(dem_i2, lo, hi, n_rows, n_cols)
+                dem_std /= kernel_nr_pix
+                dem_std -= dem_mean ** 2
+                np.abs(dem_std, out=dem_std)
+                np.sqrt(dem_std, out=dem_std)
+            dem_std += 1e-6  # add 1e-6 to prevent division with 0
+            if dev_in_place:
+                dev = np.subtract(dem_centre, dem_mean, out=dem_mean)
+            else:
+                dev = dem_centre - dem_mean
+            dev /= dem_std
+            del dem_mean, dem_std
         if kernel_radius == minimum_radius:
             dev_max_out = dev
-            rad_max_out = np.zeros_like(dev, dtype=np.float32) + kernel_radius
+            dev_max_owned = kernel_radius > 0
+        elif dev_max_owned and dev_max_out.dtype == np.result_type(dev_max_out, dev):
+            replace = np.abs(dev_max_out) >= np.abs(dev)
+            np.logical_not(replace, out=replace)
+            np.copyto(dev_max_out, dev, where=replace)
         else:
-            rad_max_out = np.where(np.abs(dev_max_out) >= np.abs(dev), rad_max_out, kernel_radius)
             dev_max_out = np.where(np.abs(dev_max_out) >= np.abs(dev), dev_max_out, dev)
-    # rad_max_out, radius of DEV for maxDEV (for each pixel)
+            dev_max_owned = True
+        del dev
 
     # change where dem nan back to nan
     dev_max_out[idx_nan_dem] = np.nan
-    rad_max_out[idx_nan_dem] = np.nan
 
     return dev_max_out.astype(np.float32)
+
+
+def _mstp_box_sum(table, lo, hi, n_rows, n_cols):
+    """Box sum of topographic_dev (b + a - c - d of the rolled summed area tables) on the output window."""
+    box = np.add(table[lo:lo + n_rows, lo:lo + n_cols], table[hi:hi + n_rows, hi:hi + n_cols])
+    box -= table[hi:hi + n_rows, lo:lo + n_cols]
+    box -= table[lo:lo + n_rows, hi:hi + n_cols]
+    return box
 
 
 def mstp(dem,
