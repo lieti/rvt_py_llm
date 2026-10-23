@@ -2389,30 +2389,55 @@ def msrm(dem,
          no_data=None
          ):
     """
-    Compute Multi-scale relief model (MSRM).
+    Compute the multi-scale relief model (MSRM).
+
+    After Orengo and Petrie 2018 (docs/listofvis_msrm.rst). Mean-filtered surfaces L_k are computed with
+    radii ``k ** scaling_factor`` px for k = i .. n, where
+    ``i = floor(((feature_min - resolution) / (2 resolution)) ** (1 / scaling_factor))`` and
+    ``n = ceil(((feature_max - resolution) / (2 resolution)) ** (1 / scaling_factor))``. The result is the
+    mean of the differences of consecutive surfaces, ``sum_k (L_{k-1} - L_k) / (n - i)``.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W). Not checked for 2D.
     resolution : float
-        DEM pixel size.
-    feature_min: float
-        Minimum size of the feature you want to detect in meters.
-    feature_max: float
-        Maximum size of the feature you want to detect in meters.
-    scaling_factor: int
-        Scaling factor, if larger than 1 it provides larger range of MSRM values (increase contrast and visibility),
-        but could result in a loss of sensitivity for intermediate sized features.
+        Pixel size (m/px). Must not be negative.
+    feature_min : float
+        Minimum feature size to enhance, in m (not px); raised to ``resolution`` if smaller.
+    feature_max : float
+        Maximum feature size to enhance, in m, e.g. 20 m = 80 px at 0.25 m/px.
+    scaling_factor : int
+        Exponent of the radius sequence, truncated with ``int``. Larger values give a wider range of
+        values (more contrast) with less sensitivity to intermediate feature sizes.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
+        Default None.
 
     Returns
     -------
-    msrm_out : numpy.ndarray
-        2D numpy result array of Multi-scale relief model.
+    numpy.ndarray
+        float64 (H, W) in m (times ``ve_factor``); NaN where the input is NaN.
+
+    Raises
+    ------
+    Exception
+        If ``ve_factor`` is outside [-10000, 10000] or ``resolution`` is negative.
+
+    Notes
+    -----
+    Edges: ``mean_filter`` pads in edge mode. Each difference ``L_{k-1} - L_k`` is taken in float32 and
+    added to a float64 sum.
+
+    Known issue (see docs/KNOWN_ISSUES.md): when i == n (e.g. ``feature_min == feature_max == resolution``,
+    or any equal pair that gives an integer power) there is no
+    difference to average and the sum is divided by 0: every pixel is NaN (RuntimeWarning).
+
+    See Also
+    --------
+    mean_filter, slrm
     """
     if not (10000 >= ve_factor >= -10000):
         raise Exception("rvt.visualization.msrm: ve_factor must be between -10000 and 10000!")
@@ -2457,19 +2482,28 @@ def msrm(dem,
 
 def integral_image(dem, data_type=np.float64):
     """
-    Calculates integral image (summed-area table), where origin is left upper corner.
+    Return the integral image (summed-area table) of a 2D array, origin at the top-left corner.
+
+    ``out[i, j] = sum(dem[:i + 1, :j + 1])``, computed as a cumulative sum along axis 0 and then axis 1.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
-    data_type : np.__class__
-        dtype as numpy data type class (np.float64, np.int8, etc.)
+        2D array, shape (H, W). Not modified.
+    data_type : numpy dtype or type
+        dtype the array is converted to before summing. Default ``np.float64``.
 
     Returns
     -------
-    msrm_out : numpy.ndarray
-        Cumulative sum of the elements along each axis of a 2D array.
+    numpy.ndarray
+        Shape (H, W), dtype ``data_type``; integer and bool types narrower than the platform integer are
+        promoted by ``numpy.cumsum`` (int8 gives int64 on 64-bit platforms).
+
+    Notes
+    -----
+    The box sum of rows r0 .. r1 and columns c0 .. c1 is
+    ``I[r1, c1] - I[r0 - 1, c1] - I[r1, c0 - 1] + I[r0 - 1, c0 - 1]``. Summing float elevations in
+    float64 keeps the differences of large sums exact enough for windows of hundreds of pixels.
 
     References
     ----------
@@ -2477,13 +2511,10 @@ def integral_image(dem, data_type=np.float64):
 
     Examples
     --------
-    In: print(integral_image(np.array([[7, 4, 7, 2],
-    ... [6, 9, 9, 5],
-    ... [6, 6, 7, 6]])))
-
-    Out: [[ 7. 11. 18. 20.]
-          [13. 26. 42. 49.]
-          [19. 38. 61. 74.]]
+    >>> integral_image(np.array([[7, 4, 7, 2], [6, 9, 9, 5], [6, 6, 7, 6]]))
+    array([[ 7., 11., 18., 20.],
+           [13., 26., 42., 49.],
+           [19., 38., 61., 74.]])
     """
     dem = dem.astype(data_type)
     return dem.cumsum(axis=0).cumsum(axis=1)
@@ -2491,27 +2522,45 @@ def integral_image(dem, data_type=np.float64):
 
 def topographic_dev(dem, dem_i_nr_pixels, dem_i1, dem_i2, kernel_radius):
     """
-    Calculates topographic DEV - Deviation from mean elevation. DEV(D) = (z0 - zmD) / sD.
-    Where D is radius of kernel, z0 is center pixel value, zmD is mean of all kernel values,
-    sD is standard deviation of kernel.
+    Compute the deviation from mean elevation, DEV(D) = (z0 - mean_D) / std_D, from summed-area tables.
+
+    z0 is the centre pixel, mean_D and std_D are the mean and standard deviation of the
+    (2D + 1) x (2D + 1) window with D = ``kernel_radius`` (Lindsay et al. 2015, docs/listofvis_mstp.rst).
+    The window sums are four ``np.roll`` copies of each table, so the result is meaningful only away from
+    the borders of the (padded) input.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m) padded by (D_max + 1, D_max) px, NaN replaced by 0, shape (H', W').
     dem_i_nr_pixels : numpy.ndarray
-        Summed area table (integral image) of number of pixels.
+        Summed-area table of the non-NaN mask of ``dem`` (pixel counts), shape (H', W').
     dem_i1 : numpy.ndarray
-        Summed area table (integral image) of dem.
+        Summed-area table of ``dem``, shape (H', W').
     dem_i2 : numpy.ndarray
-        Summed area table (integral image) of dem squared (dem**2).
+        Summed-area table of ``dem ** 2``, shape (H', W').
     kernel_radius : int
-        Kernel radius (D).
+        Window radius D in px, e.g. D = 50 px = 12.5 m at 0.25 m/px. Truncated with ``int``.
 
     Returns
     -------
-    dev_out : numpy.ndarray
-        2D numpy result array of topographic DEV - Deviation from mean elevation.
+    numpy.ndarray
+        Shape (H', W'), dtype of the tables (float64 for float64 tables). Element (i, j) belongs to the window
+        centred on ``dem[i + 1, j + 1]`` (hence ``np.roll(dem, (-1, -1))``); for D <= 0 the input ``dem``
+        itself is returned.
+
+    Notes
+    -----
+    ``std = sqrt(|E[z^2] - mean^2|)``; the absolute value absorbs small negative variances from rounding,
+    and 1e-6 is added to ``std`` to avoid division by 0. Windows without valid pixels give NaN (division
+    warnings are suppressed).
+
+    Not called inside rvt: ``max_elevation_deviation`` evaluates the same expressions on the output window
+    only (``_mstp_box_sum``, ``_mstp_dev_max_kernel``). Kept as public API.
+
+    See Also
+    --------
+    max_elevation_deviation, integral_image, mstp
     """
     radius_cell = int(kernel_radius)
     if radius_cell <= 0:
@@ -2589,24 +2638,54 @@ def _mstp_dev_max_kernel(dem_i1, dem_i2, dem_i_nr_pixels, has_nr_pixels, dem_cen
 
 def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
     """
-    Calculates maximum deviation from mean elevation, dev_max (Maximum Deviation from mean elevation) for each
-    grid cell in a digital elevation model (DEM) across a range specified spatial scales.
+    Compute the maximum deviation from mean elevation (DEV_max) over a range of window radii.
+
+    For every radius D in ``range(minimum_radius, maximum_radius + 1, step)`` the deviation
+    ``(z0 - mean_D) / (std_D + 1e-6)`` of ``topographic_dev`` is computed, and per pixel the value with the
+    largest absolute deviation is kept (Lindsay et al. 2015, docs/listofvis_mstp.rst). NaN pixels are left
+    out of the window statistics.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W), float32 or float64 (NaN as no-data). Not modified.
     minimum_radius : int
-        Minimum radius to calculate DEV (topographic_dev).
+        Smallest window radius in px, truncated with ``int``.
     maximum_radius : int
-        Maximum radius to calculate DEV (topographic_dev).
+        Largest window radius in px, truncated with ``int``; also the padding width, e.g. 500 px = 125 m at
+        0.25 m/px.
     step : int
-        Step from minimum to maximum radius to calc DEV (topographic_dev).
+        Radius step in px, truncated with ``int``; must be positive (``range`` raises ValueError for 0).
 
     Returns
     -------
-    dev_out : numpy.ndarray
-        2D numpy result array of maxDEV - Maximum Deviation from mean elevation.
+    numpy.ndarray
+        float32 (H, W), signed deviation in standard deviations; NaN where ``dem`` is NaN.
+
+    Notes
+    -----
+    Edges: the DEM is padded by ``maximum_radius + 1`` before and ``maximum_radius`` after each axis in
+    symmetric mode, so the box sums of all radii are slices of the same summed-area tables. The tables of
+    z and z^2 are float64 and the squares are taken in float64: float32 squares of elevations of hundreds
+    of metres lose the small within-window variance. Without NaN the pixel count is the constant
+    (2D + 1)^2; with NaN it comes from an int64 table of the non-NaN mask.
+
+    Tie rule: the running maximum is replaced where ``not (|max| >= |dev|)``, so on equal absolute values
+    the smaller radius is kept, and a NaN deviation replaces the maximum.
+
+    Implementation: the original code called ``topographic_dev`` on the padded extent (12 ``np.roll``
+    copies of the tables per radius) and cropped. Here the same float64 expressions, in the same order, are evaluated on
+    the output window from slices (``_mstp_box_sum``), or per pixel by the numba kernel
+    ``_mstp_dev_max_kernel`` when every radius is positive (``RVT_NO_ACCEL=1`` switches it off); both are
+    bitwise identical to the original. The float64 running maximum is rounded to float32 once at the end.
+
+    Known issue (see docs/KNOWN_ISSUES.md): a radius D <= 0 contributes the elevation itself (as
+    ``topographic_dev`` returns the DEM), taken one pixel up and left of the centre (output (i, j) is
+    ``z[i - 1, j - 1]``, with the symmetric padding at the border), not a deviation.
+
+    See Also
+    --------
+    mstp, topographic_dev, integral_image
     """
     minimum_radius = int(minimum_radius)
     maximum_radius = int(maximum_radius)
@@ -2723,30 +2802,58 @@ def mstp(dem,
          no_data=None
          ):
     """
-    Compute Multi-scale topographic position (MSTP).
+    Compute multi-scale topographic position (MSTP) as an RGB image.
+
+    After Lindsay et al. 2015 (docs/listofvis_mstp.rst). ``max_elevation_deviation`` is computed for the
+    broad, meso and local radius ranges, and each band is ``1 - exp(-lightness * |DEV_max|)``, clipped
+    to [0, 1].
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
-    local_scale : tuple(int, int, int)
-        Input local scale minimum radius (local_scale[0]), maximum radius (local_scale[1]), step (local_scale[2]).
-    meso_scale : tuple(int, int, int)
-        Input meso scale minimum radius (meso_scale[0]), maximum radius (meso_scale[1]), step (meso_scale[2]).
-    broad_scale : tuple(int, int, int)
-        Input broad scale minimum radius (broad_scale[0]), maximum radius (broad_scale[1]), step (broad_scale[2]).
+        2D elevation array (m), shape (H, W). Not checked for 2D.
+    local_scale : tuple of int
+        (minimum radius, maximum radius, step) in px of the local scale (blue). Default (1, 5, 1).
+    meso_scale : tuple of int
+        (minimum radius, maximum radius, step) in px of the meso scale (green). Default (5, 50, 5).
+    broad_scale : tuple of int
+        (minimum radius, maximum radius, step) in px of the broad scale (red). Default (50, 500, 50), i.e. up
+        to 500 px = 125 m at 0.25 m/px; the DEM is padded by the largest radius.
     lightness : float
-        Lightness of image.
+        Factor in the exponent; larger values give a lighter image. Default 1.2.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-1000, 10000] (see Raises). Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
+        Default None.
 
     Returns
     -------
-    msrm_out : numpy.ndarray
-        3D numpy RGB result array of Multi-scale topographic position.
+    numpy.ndarray
+        float32, shape (3, H, W): bands red (broad), green (meso), blue (local), values in [0, 1]; NaN where
+        the input is NaN.
+
+    Raises
+    ------
+    Exception
+        If a scale has minimum > maximum, a step larger than maximum - minimum, or ``ve_factor`` is outside
+        [-1000, 10000].
+
+    Notes
+    -----
+    The deviation (z - mean) / std is invariant to scaling z except for the 1e-6 added to std, and the sign
+    is removed by ``abs``, so ``ve_factor`` changes the result only through that term (by about 2e-7 for
+    ``ve_factor`` 5 on a 0-10 m test DEM). The lower ``ve_factor`` limit is -1000, unlike the -10000 of the
+    other functions; known issue, see docs/KNOWN_ISSUES.md.
+
+    See Also
+    --------
+    max_elevation_deviation, topographic_dev
     """
+    # Structure:
+    #   1. checks of the three scales and ve_factor; no_data -> NaN (in place), float32, ve_factor;
+    #   2. DEV_max for the local, meso and broad radius ranges (max_elevation_deviation);
+    #   3. per scale 1 - exp(-lightness * |DEV_max|), clipped to [0, 1]; stacked as (broad, meso, local).
     if local_scale[0] > local_scale[1] or meso_scale[0] > meso_scale[1] or broad_scale[0] > broad_scale[1]:
         raise Exception("rvt.visualization.mstp: local_scale, meso_scale, broad_scale min has to be smaller than max!")
     if (local_scale[1] - local_scale[0] < local_scale[2]) or (meso_scale[1] - meso_scale[0] < meso_scale[2]) or \
@@ -2789,20 +2896,51 @@ def mstp(dem,
 
 def fill_where_nan(dem, method="idw"):
     """
-    Replaces np.nan values, with interpolation (extrapolation).
+    Fill NaN pixels by interpolation from the valid pixels.
 
     Parameters
-    -------
+    ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
-    method : {'linear_row', 'idw_r_p', 'kd_tree', 'nearest_neighbour'}
-        'linear_row', Linear row interpolation, array is flattened and then linear interpolation is performed.
-        This method is fast but very inaccurate.
-        'idw_r_p', Inverse Distance Weighting interpolation. If you only input idw it will take default parameters
-        (r=20, p=2). You can also input interpolation radius (r) and power (p) for weights. (Example:
-        idw_5_2 means radius = 5, power = 2.)
-        'kd_tree', K-D Tree interpolation.
-        'nearest_neighbour', Nearest neighbour interpolation.
+        2D array (m), shape (H, W), floating dtype. Not modified.
+    method : str
+        One of:
+
+        - ``"idw"`` (default) or ``"idw_<r>_<p>"``: inverse distance weighting over the valid pixels of
+          the (2r + 1) x (2r + 1) window around each NaN pixel (clipped at the raster edge), weights
+          ``1 / distance ** p``; ``"idw"`` alone (or with other than two suffixes) uses r = 20 px, p = 2.
+          Example: ``"idw_5_2"``. Windows with no valid pixel stay NaN; values filled earlier are not used;
+        - ``"linear_row"``: the array is flattened row by row and NaN is interpolated linearly along that
+          1D sequence (``np.interp``, constant beyond the ends). Fast but crosses row ends;
+        - ``"kd_tree"``: value of the nearest valid pixel (``scipy.spatial.cKDTree``, Euclidean distance in
+          px);
+        - ``"nearest_neighbour"`` or ``"nearest_neighbor"``: the same with
+          ``scipy.interpolate.griddata(method="nearest")``.
+
+    Returns
+    -------
+    numpy.ndarray
+        Same shape and dtype as ``dem``. Without NaN the input array itself is returned (same object);
+        otherwise a filled copy.
+
+    Raises
+    ------
+    Exception
+        If ``method`` is not one of the names above (checked only when ``dem`` contains NaN).
+    IndexError
+        ``"idw"`` on an array wider than it is tall, in some cases (see Notes).
+
+    Notes
+    -----
+    Known issue (see docs/KNOWN_ISSUES.md): for ``"idw"`` the window end column is clipped to
+    ``dem.shape[0]`` (the number of rows) instead of ``dem.shape[1]``. On an array with more columns than
+    rows, windows that reach past the right edge are cut at column H, so valid pixels beyond it are
+    ignored; a NaN pixel at column >= H gets a window that does not contain its own column, which raises
+    IndexError, or an empty window, which leaves it NaN. On an array with more rows than columns the clip has no effect (NumPy slicing stops
+    at the edge).
+
+    See Also
+    --------
+    scipy.spatial.cKDTree, scipy.interpolate.griddata
     """
     if np.all(~np.isnan(dem)):  # if there is no nan return dem
         return dem
