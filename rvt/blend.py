@@ -1221,36 +1221,68 @@ def compare_2_combinations(combination1: BlenderCombination, combination2: Blend
 
 class BlenderCombinations:
     """
-    Class for storing combinations.
+    A list of named combinations, e.g. the presets of ``settings/default_blender_combinations.json``.
 
     Attributes
     ----------
-    combinations : [BlenderCombination]
-        List of BlenderCombination instances.
+    combinations : list of BlenderCombination
+        The combinations, in file / insertion order.
     """
 
     def __init__(self):
         self.combinations = []  # list of BlenderCombination
 
     def add_combination(self, combination: BlenderCombination, name=None):
-        """Adds combination if parameter name not None it renames combination."""
+        """
+        Append a combination (by reference), optionally renaming it.
+
+        Parameters
+        ----------
+        combination : BlenderCombination
+            Combination to append.
+        name : str or None
+            New name written into ``combination.name``; None keeps the name.
+        """
         if name is not None:
             combination.name = name
         self.combinations.append(combination)
 
     def remove_all_combinations(self):
-        """Removes all combinations from self.combinations."""
+        """Remove all combinations (``combinations`` becomes a new empty list)."""
         self.combinations = []
 
     def select_combination_by_name(self, name):
-        """Select first combination where self.combinations.BlenderCombination.name = name."""
+        """
+        Return the first combination with the given name.
+
+        Parameters
+        ----------
+        name : str
+            Name to look for (exact, case-sensitive).
+
+        Returns
+        -------
+        BlenderCombination or None
+            The first match, or None if there is none.
+        """
         for combination in self.combinations:
             if combination.name == name:
                 return combination
 
     def remove_combination_by_name(self, name):
-        """Removes all combinations where self.combinations.BlenderCombination.name = name.
-        If combinations list is empty function returns 0, else 1."""
+        """
+        Remove every combination with the given name.
+
+        Parameters
+        ----------
+        name : str
+            Name to remove (exact, case-sensitive).
+
+        Returns
+        -------
+        int
+            0 if the list is empty afterwards, else 1. The value does not say whether anything was removed.
+        """
         new_combinations = []
         for combination in self.combinations:
             if combination.name != name:
@@ -1262,7 +1294,20 @@ class BlenderCombinations:
             return 1
 
     def read_from_file(self, file_path):
-        """Reads combinations from .json file."""
+        """
+        Replace the combinations with those of a combinations JSON file.
+
+        Parameters
+        ----------
+        file_path : str
+            Path of a file ``{"combinations": [{"combination": {...}}, ...]}``, e.g.
+            ``settings/default_blender_combinations.json``.
+
+        Raises
+        ------
+        KeyError
+            If "combinations" or a key required by BlenderCombination.read_from_json is missing.
+        """
         self.combinations = []
         dat = open(file_path, "r")
         json_data = json.load(dat)
@@ -1274,7 +1319,14 @@ class BlenderCombinations:
         dat.close()
 
     def save_to_file(self, file_path):
-        """Saves combination to .json file."""
+        """
+        Write all combinations as one JSON file ``{"combinations": [<to_json() of each>]}`` (indent 4).
+
+        Parameters
+        ----------
+        file_path : str
+            Output path; an existing file is overwritten.
+        """
         json_data = {"combinations": []}
         for combination in self.combinations:
             json_data["combinations"].append(combination.to_json())
@@ -1283,15 +1335,36 @@ class BlenderCombinations:
         dat.close()
 
     def combination_in_combinations(self, input_combination: BlenderCombination):
-        """If input_combination (BlenderCombination) has same attributes as one of the combinations (self), method
-         returns name of the combination (from combinations). If there is no equal one it returns None."""
+        """
+        Return the name of the first stored combination equal to ``input_combination``.
+
+        Equality is that of compare_2_combinations (visualization, blend mode and opacity per layer; limits are
+        not compared).
+
+        Parameters
+        ----------
+        input_combination : BlenderCombination
+            Combination to look for.
+
+        Returns
+        -------
+        str or None
+            Name of the first equal combination, or None.
+        """
         for combination in self.combinations:
             if compare_2_combinations(input_combination, combination):
                 return combination.name
         return None
 
     def combinations_names(self):
-        """Returns list of combinations names."""
+        """
+        Return the names of all combinations.
+
+        Returns
+        -------
+        list of str
+            Names in list order (duplicates kept).
+        """
         names_list = []
         for combination in self.combinations:
             names_list.append(combination.name)
@@ -1299,7 +1372,29 @@ class BlenderCombinations:
 
 
 class TerrainSettings:
-    """Terrain settings for GUI."""
+    """
+    A terrain preset (e.g. "general", "flat", "steep"): visualization parameters and normalization stretches.
+
+    Intended for a graphical interface that adapts DefaultValues and a combination to a terrain type. Every attribute
+    is None until read; None means "keep the value of DefaultValues / of the layer" in apply_terrain.
+
+    Attributes
+    ----------
+    name : str or None
+        Name of the preset.
+    <visualization parameters> : int, float, str, tuple or None
+        slp_output_units, hs_sun_azi, hs_sun_el, mhs_nr_dir, mhs_sun_el, slrm_rad_cell, svf_n_dir, svf_r_max,
+        svf_noise, asvf_dir, asvf_level, sim_sky_mod, sim_compute_shadow, sim_nr_dir, sim_shadow_dist,
+        sim_shadow_az, sim_shadow_el, ld_min_rad, ld_max_rad, ld_rad_inc, ld_anglr_res, ld_observer_h,
+        msrm_feature_min, msrm_feature_max, msrm_scaling_factor, mstp_local_scale, mstp_meso_scale,
+        mstp_broad_scale, mstp_lightness: names, units and meaning of the DefaultValues attributes of the same
+        name (radii in px, MSRM feature sizes in m, angles in degrees); the MSTP scales are (min, max, step)
+        tuples of int.
+    <stretches> : tuple of float or None
+        hs_stretch, mhs_stretch, slp_stretch, slrm_stretch, svf_stretch, asvf_stretch, pos_opns_stretch,
+        neg_opns_stretch, sim_stretch, ld_stretch, msrm_stretch, mstp_stretch: ``(min, max)`` written into the
+        normalization limits of the layers of the matching visualization.
+    """
 
     def __init__(self):
         self.name = None
@@ -1360,14 +1455,62 @@ class TerrainSettings:
         self.mstp_stretch = None
 
     def read_from_file(self, file_path):
-        """Reads combinations from .json file."""
+        """
+        Read one terrain preset from a JSON file (see read_from_json).
+
+        Parameters
+        ----------
+        file_path : str
+            Path of a file ``{"terrain_settings": {...}}``.
+
+        Raises
+        ------
+        KeyError
+            If "terrain_settings" or "name" is missing.
+        """
         dat = open(file_path, "r")
         json_data = json.load(dat)
         self.read_from_json(json_data)
         dat.close()
 
     def read_from_json(self, json_data):
-        """Reads json dict and fills self attributes."""
+        """
+        Reset all attributes and fill them from a parsed terrain preset.
+
+        The document is ``{"terrain_settings": {"name": str, "<visualization name>": {"<parameter>": {"value": v},
+        "stretch": {"min": a, "max": b}}, ...}}`` with the visualization names "Slope gradient", "Hillshade",
+        "Multiple directions hillshade", "Simple local relief model", "Sky-View Factor", "Anisotropic Sky-View
+        Factor", "Openness - Positive", "Openness - Negative", "Sky illumination", "Local dominance", "Multi-scale
+        relief model" and "Multi-scale topographic position" (exact spelling). MSTP scales are given as
+        ``{"min", "max", "step"}``. A missing key leaves the attribute None.
+
+        Parameters
+        ----------
+        json_data : dict
+            Parsed terrain preset.
+
+        Raises
+        ------
+        KeyError
+            If "terrain_settings" or "name" is missing.
+        ValueError
+            If a value cannot be converted by ``int()`` / ``float()`` (TypeError for a JSON null). ``int()`` of a
+            JSON float truncates it.
+
+        Notes
+        -----
+        Known issue: the "Sky illumination" and "Local dominance" stretches are assigned to
+        ``neg_opns_stretch`` (copy-paste), so ``neg_opns_stretch`` ends up with the last of the three sections
+        present and ``sim_stretch`` / ``ld_stretch`` stay None. With the shipped
+        ``settings/default_terrains_settings.json`` the negative openness layer gets the local dominance limits.
+        See docs/KNOWN_ISSUES.md.
+        """
+        # Structure of this function:
+        #   1. reset every attribute to None (self.__init__());
+        #   2. read the preset name;
+        #   3. read each visualization parameter in its own try / except KeyError (missing keys stay None),
+        #      converted with str(), int() or float() as in DefaultValues; MSTP scales as (min, max, step);
+        #   4. read the (min, max) stretch of each visualization in the same way.
         self.__init__()
         terrain_data = json_data["terrain_settings"]
         self.name = terrain_data["name"]
@@ -1555,8 +1698,26 @@ class TerrainSettings:
             pass
 
     def apply_terrain(self, default: rvt.default.DefaultValues, combination: BlenderCombination):
-        """It overwrites default (DefaultValues) and combination (BlenderCombination),
-         with self values that are not None."""
+        """
+        Copy the preset into a DefaultValues instance and into the limits of a combination, in place.
+
+        Every visualization parameter that is not None overwrites the DefaultValues attribute of the same name.
+        Every stretch that is not None overwrites ``min`` and ``max`` of each layer whose visualization name
+        (case-insensitive) is the long name of that visualization, e.g. "sky-view factor" for ``svf_stretch``.
+
+        Parameters
+        ----------
+        default : rvt.default.DefaultValues
+            Parameters to overwrite (modified in place).
+        combination : BlenderCombination
+            Combination whose layer limits are overwritten (modified in place). Every layer must have a ``vis``.
+
+        Notes
+        -----
+        Because of the read_from_json issue (docs/KNOWN_ISSUES.md), sky illumination and local dominance layers
+        keep their limits, and negative openness layers get the limits of the last of the "Openness - Negative",
+        "Sky illumination" and "Local dominance" sections of the preset.
+        """
         if self.slp_output_units is not None:
             default.slp_output_units = self.slp_output_units
         if self.hs_sun_azi is not None:
@@ -1657,13 +1818,37 @@ class TerrainSettings:
 
 
 class TerrainsSettings:
-    """Multiple Terrain settings."""
+    """
+    A list of terrain presets, e.g. those of ``settings/default_terrains_settings.json``.
+
+    Attributes
+    ----------
+    terrains_settings : list of TerrainSettings
+        The presets, in file order.
+    """
 
     def __init__(self):
         self.terrains_settings = []
 
     def read_from_file(self, file_path):
-        """Reads combinations from .json file."""
+        """
+        Append the terrain presets of a JSON file.
+
+        Parameters
+        ----------
+        file_path : str
+            Path of a file ``{"terrains_settings": [{"terrain_settings": {...}}, ...]}``.
+
+        Raises
+        ------
+        KeyError
+            If "terrains_settings" or a key required by TerrainSettings.read_from_json is missing.
+
+        Notes
+        -----
+        Known issue: unlike BlenderCombinations.read_from_file, the list is not emptied first, so reading a file
+        twice holds every preset twice. See docs/KNOWN_ISSUES.md.
+        """
         dat = open(file_path, "r")
         json_data = json.load(dat)
         terrains_settings_json = json_data["terrains_settings"]
@@ -1674,7 +1859,19 @@ class TerrainsSettings:
         dat.close()
 
     def select_terrain_settings_by_name(self, name):
-        """Select first combination where self.combinations.BlenderCombination.name = name."""
+        """
+        Return the first terrain preset with the given name.
+
+        Parameters
+        ----------
+        name : str
+            Name to look for (exact, case-sensitive), e.g. "general", "flat", "steep".
+
+        Returns
+        -------
+        TerrainSettings or None
+            The first match, or None if there is none.
+        """
         for terrain_setting in self.terrains_settings:
             if terrain_setting.name == name:
                 return terrain_setting
