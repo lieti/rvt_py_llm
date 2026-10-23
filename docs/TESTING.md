@@ -132,6 +132,12 @@ What equiv covers: every public function, method and class reached by the 1089 t
 (small synthetic arrays and GeoTIFFs), on one machine. It does not cover inputs the tests do not use (large
 rasters, other CPUs); the evaluation harness (section 3.6) covers real DEM windows.
 
+What equiv does not compare: raised exceptions, their types and messages (covered by the frozen tests and by
+astcheck); warnings; the contents of `.txt` and `.log` files a test writes (they hold timestamps, so only their
+line count is compared); in-place changes of dict or object members (only
+array arguments are hashed; the known in-place effects are asserted by the frozen tests); private functions (only
+through the public calls that reach them); inputs outside the frozen tests.
+
 ### 3.3 mutants: do the tests and equiv notice wrong changes?
 
 No mutation library is in the environment, so `mutants.py` has 21 hand-written mutants, each one plausible mistake
