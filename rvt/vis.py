@@ -1923,6 +1923,47 @@ def topographic_dev(dem, dem_i_nr_pixels, dem_i1, dem_i2, kernel_radius):
     return dev_out
 
 
+@_accel.jit_kernel
+def _mstp_dev_max_kernel(dem_i1, dem_i2, dem_i_nr_pixels, has_nr_pixels, dem_centre, radii, maximum_radius, out,
+                         buf):
+    # Serial kernel of the sliced numpy path in max_elevation_deviation, same float64 operations and order per pixel
+    # and radius: box sums (a + b - c - d) of the summed area tables, int64 pixel-count box converted to float64 (or
+    # (2 * r + 1) ** 2), mean, mean of squares minus mean * mean, abs, sqrt, + 1e-6, (z - mean) / std, running max
+    # replaced where not (|max| >= |dev|), radii in the same order. np.divide is a plain IEEE division (no
+    # ZeroDivisionError), as in numpy. The float64 running max of a row (buf) is rounded to float32 into out.
+    n_rows, n_cols = out.shape
+    n_radii = radii.shape[0]
+    for i in range(n_rows):
+        for k in range(n_radii):
+            r = radii[k]
+            lo = maximum_radius - r
+            hi = maximum_radius + r + 1
+            row_lo = lo + i
+            row_hi = hi + i
+            nr_pix_const = np.float64((2 * r + 1) ** 2)
+            for j in range(n_cols):
+                col_lo = lo + j
+                col_hi = hi + j
+                nr_pix = nr_pix_const
+                if has_nr_pixels:
+                    nr_pix = np.float64(dem_i_nr_pixels[row_lo, col_lo] + dem_i_nr_pixels[row_hi, col_hi]
+                                        - dem_i_nr_pixels[row_hi, col_lo] - dem_i_nr_pixels[row_lo, col_hi])
+                s1 = dem_i1[row_lo, col_lo] + dem_i1[row_hi, col_hi]
+                s1 = s1 - dem_i1[row_hi, col_lo]
+                s1 = s1 - dem_i1[row_lo, col_hi]
+                mean = np.divide(s1, nr_pix)
+                s2 = dem_i2[row_lo, col_lo] + dem_i2[row_hi, col_hi]
+                s2 = s2 - dem_i2[row_hi, col_lo]
+                s2 = s2 - dem_i2[row_lo, col_hi]
+                var = np.divide(s2, nr_pix) - mean * mean
+                std = np.sqrt(abs(var)) + 1e-6
+                dev = np.divide(np.float64(dem_centre[i, j]) - mean, std)
+                m = buf[j]
+                buf[j] = dev if (k == 0 or not (abs(m) >= abs(dev))) else m
+        for j in range(n_cols):
+            out[i, j] = buf[j]
+
+
 def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
     """
     Calculates maximum deviation from mean elevation, dev_max (Maximum Deviation from mean elevation) for each
@@ -1983,6 +2024,20 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
     n_rows, n_cols = idx_nan_dem.shape
     dem_centre = dem_pad[maximum_radius + 1:maximum_radius + 1 + n_rows, maximum_radius + 1:maximum_radius + 1 + n_cols]
     dev_in_place = np.result_type(dem_centre.dtype, np.float64) == np.float64
+
+    if (0 < minimum_radius <= maximum_radius and step > 0 and dem_centre.dtype in (np.float32, np.float64)
+            and dem_i1.dtype == np.float64 and dem_i2.dtype == np.float64
+            and (dem_i_nr_pixels is None or dem_i_nr_pixels.dtype == np.int64)):
+        # accelerated path: all radii > 0, the float64 running max rounded to float32 as by astype at the return
+        radii = np.array(range(minimum_radius, maximum_radius + 1, step), dtype=np.int64)
+        has_nr_pixels = dem_i_nr_pixels is not None
+        nr_pixels = dem_i_nr_pixels if has_nr_pixels else np.zeros((1, 1), dtype=np.int64)
+        dev_max_out = np.empty((n_rows, n_cols), dtype=np.float32)
+        if _accel.call(_mstp_dev_max_kernel, dem_i1, dem_i2, nr_pixels, has_nr_pixels, dem_centre, radii,
+                       maximum_radius, dev_max_out, np.empty(n_cols, dtype=np.float64)):
+            dev_max_out[idx_nan_dem] = np.nan
+            return dev_max_out
+        del dev_max_out  # fallback: numpy path below
 
     for kernel_radius in range(minimum_radius, maximum_radius + 1, step):
         if kernel_radius <= 0:
