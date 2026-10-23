@@ -1881,39 +1881,58 @@ class TerrainsSettings:
 def color_relief_image_map(dem, resolution, default: rvt.default.DefaultValues = rvt.default.DefaultValues(),
                            colormap="OrRd", min_colormap_cut=0, max_colormap_cut=1, no_data=None):
     """
-    RVT Color relief image map (CRIM)
-    Blending combination where layers are:
-    1st: Openness positive - Openness negative, overlay, 50% opacity
-    2nd: Openness positive - Openness negative, luminosity, 50% opacity
-    3rd: Slope gradient, colored with matplotlib colormap
+    Compute the Color Relief Image Map (CRIM): openness difference blended onto a colored slope.
+
+    Recipe as implemented (layers top first; the bottom layer is the start image):
+
+    ==  ===========================================  =====================  ==========  =======
+    #   Image                                        Normalization          Blend mode  Opacity
+    ==  ===========================================  =====================  ==========  =======
+    1   positive - negative openness (degrees)       value -28..28          overlay     50 %
+    2   positive - negative openness (same array)    value -28..28          luminosity  50 %
+    3   slope in radians, colored with ``colormap``  value 0..0.8 rad       (bottom)    --
+    ==  ===========================================  =====================  ==========  =======
+
+    0.8 rad is 45.8°. Openness is computed with DefaultValues.get_sky_view_factor (``default.svf_n_dir``,
+    ``default.svf_noise``, ``default.ve_factor``) with ``svf_r_max`` forced to 10 px; negative openness is the
+    positive openness of ``-dem``. The slope comes from rvt.vis.slope_aspect (radians, no ``ve_factor``) and is
+    not inverted.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D DEM ``(H, W)`` in m, float. Pixels equal to ``no_data`` are set to NaN **in this array**.
     resolution : float
-        DEM pixel size.
+        Pixel size in m/px (x and y).
     default : rvt.default.DefaultValues
-        Default values for visualization functions.
+        Visualization parameters. **Its svf_r_max is set to 10 in place.** The default is one instance created at
+        import time and shared by all calls.
     colormap : str
-        Colormap form matplotlib (https://matplotlib.org/3.3.2/tutorials/colors/colormaps.html).
-    min_colormap_cut : float
-        What lower part of colormap to cut. Between 0 and 1, if 0.2 it cuts off (deletes) 20% of lower colors in
-        colormap.
-        If None cut is not applied.
-    max_colormap_cut : float
-        What upper part of colormap to cut. Between 0 and 1, if 0.8 it cuts off (deletes) 20% of upper colors in
-        colormap.
-        If None cut is not applied.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        matplotlib colormap name for the slope layer (default "OrRd").
+    min_colormap_cut : float or None
+        Lower end of the used part of the colormap, in [0, 1] (default 0).
+    max_colormap_cut : float or None
+        Upper end of the used part of the colormap, in [0, 1] (default 1).
+    no_data : float or None
+        No-data value of ``dem``; None means the DEM has no such value (NaN is no-data anyway).
 
     Returns
     -------
-    crim_out : numpy.ndarray
-        2D numpy result array of Color relief image map. 
+    numpy.ndarray
+        float64 ``(3, H, W)`` RGB image, values in [0, 1], NaN where ``dem`` is NaN.
+
+    Notes
+    -----
+    Known issues (docs/KNOWN_ISSUES.md):
+
+    - ``default.svf_r_max = 10`` changes the caller's DefaultValues object (and the shared default instance), so
+      a later use of the same object computes SVF / openness with r = 10 px;
+    - the opacity of the overlay layer has no visible effect (the overlay result replaces the background before
+      the opacity mix);
+    - with a gray colormap (R = G = B) the luminosity layer can give NaN at pixels where the DEM is finite
+      (rvt.blend_func.clip_color divides 0 by 0).
     """
-    slope_norm = ("value", 0, 0.8)  # ("value", 0, 50) deg
+    slope_norm = ("value", 0, 0.8)  # radians: 0..0.8 rad = 0..45.8 deg
     op_on_norm = ("value", -28, 28)
     default.svf_r_max = 10
 
@@ -1953,27 +1972,51 @@ def color_relief_image_map(dem, resolution, default: rvt.default.DefaultValues =
 
 def e3mstp(dem, resolution, default: rvt.default.DefaultValues = rvt.default.DefaultValues(), no_data=None):
     """
-    RVT enhanced version 3 Multi-scale topographic position (e3MSTP)
-    Blending combination where layers are:
-    1st: Simple local relief model (SLRM), screen, 25% opacity
-    2nd: Color relief image map where cmap=Reds_r(0.5-1) (CRIM_Reds_r), soft_light, 70% opacity
-    3rd: Multi-scale topographic position (MSTP)
+    Compute the enhanced multi-scale topographic position visualization, version 3 (e3MSTP).
+
+    Recipe as implemented (layers top first; the bottom layer is the start image):
+
+    ==  =================================================  ===============  ==========  =======
+    #   Image                                              Normalization    Blend mode  Opacity
+    ==  =================================================  ===============  ==========  =======
+    1   SLRM (DefaultValues.get_slrm), m                   value -0.5..0.5  screen      25 %
+    2   CRIM, color_relief_image_map with "OrRd", 0..1     value 0..1       soft_light  70 %
+    3   MSTP (DefaultValues.get_mstp), RGB                 value 0..1       (bottom)    --
+    ==  =================================================  ===============  ==========  =======
+
+    The SLRM uses ``default.slrm_rad_cell`` (px) and ``default.ve_factor``; the CRIM is computed with ``default``
+    (see color_relief_image_map); the MSTP uses ``default.mstp_local_scale``, ``mstp_meso_scale``,
+    ``mstp_broad_scale`` (px) and ``mstp_lightness``.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D DEM ``(H, W)`` in m, float. Pixels equal to ``no_data`` are set to NaN **in this array**.
     resolution : float
-        DEM pixel size.
+        Pixel size in m/px (x and y).
     default : rvt.default.DefaultValues
-        Default values for visualization functions.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Visualization parameters. **Its svf_r_max is set to 10 in place** (through color_relief_image_map). The
+        default is one instance created at import time and shared by all calls.
+    no_data : float or None
+        No-data value of ``dem``; None means the DEM has no such value (NaN is no-data anyway).
 
     Returns
     -------
-    e3mstp_out : numpy.ndarray
-        2D numpy result array of Color relief image map.
+    numpy.ndarray
+        float64 ``(3, H, W)`` RGB image, values in [0, 1], NaN where ``dem`` is NaN (also where it was
+        ``no_data``).
+
+    Notes
+    -----
+    Discrepancy: the earlier docstring described layer 2 as a CRIM colored with "Reds_r(0.5-1)"; the code uses
+    "OrRd" with cuts 0..1 (this docstring describes the code). See docs/KNOWN_ISSUES.md.
+
+    Known issues (docs/KNOWN_ISSUES.md):
+
+    - the opacity of the soft_light layer has no visible effect (70 % and 65 % give results that differ by
+      less than 1e-6): the soft light result replaces the background before the opacity mix;
+    - ``default.ve_factor`` is not applied to the MSTP layer nor to the slope inside the CRIM;
+    - ``default.svf_r_max`` is set to 10 on the caller's object (see color_relief_image_map).
     """
     if no_data is not None:
         dem[dem == no_data] = np.nan
@@ -2001,38 +2044,58 @@ def e3mstp(dem, resolution, default: rvt.default.DefaultValues = rvt.default.Def
 
 def e4mstp(dem, resolution, default: rvt.default.DefaultValues=rvt.default.DefaultValues(), no_data=None):
     """
-    RVT enhanced version 4 Multi-scale topographic position (e4MSTP)
-    Blending combination where layers are:
-    1st: Multi-scale topographic position (MSTP), overlay, 90% opacity
-    2nd: Combined SFV, multiply, opacity=25
-            * Sky-view factor(0.7 - 1), normal, opacity=50
-            * Sky-view factor(0.9 - 1), normal, opacity=100
-    3rd: Combined Openness and Local Dominance, multiply, opacity=100
-            * [Openness(-15 - 15) - Neg. Openness(-15 - 15)], normal, opacity=50
-            * Local Dominance(0.5 - 1.8), normal, opacity=100
-    4th: Colored slope (0-55), cmap=Reds_r(0-1), normal, opacity=100
+    Compute the enhanced multi-scale topographic position visualization, version 4 (e4MSTP).
 
-    Note
-    ----
-    Two different "defaults" settings are used. The first one, for general terrain is assigned at the function input
-    (which reads the defaults.json file), the second one for flat terrain is called inside the function (can not be
-    assigned by the user).
+    Recipe as implemented (layers top first; the bottom layer is the start image):
+
+    ==  ===========================================  ===============  ==========  =======
+    #   Image                                        Normalization    Blend mode  Opacity
+    ==  ===========================================  ===============  ==========  =======
+    1   MSTP (DefaultValues.get_mstp), RGB           value 0..1       overlay     90 %
+    2   combined SVF (below), float32                value -0.5..0.5  multiply    25 %
+    3   combined openness / LD (below), float32      value 0..1       multiply    100 %
+    4   slope in radians, inverted, "Reds_r" 0..1    value 0..55      (bottom)    --
+    ==  ===========================================  ===============  ==========  =======
+
+    Combined SVF, a two-layer combination rendered first: SVF with ``default`` (value 0.7..1, normal 50 %) over
+    the "flat terrain" SVF (value 0.9..1, bottom). The flat terrain SVF uses a new DefaultValues with
+    ``svf_r_max = int(10 / resolution)`` px (10 m, e.g. 20 px at 0.5 m/px) and ``svf_noise = 3``; it cannot be
+    set by the caller and ignores ``default``.
+
+    Combined openness / LD: positive minus negative openness (value -15..15, normal 50 %) over local dominance
+    (value 0.5..1.8, bottom), both with ``default``.
+
+    Layer 2 maps the combined SVF (values in [0, 1]) with the limits -0.5..0.5: values are clipped to 0.5 and
+    shifted by 0.5, so [0, 0.5] becomes [0.5, 1] and every value >= 0.5 becomes 1. Layer 4 is inverted because its
+    name is "Slope gradient" (rvt.blend_func.normalize_image).
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D DEM ``(H, W)`` in m, float. Pixels equal to ``no_data`` are set to NaN **in this array**.
     resolution : float
-        DEM pixel size.
+        Pixel size in m/px (x and y).
     default : rvt.default.DefaultValues
-        Default values for visualization functions.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Visualization parameters for MSTP, SVF, openness and local dominance; not modified. The default is one
+        instance created at import time and shared by all calls.
+    no_data : float or None
+        No-data value of ``dem``; None means the DEM has no such value (NaN is no-data anyway).
 
     Returns
     -------
-    e4mstp_out : numpy.ndarray
-        2D numpy result array of Color relief image map.
+    numpy.ndarray
+        float64 ``(3, H, W)`` RGB image, values in [0, 1]. Where ``dem`` is NaN (after the ``no_data``
+        replacement) the output is NaN if ``no_data`` is None, else ``no_data`` in all three bands.
+
+    Notes
+    -----
+    Known issues (docs/KNOWN_ISSUES.md):
+
+    - the slope comes from rvt.vis.slope_aspect with its default unit, radians (about 0..1.5), but is normalized
+      over 0..55 as if in degrees, so the inverted slope layer stays within about 0.97..1;
+    - the opacity of the MSTP overlay layer has no visible effect (the overlay result replaces the background
+      before the opacity mix);
+    - ``default.ve_factor`` is not applied to the MSTP layer, the slope layer and the flat terrain SVF.
     """
 
     # Nodata check
