@@ -52,7 +52,7 @@ and why.
 From the repository root:
 
 ```
-python -m pytest tests -q                                   # 1089 passed
+python -m pytest tests -q                                   # 1093 passed
 RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```

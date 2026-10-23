@@ -7,7 +7,7 @@ encode the contract, the tools that prove each commit keeps it, and how to run t
 
 ## 1. Test suites
 
-All tests are in `tests/` (1089 tests, about 10 s in one process on the development machine). `tests/conftest.py`
+All tests are in `tests/` (1093 tests: 1089 frozen at tag `tests-frozen` plus `test_proof_box_sum.py`; about 10 s in one process on the development machine). `tests/conftest.py`
 puts the repository root first on `sys.path` and asserts that the imported `rvt` comes from this repository, so the
 tests never run against an installed copy.
 
@@ -156,11 +156,19 @@ equivalent.
 | before the freeze (tests from `main`, 1021 tests) | 20 / 21 = 95 % (m21, the e3/e4 SLRM layer opacity, survived) | 21 / 21 | equivalent | MUTANTS PASS |
 | after the freeze (tests from `tests-frozen`, 1089 tests) | 21 / 21 = 100 % | 21 / 21 | equivalent | MUTANTS PASS |
 | final `main` (`de0f665`, after the refactors; tests from `tests-frozen`, 1089 tests) | 21 / 21 = 100 % | 21 / 21 | equivalent | MUTANTS PASS |
-| final `main` with mutants m22-m23 on the refactored helpers | pending | pending | pending | pending |
+| final `main` (`02f0b11`) with m22-m23 on the refactored helpers; tests from `tests-frozen`, 1089 tests | 22 / 23 = 96 % (m22 survived) | 22 / 23 = 96 % (m22 survived) | equivalent | MUTANTS FAIL (equiv below 100 %) |
+| final `main` (`02f0b11`), tests from `main` (1093 tests, incl. `test_proof_box_sum.py`) | 23 / 23 = 100 % | 23 / 23 | equivalent | MUTANTS PASS |
 
 The surviving mutant m21 led to `tests/test_char_e3e4_recipe.py` (commit `c341ec8`), added before the freeze.
-The log of the final-`main` run is `work/llm/eval/mutants_main.log` of the optimization workspace (not in this
-repository). Mutants m01-m21 do not touch the code that the three refactors changed (`_accumulate`, `_box_sum`,
+The surviving mutant m22 (the two subtractions of `_box_sum` in the other order) shows a limit of the frozen
+corpus, not of the code: the frozen tests use small DEMs whose float64 integral images are exact, so the order of
+the subtractions cannot change a bit there. The refactor 8839afd keeps the original order (checked by reading the
+diff, by the release audit, and by the audit's out-of-corpus bitwise comparison of `start` and `main`). The gap was
+closed with the new, additive test file `tests/test_proof_box_sum.py` (commit `422ad9f`; inputs with full 53-bit
+mantissas, where the two orders round differently); no frozen file was changed, and the threshold was not lowered:
+the run against the frozen tests is reported as FAIL above.
+The logs of the two final runs are in [release_evidence/0.1.0/](release_evidence/0.1.0/)
+(`mutants_final_frozen.log`, `mutants_final_all_main_tests.log`, with `frozen_final.log`). Mutants m01-m21 do not touch the code that the three refactors changed (`_accumulate`, `_box_sum`,
 `BLOCK_ELEMS`); m22-m23 are written for those helpers.
 
 ### 3.4 linecov: line coverage
@@ -205,7 +213,7 @@ Run from the repository root unless stated. Do not run plain `pytest` at the roo
 | tests, numpy fallback | `$env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL` | `RVT_NO_ACCEL=1 python -m pytest tests -q` |
 | tests, one thread | `$env:RVT_NUM_THREADS="1"; python -m pytest tests -q; Remove-Item Env:RVT_NUM_THREADS` | `RVT_NUM_THREADS=1 python -m pytest tests -q` |
 
-Expected last line: `1089 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
+Expected last line: `1093 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
 the numba path with the numpy path run too (they switch the accelerators on themselves), so nothing is skipped.
 Without numba installed, the tests that need it are skipped. In the development workspace, prefix with `pixi run`
 and pass the path of the checkout, e.g. `pixi run pytest rvt_py_llm/tests -q`.

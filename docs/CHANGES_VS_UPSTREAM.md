@@ -40,7 +40,7 @@ return shapes and dtypes, exception types) is unchanged.
   `RVT_NO_ACCEL=1`, the numpy code runs and gives the same bits. numba costs about 0.2 s to import and 0.24-0.40 s to
   compile per kernel, once per process.
 - **Documentation and tests.** Every public function has a numpy-style docstring with units, dtypes, edges and NaN
-  handling; the repository has architecture, testing and known-issue documents; 1089 tests.
+  handling; the repository has architecture, testing and known-issue documents; 1093 tests.
 - **Exception texts.** 40 messages were corrected (module name `rvt.vis` instead of `rvt.visualization`, wrong
   function or bound named, typos); exception types are unchanged. The list is at the end of this file.
 

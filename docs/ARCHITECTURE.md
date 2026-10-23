@@ -288,9 +288,10 @@ For a process that computes one cheap visualization on a small tile, `RVT_NO_ACC
 | `tests/test_char_tile.py` | characterization | both tiling functions on a 120 x 130 px GeoTIFF in 50 x 50 px tiles |
 | `tests/test_char_accel.py` | characterization | `rvt._accel` registry structure, return types, runtime failures |
 | `tests/test_api_snapshot.py` | API snapshot | signatures, defaults, `DefaultValues` attributes, `RVTVisualization` members |
+| `tests/test_proof_box_sum.py` | proof (added after the release audit) | `rvt.vis._box_sum` against the reference operation order on inputs where the order changes the rounding |
 
-The suite has 1089 tests and runs in about 10 s on one process; every file listed above is frozen at tag
-`tests-frozen` (see [TESTING.md](TESTING.md)).
+The suite has 1093 tests and runs in about 10 s on one process; every file listed above except
+`tests/test_proof_box_sum.py` is frozen at tag `tests-frozen` (1089 tests, see [TESTING.md](TESTING.md)).
 
 ## 6. If you need to change X, look at Y
 

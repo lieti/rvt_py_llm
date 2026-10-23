@@ -44,7 +44,7 @@ which is bitwise identical to the upstream code with the precision fix (`baselin
   `docs/UPSTREAM_README.md`.
 
 ### Verification
-- Tests: 1089 passed, with accelerators and with `RVT_NO_ACCEL=1` (no test skipped).
+- Tests: 1093 passed (1089 frozen + 4 added after the release audit), with accelerators and with `RVT_NO_ACCEL=1` (no test skipped).
 - At the freeze: `equiv.py` (accel, t1, noaccel; 153/153 public functions executed) and `mutants.py` (21/21 mutants
   killed by the tests and by equiv) PASS. For each refactor commit: tests (accel and `RVT_NO_ACCEL=1`) and
   `equiv.py` PASS. Every commit of `start..main` passes `astcheck.py` for its class (see docs/TESTING.md).

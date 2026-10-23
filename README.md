@@ -6,7 +6,7 @@ visualizations of digital elevation models (slope, hillshade, sky-view factor, o
 illumination, SLRM, MSRM, MSTP) and blends them into composites (VAT, e3MSTP, e4MSTP). The import name is still
 `rvt`, the API is unchanged, and the outputs are bitwise identical to the upstream code with one precision fix
 (tag `baseline-fixed`); against raw upstream only MSTP, e3MSTP and e4MSTP differ. The code is faster, every function
-is documented, and 1089 tests guard the behaviour. The upstream README is kept in
+is documented, and 1093 tests guard the behaviour. The upstream README is kept in
 [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 
 ## TL;DR (English)
@@ -60,7 +60,8 @@ is documented, and 1089 tests guard the behaviour. The upstream README is kept i
 - **Documentation.** Every public module, class and function has a numpy-style docstring (units, dtypes, edges,
   NaN, in-place effects); new documents describe the architecture, the tests, the known issues and the changes.
 - **Tests.** 223 equivalence tests of the optimized code and 866 tests that pin the current behaviour of every
-  public function (859 characterization tests and 7 API-snapshot tests); 1089 in total.
+  public function (859 characterization tests and 7 API-snapshot tests), frozen at tag `tests-frozen` (1089); plus 4
+  order-sensitive tests of `_box_sum` added after the release audit; 1093 in total.
 - **Messages.** 40 exception texts were corrected (they named the old module `rvt.visualization`, a wrong function or
   a wrong bound). Exception types are unchanged.
 - **Not changed.** API, defaults, settings files, file names and outputs (except the precision fix). Behaviour that
@@ -123,12 +124,12 @@ From the repository root (always pass the `tests` path; the upstream scripts `te
 at the root are not part of the suite):
 
 ```
-python -m pytest tests -q                                   # 1089 passed
-RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1089 passed
+python -m pytest tests -q                                   # 1093 passed
+RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1093 passed
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-With `RVT_NO_ACCEL=1` all 1089 tests also pass and none is skipped: the tests that compare the numba path with the
+With `RVT_NO_ACCEL=1` all 1093 tests also pass and none is skipped: the tests that compare the numba path with the
 numpy path switch the accelerators on themselves. They are skipped only when numba is not installed.
 
 The proof tools (AST check, bitwise record comparison, frozen check, mutants, docstring lint) are in
