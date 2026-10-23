@@ -719,25 +719,40 @@ def horizon_shift_vector(num_directions=16,
                          min_radius=1
                          ):
     """
-    Calculates Sky-View determination movements.
+    Return the pixel shifts and distances of a horizon search along ``num_directions`` directions.
+
+    For direction angle a_k = 360 / num_directions * k degrees, points are sampled on the ray at radii from
+    ``min_radius`` to ``radius_pixels`` px in steps of 1/3 px, rounded to whole pixels, de-duplicated and
+    sorted by their distance.
 
     Parameters
     ----------
     num_directions : int
-        Number of directions as input.
-    radius_pixels : int
-        Radius to consider in pixels (not in meters).
-    min_radius : int
-        Radius to start searching for horizon in pixels (not in meters).
+        Number of search directions. Default 16.
+    radius_pixels : int or float
+        Maximum search radius in px (not m), e.g. r = 10 px = 2.5 m at 0.25 m/px. Default 10.
+    min_radius : int or float
+        Minimum search radius in px. Default 1. With 0 the shift (0, 0) at distance 0 is included.
 
     Returns
     -------
-    shift : dict
-        Dict with keys corresponding to the directions of search azimuths rounded to 1 decimal number
-            - for each key, a subdict contains a key "shift":
-                values for this key is a list of tuples prepared for np.roll - shift along lines and columns
-            - the second key is "distance":
-                values for this key is a list of search radius used for the computation of the elevation angle 
+    dict
+        ``{a_k: {"shift": [(dy, dx), ...], "distance": numpy.ndarray float64}}``, keys are a_k in degrees
+        rounded to 1 decimal (``numpy.float64``), in increasing order. ``shift`` holds integer pairs for
+        ``np.roll(height, (dy, dx), axis=(0, 1))``; ``distance`` holds ``sqrt(dy**2 + dx**2)`` in px, in
+        ascending order, one per shift.
+
+    Notes
+    -----
+    ``dy = round(cos(a_k) * r)`` and ``dx = round(sin(a_k) * r)``. Since ``np.roll(h, (dy, dx))[i, j] ==
+    h[i - dy, j - dx]``, key 0 looks north (towards row 0), 90 west, 180 south and 270 east: the keys are
+    measured counterclockwise from north, unlike ``sun_azimuth`` and ``shadow_az``, which are clockwise.
+    ``sky_illumination`` converts with ``360 - shadow_az``. Equal distances are ordered by ``np.argsort``
+    of the de-duplicated set; the order is deterministic for given arguments.
+
+    See Also
+    --------
+    sky_view_factor_compute, horizon_generate_pyramids
     """
 
     # Initialize the output dict
@@ -980,49 +995,75 @@ def sky_view_factor_compute(height_arr,
                             a_min_weight=0.4
                             ):
     """
-    Calculates horizon based visualizations: Sky-view factor, Anisotropic SVF and Openness.
+    Compute sky-view factor, anisotropic sky-view factor and openness from a horizon search.
 
-    SVF processing is using search radius, that looks at values beyond the edge of an array. Consider using a buffered
-    array as an input, with the buffer size equal to the radius_max.
-    To prevent erosion of the edge, function applies mirrored padding in all four directions, however, this means that
-    edge values are "averaged over half of the hemisphere". Similarly, the edges of the dataset (i.e. areas with NaN
-    values), will be considered as fully open (SFV angle 0, Openness angle -90).
-
-    Input array should use np.nan as nodata value.
+    For each of ``num_directions`` directions the maximum elevation angle of the horizon is searched at the
+    shifts of ``horizon_shift_vector`` (radii ``radius_min`` .. ``radius_max`` px). Then
+    SVF = mean over directions of ``1 - sin(max(angle, 0))``; ASVF = the same terms weighted by
+    ``w_k = (1 - a_min_weight) * cos((a_k - a_main_direction) / 2) ** a_poly_level + a_min_weight`` and divided
+    by the sum of the weights; openness = ``90 - mean(angle)`` in degrees (Zakšek et al. 2011, Yokoyama et
+    al. 2002; docs/listofvis_svf.rst, docs/listofvis_openness.rst).
 
     Parameters
     ----------
     height_arr : numpy.ndarray
-        Elevation (DEM) as 2D numpy array.
+        2D elevation array, shape (H, W), in the same unit as one pixel (``sky_view_factor`` divides the DEM
+        by the resolution first). Use NaN for no-data. Not modified.
     radius_max : int
-        Maximal search radius in pixels/cells (not in meters).
-    radius_min : int
-        Minimal search radius in pixels/cells (not in meters), for noise reduction.
+        Maximum search radius in px, e.g. r = 10 px = 2.5 m at 0.25 m/px; also the padding width. Default 10.
+    radius_min : int or float
+        Minimum search radius in px (noise reduction). Default 1.
     num_directions : int
-        Number of directions as input.
+        Number of search directions. Default 16.
     compute_svf : bool
-        If true it computes and outputs svf.
-    compute_asvf : bool
-        If true it computes and outputs asvf.
+        Return ``"svf"``. Default True.
     compute_opns : bool
-        If true it computes and outputs opns.
+        Return ``"opns"``. Default False.
+    compute_asvf : bool
+        Return ``"asvf"``. Default False.
     a_main_direction : int or float
-        Main direction of anisotropy.
+        Main direction of anisotropy in degrees, in the convention of the ``horizon_shift_vector`` keys
+        (counterclockwise from north, see Notes). Default 315.
     a_poly_level : int
-        Level of polynomial that determines the anisotropy.
+        Exponent of the anisotropy weight (4 low, 8 high in ``sky_view_factor``). Default 4.
     a_min_weight : float
-        Weight to consider anisotropy:
-                 0 - low anisotropy, 
-                 1 - high  anisotropy (no illumination from the direction opposite the main direction)
+        Minimum weight, in [0, 1], given to the direction opposite the main one (0.4 low, 0.1 high
+        anisotropy in ``sky_view_factor``). Default 0.4.
 
     Returns
     -------
-    dict_out : dictionary
-        Return {"svf": svf_out, "asvf": asvf_out, "opns": opns_out};
-        svf_out, skyview factor : 2D numpy array (numpy.ndarray) of skyview factor;
-        asvf_out, anisotropic skyview factor : 2D numpy array (numpy.ndarray) of anisotropic skyview factor;
-        opns_out, openness : 2D numpy array (numpy.ndarray) openness (elevation angle of horizon).
+    dict
+        Keys ``"svf"``, ``"asvf"``, ``"opns"``, each present only if requested; values are
+        numpy.ndarray float64 (H, W) for float32 or float64 input. SVF and ASVF are in [0, 1], openness in
+        degrees. NaN where ``height_arr`` is NaN.
+
+    Notes
+    -----
+    Edges: the array is padded by ``radius_max`` in reflect mode, so pixels near the edge see a mirrored
+    terrain. NaN neighbours are skipped (``np.fmax``), i.e. treated as open sky; the search maximum starts
+    at slope -1000 (angle about -89.94°).
+
+    Known issue (see docs/KNOWN_ISSUES.md): ``a_main_direction`` is compared with the direction keys,
+    which are counterclockwise from north, while ``sun_azimuth`` elsewhere is clockwise. With the default
+    315 the weight is largest for the north-east sky, not the north-west.
+
+    Implementation: when every shift is at most ``radius_max`` px (checked at run time by
+    ``_svf_window_ok``; true for ``radius_max >= 1`` and ``radius_min <= radius_max``), ``_svf_compute_window``
+    computes only the output window from slices of the padded array, in row blocks, with an optional numba
+    kernel for the radius loop (``_svf_max_slope_kernel``; ``RVT_NO_ACCEL=1`` switches it off). The
+    results are bitwise identical to the full-extent ``np.roll`` loop below, which is kept as the
+    reference and the fallback.
+
+    See Also
+    --------
+    sky_view_factor, horizon_shift_vector
     """
+    # Structure:
+    #   1. pad by radius_max (reflect) and build the shifts of every direction;
+    #   2. fast path: output window only, in row blocks (_svf_compute_window), when no shift exceeds the padding;
+    #   3. reference path: per direction, running np.fmax of (rolled - height) / distance over all radii on the
+    #      padded extent, arctan, accumulate svf / asvf / opns terms;
+    #   4. crop the padding and average over the directions (asvf: over the weights).
 
     # Pad the array for the radius_max on all 4 sides
     height = np.pad(height_arr, radius_max, mode='reflect')
@@ -1119,43 +1160,65 @@ def sky_view_factor(dem,
                     no_data=None
                     ):
     """
-    Prepare the data, call sky_view_factor_compute, reformat and return back 2D arrays.
+    Compute sky-view factor, anisotropic sky-view factor and/or positive openness of a DEM.
+
+    Converts the DEM to float32, sets ``no_data`` to NaN, multiplies by ``ve_factor``, divides by
+    ``resolution`` (so that heights are in pixel units and the elevation angles are correct), derives the
+    minimum radius and the anisotropy parameters from the noise and level settings, and calls
+    ``sky_view_factor_compute``. Negative openness is obtained by calling this function with the negated
+    DEM (``rvt.default.DefaultValues.get_neg_opns``).
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
-    compute_svf : bool
-        Compute SVF (True) or not (False).
-    compute_opns : bool
-        Compute OPENNESS (True) or not (False).
+        2D elevation array (m), shape (H, W). Converted to float32 (a copy); not modified.
     resolution : float
-        Pixel resolution.
-    svf_n_dir : int
-        Number of directions.
-    svf_r_max : int
-        Maximal search radius in pixels.
-    svf_noise : int
-        The level of noise remove (0-don't remove, 1-low, 2-med, 3-high).
+        Pixel size (m/px). Must not be negative.
+    compute_svf : bool
+        Return ``"svf"``. Default True.
+    compute_opns : bool
+        Return ``"opns"`` (openness, degrees). Default False.
     compute_asvf : bool
-        Compute anisotropic SVF (True) or not (False).
-    asvf_level : int
-        Level of anisotropy, 1-low, 2-high.
+        Return ``"asvf"``. Default False.
+    svf_n_dir : int
+        Number of search directions. Default 16.
+    svf_r_max : int
+        Maximum search radius in px, e.g. r = 10 px = 2.5 m at 0.25 m/px. Default 10.
+    svf_noise : int
+        Noise removal level 0 (none), 1 (low), 2 (medium), 3 (high): the search starts at 0 %, 10 %, 20 % or
+        40 % of ``svf_r_max``, rounded, at least 1 px. Default 0.
     asvf_dir : int or float
-        Direction of anisotropy.
+        Main direction of anisotropy in degrees (see the known issue in ``sky_view_factor_compute``).
+        Default 315.
+    asvf_level : int
+        Anisotropy level 1 (low: exponent 4, minimum weight 0.4) or 2 (high: exponent 8, minimum weight 0.1).
+        Default 1.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan. Use this parameter when nodata
-        is not np.nan.
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it (after the float32 conversion) are set to NaN. Default None.
 
     Returns
     -------
-    dict_out : dictionary
-        Return {"svf": svf_out, "asvf": asvf_out, "opns": opns_out};
-        svf_out, skyview factor : 2D numpy array (numpy.ndarray) of skyview factor;
-        asvf_out, anisotropic skyview factor : 2D numpy array (numpy.ndarray) of anisotropic skyview factor;
-        opns_out, openness : 2D numpy array (numpy.ndarray) openness (elevation angle of horizon).
+    dict
+        Keys ``"svf"``, ``"asvf"``, ``"opns"``, each present only if requested; values are numpy.ndarray
+        float64 (H, W), NaN where the input is NaN or ``no_data``.
+
+    Raises
+    ------
+    Exception
+        If ``dem`` is not 2D, ``ve_factor`` is outside [-10000, 10000], ``svf_noise`` is not 0-3,
+        ``asvf_level`` is not 1 or 2, all three ``compute_*`` are False, or ``resolution`` is negative.
+
+    Notes
+    -----
+    Edges are padded by ``svf_r_max`` in reflect mode. For seamless tiles pass a DEM with a buffer of at
+    least ``svf_r_max`` px. The accelerated path is described in
+    ``sky_view_factor_compute``.
+
+    See Also
+    --------
+    sky_view_factor_compute, horizon_shift_vector
     """
 
     # Checks for input parameters
@@ -1258,33 +1321,71 @@ def local_dominance(dem,
                     no_data=None
                     ):
     """
-    Compute Local Dominance dem visualization.
-    Adapted from original version that is part of the Lidar Visualisation Toolbox LiVT developed by Ralf Hesse.
+    Compute local dominance: how much an observer above each pixel looks down on its surroundings.
+
+    Adapted from the Lidar Visualisation Toolbox (LiVT) by Ralf Hesse (docs/listofvis_localdom.rst). For
+    every shift (angle a, distance d) of a ring of radii ``min_rad`` .. ``max_rad`` px, where the observer
+    at ``z + observer_height`` is above the shifted pixel ``z_s``, the term
+    ``(z + observer_height - z_s) / d * (2 d + rad_inc)`` is added. The sum is divided by
+    ``norma = n_angles * sum_d(observer_height / d * (2 d + rad_inc))``, the value for flat terrain.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W).
     min_rad : int
-        Minimum radial distance (in pixels) at which the algorithm starts with visualization computation.
+        Minimum distance in px, e.g. r = 10 px = 2.5 m at 0.25 m/px. Default 10.
     max_rad : int
-        Maximum radial distance (in pixels) at which the algorithm ends with visualization computation.
+        Maximum distance in px; also the edge padding width. Default 20.
     rad_inc : int
-        Radial distance steps in pixels.
+        Distance step in px. Default 1.
     angular_res : int
-        Angular step for determination of number of angular directions.
+        Angle step in degrees; the angles are 0, ``angular_res``, ... below 360 (24 angles for 15).
+        Default 15.
     observer_height : int or float
-        Height at which we observe the terrain.
+        Observer height above the terrain (m). Default 1.7. Not multiplied by ``ve_factor``.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
+        Default None.
 
     Returns
     -------
-    local_dom_out : numpy.ndarray
-        2D numpy array of local dominance
+    numpy.ndarray
+        float64 (H, W); 1 for flat terrain, larger where the pixel dominates its surroundings; NaN where the
+        input is NaN.
+
+    Raises
+    ------
+    Exception
+        If ``dem`` is not 2D or ``ve_factor`` is outside [-10000, 10000].
+
+    Notes
+    -----
+    Edges: the DEM is padded by ``max_rad`` in edge mode. NaN neighbours compare False and add nothing.
+    There is no resolution parameter: heights in m are divided by distances in px, in the sum and in
+    ``norma`` alike.
+
+    Implementation: the shifts never exceed the padding (``|round(d * sin a)|, |round(d * cos a)| <=
+    max_rad``), so the shifted DEM over the output window is a slice of the padded DEM. The output window
+    is computed in row blocks of about 32768 elements (numpy), or by the numba kernel
+    ``_local_dominance_kernel`` (``RVT_NO_ACCEL=1`` switches it off), with the same float32 difference,
+    float64 division and multiplication, float32 accumulator and shift order as the original full-extent
+    ``np.roll`` loop at the end, which is kept as the reference (bitwise identical).
+
+    Known issue (see docs/KNOWN_ISSUES.md): with ``max_rad = 0`` the padding is 0, the reference loop
+    runs and its crop ``[0:-0]`` returns an empty (0, 0) array.
+
+    See Also
+    --------
+    sky_view_factor
     """
+    # Structure:
+    #   1. checks, no_data -> NaN (in place), float32, edge padding by max_rad, ve_factor;
+    #   2. distances, angles, normalisation norma, the list of (dy, dx) shifts (angle-major order);
+    #   3. fast path (shifts within the padding): numba kernel, else numpy row blocks; divide by norma;
+    #   4. reference path: np.roll per shift on the padded extent, masked accumulation, divide, crop.
     if dem.ndim != 2:
         raise Exception("rvt.visualization.local_dominance: dem has to be 2D np.array!")
     if not (10000 >= ve_factor >= -10000):
