@@ -31,7 +31,7 @@ Five functions have a faster path that returns bitwise identical results to the 
   because every shift is at most the padding width; where this is not guaranteed by construction the
   function checks it at run time and otherwise runs its original full-extent loop, which is kept as the
   reference. SVF, local dominance and sky illumination work in row blocks of about 32768 elements
-  (256 KiB of float64 per buffer) so that the per-block buffers stay in the CPU cache;
+  (``rvt._blocking.BLOCK_ELEMS``, 256 KiB of float64 per buffer) so that the per-block buffers stay in the CPU cache;
 - the inner loops of four of them (SVF horizon scan, local dominance, sky illumination level search,
   MSTP deviation) also have a numba kernel, registered with ``rvt._accel.jit_kernel`` and run through
   ``rvt._accel.call``. When numba is missing, fails, or ``RVT_NO_ACCEL=1`` is set, the call returns False
@@ -73,6 +73,7 @@ Copyright:
 # python libraries
 import numpy as np
 from rvt import _accel
+from rvt._blocking import BLOCK_ELEMS as _BLOCK_ELEMS
 from scipy.interpolate import griddata, RectBivariateSpline
 from scipy.ndimage import distance_transform_edt
 from scipy.spatial import cKDTree
@@ -796,13 +797,6 @@ def horizon_shift_vector(num_directions=16,
     return shift
 
 
-# Number of output-window elements processed at once by the horizon scan. 32768 float64 elements are 256 KiB per
-# buffer, so the few per-block buffers (difference, quotient, running maximum, accumulators) stay in the L2 cache of
-# current CPUs while all radii of a direction are scanned. The value only affects speed: pixels are independent, so
-# any block size gives the same results.
-_SVF_BLOCK_ELEMS = 32768
-
-
 def _svf_window_ok(height, radius_max, move):
     """
     Return True if the output-window path of ``sky_view_factor_compute`` is exact for these arguments.
@@ -923,8 +917,8 @@ def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, c
     Per pixel the arithmetic is that of the full-extent loop: (shifted - height) / radius with the np.float64
     radius, np.fmax with the float32 -1000 start, np.arctan, then per direction svf + (1 - sin(fmax(angle, 0))),
     asvf + (1 - sin(fmax(angle, 0))) * weight[i_dir], opns + angle, starting from height * 0. Pixels are
-    independent, so the window is processed in row blocks of ``_SVF_BLOCK_ELEMS`` elements, and every
-    shifted array is the slice ``height[r + r0 - dy : r + r1 - dy, r - dx : r - dx + W]``, which equals the
+    independent, so the window is processed in row blocks of ``_BLOCK_ELEMS`` elements (``rvt/_blocking.py``),
+    and every shifted array is the slice ``height[r + r0 - dy : r + r1 - dy, r - dx : r - dx + W]``, which equals the
     rolled array there because no shift exceeds the padding.
 
     Per block and direction the running maximum comes from ``_svf_max_slope_kernel`` when numba is usable
@@ -957,7 +951,7 @@ def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, c
                      np.array([s[2] for s in steps], dtype=np.float64)) for steps in scan]
 
     svf_win = asvf_win = opns_win = None
-    block_rows = max(1, _SVF_BLOCK_ELEMS // max(1, n_cols))
+    block_rows = max(1, _BLOCK_ELEMS // max(1, n_cols))
     for r0 in range(0, n_rows, block_rows):
         r1 = min(n_rows, r0 + block_rows)
         h_blk = height[r + r0:r + r1, r:r + n_cols]
@@ -1441,7 +1435,7 @@ def local_dominance(dem,
 
     Implementation: the shifts never exceed the padding (``|round(d * sin a)|, |round(d * cos a)| <=
     max_rad``), so the shifted DEM over the output window is a slice of the padded DEM. The output window
-    is computed in row blocks of about 32768 elements (numpy), or by the numba kernel
+    is computed in row blocks of about ``_BLOCK_ELEMS`` = 32768 elements (numpy), or by the numba kernel
     ``_local_dominance_kernel`` (``RVT_NO_ACCEL=1`` switches it off), with the same float32 difference,
     float64 division and multiplication, float32 accumulator and shift order as the original full-extent
     ``np.roll`` loop at the end, which is kept as the reference (bitwise identical).
@@ -1507,7 +1501,7 @@ def local_dominance(dem,
                            distances, dist_factor):
                 return local_dom_out / norma
             local_dom_out = dem_in * 0  # fallback: start again from the numpy path
-        blk_rows = max(1, 32768 // max(1, n_cols))
+        blk_rows = max(1, _BLOCK_ELEMS // max(1, n_cols))
         buf_mask = np.empty((blk_rows, n_cols), dtype=bool)
         buf_diff = np.empty((blk_rows, n_cols), dtype=np.float32)
         buf_val = np.empty((blk_rows, n_cols), dtype=np.result_type(buf_diff, distances[0], dist_factor[0]))
@@ -1842,14 +1836,14 @@ def _sky_illum_block_rows(n_cols):
     """
     Return the number of rows per block of the blocked sky illumination path (at least 16).
 
-    About 32768 pixels per block (256 KiB per float64 buffer, so the block buffers stay in the L2 cache),
+    About ``_BLOCK_ELEMS`` = 32768 pixels per block (``rvt/_blocking.py`` gives the cache reasoning),
     rounded down to a multiple of 16 rows. With a multiple of 16 rows every block except the last holds a
     multiple of 16 elements, so each element sits at the same position relative to the SIMD vector width
     (at most 16 lanes) as in the whole-array operation. numpy's vectorized transcendental functions (sin,
     cos, arctan, power) may round differently in the vector body and in the scalar tail of a loop; keeping
     the positions keeps every element on the same code path and the results bitwise identical.
     """
-    return max(16, (32768 // max(1, n_cols)) // 16 * 16)
+    return max(16, (_BLOCK_ELEMS // max(1, n_cols)) // 16 * 16)
 
 
 # Two serial numba kernels reproduce the numpy path of _sky_illum_search_blocked row by row, with the same operations

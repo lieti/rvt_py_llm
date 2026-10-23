@@ -15,7 +15,9 @@ Modules:
 - ``rvt.blend_func``: blend modes, normalization and opacity on arrays, used by ``rvt.blend``;
 - ``rvt.tile``: tile-by-tile processing of rasters larger than memory;
 - ``rvt._accel``: private; optional numba kernels with a numpy fallback (``RVT_NO_ACCEL``,
-  ``RVT_NUM_THREADS``).
+  ``RVT_NUM_THREADS``);
+- ``rvt._blocking``: private; the block size shared by the row-blocked loops of ``rvt.vis`` and
+  ``rvt.blend_func``.
 
 The module structure, the data flow and the accelerated paths are described in docs/ARCHITECTURE.md; units,
 NaN, dtype and edge conventions in docs/CONVENTIONS.md; known issues in docs/KNOWN_ISSUES.md.

@@ -74,15 +74,15 @@ import numpy as np
 from matplotlib import colormaps
 from matplotlib.colors import LinearSegmentedColormap
 
+from rvt._blocking import BLOCK_ELEMS as _BLOCK_ELEMS
+
 # Blocked elementwise evaluation (pure data-flow change). The blend kernels below evaluate exactly the same
 # expressions on the same element values, only on row blocks of about _BLOCK_ELEMS elements instead of whole
 # images, so temporaries stay cache-resident and full-size temporaries / fancy indexing are avoided. Every element
 # goes through the same IEEE operations in the same order and with the same dtypes, so results are bitwise equal.
-# Why 32768: one float64 temporary of a block is 256 KiB (float32: 128 KiB), so the few temporaries of one blend
-# expression stay in the CPU cache (L2 / L3) instead of streaming image-sized temporaries through main memory. The
-# value is not tuned per machine; the same block size is used by the block loops in vis.py. The results do not
-# depend on it, because every operation is elementwise.
-_BLOCK_ELEMS = 32768
+# _BLOCK_ELEMS = 32768 is imported from rvt/_blocking.py, which explains the value (cache size of the block
+# temporaries) and is shared with the block loops in vis.py. The results do not depend on it, because every
+# operation is elementwise.
 _FLOAT_DTYPES = (np.dtype(np.float32), np.dtype(np.float64))
 _REAL_SCALARS = (int, float, np.integer, np.floating)
 
