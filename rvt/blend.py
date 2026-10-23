@@ -1206,12 +1206,7 @@ def compare_2_combinations(combination1: BlenderCombination, combination2: Blend
     for i_layer in range(len(combination1.layers)):
         if combination1.layers[i_layer].vis.lower() != combination2.layers[i_layer].vis.lower():
             return False
-        # if combination1.layers[i_layer].normalization.lower() != combination2.layers[i_layer].normalization.lower():
-        #     return False
-        # if combination1.layers[i_layer].min != combination2.layers[i_layer].min:
-        #     return False
-        # if combination1.layers[i_layer].max != combination2.layers[i_layer].max:
-        #     return False
+        # normalization, min and max are not compared (see Notes; the checks were commented out upstream)
         if combination1.layers[i_layer].blend_mode.lower() != combination2.layers[i_layer].blend_mode.lower():
             return False
         if combination1.layers[i_layer].opacity != combination2.layers[i_layer].opacity:

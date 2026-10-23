@@ -977,10 +977,6 @@ def _blend_soft_light_ref(active, background):
     Writes the result into ``background`` at the ``np.where`` index sets of ``active < 0.5`` and
     ``active >= 0.5`` (both taken before the first write) and returns ``background``.
     """
-    # idx1 = np.where(active > 0.5)
-    # idx2 = np.where(active <= 0.5)
-    # background[idx1] = 1 - (1-background[idx1]) * (1-(active[idx1]-0.5))
-    # background[idx2] = background[idx2] * (active[idx2]+0.5)
     idx1 = np.where(active < 0.5)
     idx2 = np.where(active >= 0.5)
     background[idx1] = 2 * background[idx1] * active[idx1] + background[idx1] ** 2 * (1.0 - 2 * active[idx1])
@@ -1365,19 +1361,18 @@ def scale_within_0_and_1(numeric_value):
     if np.nanmin(numeric_value) >= 0 and np.nanmax(numeric_value) <= 1:
         return numeric_value
 
-    # Create mask for NaN values
-    # nan_mask = np.isnan(numeric_value)
-
+    # NaN is replaced in the caller's array and not restored at the end (see Notes)
     numeric_value[np.isnan(numeric_value)] = np.nanmin(numeric_value)  # nan change to nanmin
 
+    # Known issue (Notes): the second argument of np.array is the dtype, so the limits are always 0 and 1
     actual_min = np.nanmin(numeric_value)
     norm_min_value = np.nanmax(np.array(0, actual_min))
 
     actual_max = np.nanmax(numeric_value)
     norm_max_value = np.nanmin(np.array(1, actual_max))
 
-    # Do not scale values where max is between 1 and 255 if the max-min values difference is at least 30 and min >0
-    # and numeric values are integer type
+    # Values that look like 8-bit data (1 < max <= 255, max - min > 30, min > 0) are divided by 255; the dtype is
+    # not checked
     if 255 >= actual_max > 1:
         if actual_max - actual_min > 30 and actual_min > 0:
             scaled = numeric_value / 255
@@ -1387,8 +1382,6 @@ def scale_within_0_and_1(numeric_value):
 
     if np.nanmin(scaled) > -0.01:
         scaled[(0 > scaled) & (scaled > -0.01)] = 0
-
-    # scaled[nan_mask] = np.nan
 
     return scaled
 
