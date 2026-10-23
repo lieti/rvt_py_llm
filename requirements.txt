@@ -6,3 +6,5 @@ pandas
 geopandas
 rasterio
 jupyter
+# Optional: numba>=0.60 enables the compiled paths of rvt._accel (same results; numpy is used without it).
+# numba>=0.60
