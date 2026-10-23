@@ -1246,6 +1246,84 @@ def _sky_illum_level_search(height, move, direction, max_slope, inner):
     return max_slope
 
 
+def _sky_illum_block_rows(n_cols):
+    # ~32k pixels per block; a multiple of 16 rows keeps every block but the last a multiple of the
+    # SIMD width, so element positions in vector bodies and tails match the whole-array operation
+    return max(16, (32768 // max(1, n_cols)) // 16 * 16)
+
+
+def _sky_illum_search_blocked(hp, p, shifts, max_slope, floor_once):
+    # Horizon search of one level and direction on the window hp[p:p + n0, p:p + n1] (n0, n1 =
+    # max_slope.shape) with the shifted windows hp[p - dy:, p - dx:] (|dy|, |dx| <= p), in row
+    # blocks that stay in cache. Per pixel the same ufuncs, operand order and dtypes as
+    #     max_slope = np.maximum(max_slope, np.maximum((shifted - base) / radius, 0.))
+    # (see _sky_illum_level_search; max_slope is promoted before the first radius instead of at
+    # it, exact for float32 -> float64). floor_once computes max(ms, max(q1, 0), ..., max(qn, 0))
+    # as max(max(ms, 0), q1, ..., qn): the same numbers (np.maximum returns the NaN operand, the
+    # first one if both are NaN), only the sign of a zero maximum may differ.
+    # max_slope is updated in place when its dtype is already the promoted one.
+    if len(shifts) == 0:
+        return max_slope
+    n0, n1 = max_slope.shape
+    d_dtype = hp.dtype
+    q_dtype = np.result_type(np.empty(0, dtype=d_dtype), shifts[0][2])
+    if np.result_type(max_slope, np.empty(0, dtype=q_dtype)) != max_slope.dtype:
+        max_slope = max_slope.astype(np.result_type(max_slope, np.empty(0, dtype=q_dtype)))
+    rows = _sky_illum_block_rows(n1)
+    shape_b = (min(rows, n0), n1)
+    diff_b = np.empty(shape_b, dtype=d_dtype)
+    quot_b = diff_b if q_dtype == d_dtype else np.empty(shape_b, dtype=q_dtype)
+    for r0 in range(0, n0, rows):
+        r1 = min(r0 + rows, n0)
+        ms = max_slope[r0:r1]
+        d_b = diff_b[:r1 - r0]
+        q_b = quot_b[:r1 - r0]
+        base = hp[p + r0:p + r1, p:p + n1]
+        if floor_once:
+            np.maximum(ms, 0., out=ms)
+            for dy, dx, radius in shifts:
+                np.subtract(hp[p + r0 - dy:p + r1 - dy, p - dx:p - dx + n1], base, out=d_b)
+                np.divide(d_b, radius, out=q_b)
+                np.maximum(ms, q_b, out=ms)
+        else:
+            for dy, dx, radius in shifts:
+                np.subtract(hp[p + r0 - dy:p + r1 - dy, p - dx:p - dx + n1], base, out=d_b)
+                np.divide(d_b, radius, out=q_b)
+                np.maximum(q_b, 0., out=q_b)
+                np.maximum(ms, q_b, out=ms)
+    return max_slope
+
+
+def _sky_illum_resample(x, y, z, x_fine, y_fine):
+    # Same values as RectBivariateSpline(x, y, z, kx=1, ky=1)(x_fine, y_fine).
+    # For kx = ky = 1 and s = 0 the knots are (x[0], x, x[-1]) and the fitted coefficients are z
+    # itself whenever (1 / dx) * dx == 1 for every knot step (the B-spline values at the data
+    # points are then exactly 1 and 0, every Givens rotation has cos = 0, sin = 1, and the back
+    # substitution only subtracts exact zeros) and z is finite; NaN or inf would be spread by the
+    # fit, so then the fit is run. The evaluation is the same FITPACK bispev with the same knots.
+    x = np.asarray(x)
+    y = np.asarray(y)
+    z = np.asarray(z)
+    direct = (z.ndim == 2 and z.dtype == np.float64 and x.ndim == 1 and y.ndim == 1
+              and z.shape == (x.size, y.size) and x.size >= 2 and y.size >= 2
+              and np.size(x_fine) > 0 and np.size(y_fine) > 0)
+    if direct:
+        tx = np.concatenate((x[:1], x, x[-1:])).astype(np.float64)
+        ty = np.concatenate((y[:1], y, y[-1:])).astype(np.float64)
+        dtx = np.diff(tx[1:-1])
+        dty = np.diff(ty[1:-1])
+        direct = (bool(np.all(dtx > 0)) and bool(np.all(dty > 0))
+                  and bool(np.all((1. / dtx) * dtx == 1.)) and bool(np.all((1. / dty) * dty == 1.))
+                  and bool(np.isfinite(z).all()))
+    if not direct:
+        return RectBivariateSpline(x, y, z, kx=1, ky=1)(x_fine, y_fine)
+    from scipy.interpolate import bisplev
+    x_fine = np.asarray(x_fine)
+    y_fine = np.asarray(y_fine)
+    out = bisplev(x_fine, y_fine, (tx, ty, np.ascontiguousarray(z).ravel(), 1, 1))
+    return np.asarray(out).reshape((x_fine.size, y_fine.size))
+
+
 def sky_illumination(dem,
                      resolution,
                      sky_model="overcast",
@@ -1391,6 +1469,43 @@ def sky_illumination(dem,
         overcast_sh_out = None
         uniform_sh_out = None
 
+    # Blocked level 0 and directional terms: every pixel is independent, so level 0 and the
+    # per-direction terms are computed in row blocks that stay in cache (same ufuncs, operands,
+    # operand order and dtypes per pixel). Used for the float32 level-0 DEM on the unpadded extent
+    # (max_slope and the directional terms are then float64); otherwise the whole-array path below runs.
+    height0 = pyramid[0]["dem"]
+    blocked = (inner0 and height0.dtype == np.float32 and aspect.dtype in (np.float32, np.float64)
+               and all(shift0[d]["distance"].dtype == np.float64 and len(shift0[d]["shift"]) > 0
+                       for d in shift0))
+    if blocked:
+        n_w0, n_w1 = work_shape
+        rows_blk = _sky_illum_block_rows(n_w1)
+        blocks = [(r0, min(r0 + rows_blk, n_w0)) for r0 in range(0, n_w0, rows_blk)]
+        blk_shape = (min(rows_blk, n_w0), n_w1)
+        ang_b = np.empty(blk_shape, dtype=np.float64)
+        dasp_b = np.empty(blk_shape, dtype=np.float64)
+        buf_b = np.empty(blk_shape, dtype=np.float64)
+        cos_b = np.empty(blk_shape, dtype=np.float64)
+
+        def _shift_lists(move):
+            return {d: [(int(s[0]), int(s[1]), r) for s, r in zip(move[d]["shift"], move[d]["distance"])]
+                    for d in move}
+
+        shifts0 = _shift_lists(shift0)
+        d_aspect_coef = -2 * np.sin(da)
+        # Coarser levels keep np.roll semantics on their full extent: with |shift| <= p <= the level
+        # size, np.roll(height, (dy, dx))[i, j] == np.pad(height, p, mode="wrap")[p + i - dy, p + j - dx].
+        coarse_wrap = {}
+        for i_level in range(1, n_levels + 1):
+            h_c = pyramid[i_level]["dem"]
+            move_c = pyramid[i_level]["shift"]
+            p_c = max([max(abs(int(s[0])), abs(int(s[1]))) for d in move_c for s in move_c[d]["shift"]] + [0])
+            if (h_c.ndim == 2 and p_c <= min(h_c.shape) and h_c.dtype.kind == "f"
+                    and all(move_c[d]["distance"].dtype == np.float64 for d in move_c)):
+                coarse_wrap[i_level] = (np.pad(h_c, p_c, mode="wrap"), p_c, _shift_lists(move_c))
+            else:
+                coarse_wrap[i_level] = None
+
     # search for horizon in each direction...
     for i_dir, direction in enumerate(pyramid[0]["shift"]):
         dir_rad = np.radians(direction)
@@ -1403,8 +1518,17 @@ def sky_illumination(dem,
             move = pyramid[i_level]["shift"]
 
             # ... and to the search radius (keep the largest slope)
-            max_slope = _sky_illum_level_search(height, move, direction, max_slope,
-                                                p_in if i_level == 0 else None)
+            if i_level == 0 and blocked:
+                # the zero sign of level 0 reaches the horizon of the shadow direction: literal there
+                max_slope = _sky_illum_search_blocked(height0, pm, shifts0[direction], max_slope,
+                                                      not (compute_shadow and direction == shadow_az))
+            elif i_level > 0 and blocked and coarse_wrap[i_level] is not None:
+                # coarse levels only reach the spline, whose values do not depend on the zero sign
+                hp_c, p_c, shifts_c = coarse_wrap[i_level]
+                max_slope = _sky_illum_search_blocked(hp_c, p_c, shifts_c[direction], max_slope, True)
+            else:
+                max_slope = _sky_illum_level_search(height, move, direction, max_slope,
+                                                    p_in if i_level == 0 else None)
 
             # resample the max_slope to a lower pyramid level
             if i_level > 0:
@@ -1418,8 +1542,53 @@ def sky_illumination(dem,
                     col_fine = col_fine[pm:-pm]
                 lin_coarse = pyramid[i_level]["i_lin"] * pyramid_scale
                 col_coarse = pyramid[i_level]["i_col"] * pyramid_scale
-                interp_spline = RectBivariateSpline(lin_coarse, col_coarse, max_slope, kx=1, ky=1)
-                max_slope = interp_spline(lin_fine, col_fine)
+                max_slope = _sky_illum_resample(lin_coarse, col_coarse, max_slope, lin_fine, col_fine)
+
+        if blocked:
+            if compute_shadow and (direction == shadow_az):
+                horizon_out = np.degrees(np.arctan(max_slope))
+                shadow_out = (horizon_out < shadow_el) * 1
+                if shadow_horizon_only:
+                    return {"shadow": shadow_out, "horizon": horizon_out}
+            # float32 accumulators are promoted to float64 by the first acc + term (0. + term)
+            if uniform_a.dtype != np.float64:
+                uniform_a = uniform_a.astype(np.float64)
+                uniform_b = uniform_b.astype(np.float64)
+                if compute_overcast:
+                    overcast_c = overcast_c.astype(np.float64)
+                    overcast_d = overcast_d.astype(np.float64)
+            for r0, r1 in blocks:
+                n_r = r1 - r0
+                # _ = np.arctan(max_slope)
+                _ = np.arctan(max_slope[r0:r1], out=ang_b[:n_r])
+                # _d_aspect = -2 * np.sin(da) * np.cos(dir_rad - aspect)
+                _d_aspect = np.subtract(dir_rad, aspect[r0:r1], out=dasp_b[:n_r])
+                np.cos(_d_aspect, out=_d_aspect)
+                np.multiply(d_aspect_coef, _d_aspect, out=_d_aspect)
+                # the same sequence as the whole-array float64 branch below
+                cos_ = np.cos(_, out=cos_b[:n_r])
+                buf = np.square(cos_, out=buf_b[:n_r])
+                np.add(uniform_a[r0:r1], buf, out=uniform_a[r0:r1])
+                np.multiply(2., _, out=buf)
+                np.sin(buf, out=buf)
+                np.divide(buf, 4., out=buf)
+                np.divide(_, 2., out=_)
+                np.subtract(np.pi / 4., _, out=_)
+                np.subtract(_, buf, out=_)
+                np.multiply(_d_aspect, _, out=_)
+                np.maximum(_, 0, out=_)
+                np.add(uniform_b[r0:r1], _, out=uniform_b[r0:r1])
+                if compute_overcast:
+                    _cos3 = np.power(cos_, 3, out=buf)
+                    np.maximum(_cos3, 0, out=_)
+                    np.add(overcast_c[r0:r1], _, out=overcast_c[r0:r1])
+                    np.subtract(2. / 3., cos_, out=cos_)
+                    np.divide(_cos3, 3., out=_cos3)
+                    np.add(cos_, _cos3, out=cos_)
+                    np.multiply(_d_aspect, cos_, out=cos_)
+                    np.maximum(cos_, 0, out=cos_)
+                    np.add(overcast_d[r0:r1], cos_, out=overcast_d[r0:r1])
+            continue
 
         # convert to angle in radians and compute directional output
         _ = np.arctan(max_slope)
