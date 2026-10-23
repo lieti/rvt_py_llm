@@ -8,8 +8,10 @@ purpose. Deciding which of these to fix, and how, is left to the upstream author
 
 Conventions of this list:
 
-- **Where** gives `file:line` at tag `start` (`8413d3e`, the code of `opt/perf`). In 0.1.0 the same code has
-  docstrings and comments added, so its line numbers are larger; search for the function name or the quoted code.
+- **Where** gives `file:line` at tag `start` (`8413d3e`, the code of `opt/perf`), where the issue was found; these
+  lines are kept as evidence. In 0.1.0 the same code has docstrings and comments added, so its line numbers are
+  200-1600 lines larger. **Now** gives the same places in 0.1.0: the enclosing function (the stable reference) and
+  the current line at commit `234b156`, found by matching the unchanged source line between the two commits.
 - **Repro** uses the preamble below; the result after `->` was printed on Windows 11, Python 3.11.17, numpy 2.4.6,
   numba 0.68.0, by code that is behaviour-identical to `start`.
 - **Pinned** names the frozen test that asserts the current behaviour (`tests/<file>:<line>` or
@@ -67,6 +69,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   `multi_hillshade` at `rvt/vis.py:383` with a slope and aspect of shape (H, W). Consequences:
   `rvt/default.py:1467-1471` (`save_multi_hillshade` writes the cropped array with the DEM's geotransform) and
   `rvt/tile.py:238-239`, `:419-440` (`save_rvt_visualization_tile_by_tile` assumes a result of tile size).
+- Now: `hillshade` (`rvt/vis.py:454`); `multi_hillshade` (`rvt/vis.py:549`); `DefaultValues.save_multi_hillshade`
+  (`rvt/default.py:2422-2426`); `_create_rvt_visualization_blank_raster` (`rvt/tile.py:347-348`);
+  `save_rvt_visualization_tile_by_tile` (`rvt/tile.py:619-640`) (lines at `234b156`).
 - Description: `hillshade` crops 1 px on each side of whatever slope it gets; this fits only its own
   (H + 2, W + 2) slope. `multi_hillshade` passes an (H, W) slope, so its result is (n, H - 2, W - 2); pixel
   [i, j] belongs to DEM pixel [i + 1, j + 1].
@@ -89,6 +94,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-03 sky_illumination: a tile matches the full raster exactly only when its origin is a multiple of 8 px
 - Where: `rvt/vis.py:1570` at `start` (`horizon_generate_pyramids(dem, ...)` inside `sky_illumination`),
   `rvt/vis.py:1218-1294` (`horizon_generate_pyramids`), `rvt/vis.py:1156` (`horizon_generate_coarse_dem`).
+- Now: `sky_illumination` (`rvt/vis.py:2206`); `horizon_generate_pyramids` (`rvt/vis.py:1665-1783`);
+  `horizon_generate_coarse_dem` (`rvt/vis.py:1560`) (lines at `234b156`).
 - Description: the coarse pyramid levels (scale 2, 3 levels with the defaults) are anchored at the top-left
   corner of the array passed in, so the coarse grid of a tile depends on the tile origin modulo 2^3 = 8 px.
 - Impact: tiled processing (`rvt.tile`, or any external tiling) differs from the full-raster result. Measured on a
@@ -101,8 +108,10 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-04 topographic_dev is public but no rvt function calls it
 - Where: `rvt/vis.py:1999` at `start` (`topographic_dev`).
-- Description: `max_elevation_deviation` evaluates the same expressions on the output window (`_mstp_box_sum`,
-  `_mstp_dev_max_kernel`); `topographic_dev` is kept as public API only.
+- Now: `topographic_dev` (`rvt/vis.py:2682`) (lines at `234b156`).
+- Description: `max_elevation_deviation` evaluates the same expressions on the output window (numpy path with
+  `_box_sum`, called `_mstp_box_sum` at `start`; numba path `_mstp_dev_max_kernel`); `topographic_dev` is kept as
+  public API only.
 - Impact: none on results; a change to `topographic_dev` does not change MSTP.
 - Repro:
   ```python
@@ -115,6 +124,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-05 mstp accepts ve_factor >= -1000 only
 - Where: `rvt/vis.py:2263` at `start` (`mstp`): `if not (10000 >= ve_factor >= -1000)`.
+- Now: `mstp` (`rvt/vis.py:3034`) (lines at `234b156`).
 - Description: every other function accepts [-10000, 10000]. Until 0.1.0 the message said "-10000"; the `msg:`
   commit 51a882a made the message state the actual check, which is unchanged.
 - Impact: `ve_factor` in [-10000, -1001] raises for MSTP only. MSTP is nearly invariant to `ve_factor` (only the
@@ -131,6 +141,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/vis.py:1552-1553` at `start` (DEM converted and multiplied by `ve_factor`, never divided by
   `resolution`); compare `sky_view_factor` at `rvt/vis.py:976` (`dem = dem / resolution`). In `sky_illumination`
   `resolution` is used only for slope and aspect (`rvt/vis.py:1565`).
+- Now: `sky_illumination` (`rvt/vis.py:2188-2189`, `:2201`); `sky_view_factor` (`rvt/vis.py:1324`) (lines at
+  `234b156`).
 - Description: the horizon search divides height differences in m by distances in px, so horizon angles are
   correct only at 1 m/px.
 - Impact: shadow, horizon and the horizon terms of sky illumination are wrong at any other pixel size; at
@@ -148,6 +160,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   (coarse padding with `dem_coarse.min()`), the spline fit on non-finite data (`_sky_illum_resample` falls back to
   `RectBivariateSpline`), `rvt/vis.py:1813` (`overcast_out.max()`); `shadow_horizon` at `rvt/vis.py:1885`;
   through `DefaultValues.get_shadow` (`rvt/default.py:1284`) and `get_sky_illumination` (`rvt/default.py:1811`).
+- Now: `horizon_generate_pyramids` (`rvt/vis.py:1758`); `horizon_generate_coarse_dem` (`rvt/vis.py:1660`);
+  `sky_illumination` (`rvt/vis.py:2456`); `shadow_horizon` (`rvt/vis.py:2537`); `DefaultValues.get_shadow`
+  (`rvt/default.py:2037`); `DefaultValues.get_sky_illumination` (`rvt/default.py:3001`) (lines at `234b156`).
 - Description: `dem.min()` is NaN when the DEM holds a NaN, so the pyramid padding and every coarse level become
   NaN, the spline spreads NaN to every pixel, and the horizon of every pixel is NaN. The shadow is computed by
   comparisons with that horizon, which are False for NaN, so the shadow is 0 everywhere.
@@ -168,6 +183,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-08 sky_illumination: shadow_az is matched without wrap-around (0 and 360 differ)
 - Where: `rvt/vis.py:1616` at `start`: `i = np.argmin(np.abs(_ - (360 - shadow_az)))`.
+- Now: `sky_illumination` (`rvt/vis.py:2252`) (lines at `234b156`).
 - Description: the direction keys run from 0 to 348.75 (32 directions); `shadow_az = 0` looks for 360 and picks
   348.75 (the key of `shadow_az = 11.25`) instead of key 0, which `shadow_az = 360` picks.
 - Impact: a sun exactly in the north casts its shadow 11.25° off; 0 and 360 give different results.
@@ -184,6 +200,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/vis.py:1767` at `start`: `_d_aspect = -2 * np.sin(da) * np.cos(dir_rad - aspect)`, combined with the
   direction keys of `horizon_shift_vector` (`rvt/vis.py:528-529`, counterclockwise from north) and the aspect of
   `slope_aspect` (clockwise from north). The mixed conventions are a plausible cause; this is not proven.
+- Now: `sky_illumination` (`rvt/vis.py:2408`); `horizon_shift_vector` (`rvt/vis.py:777-778`) (lines at `234b156`).
 - Description: under a uniform sky a plane of a given slope should receive the same light whatever its aspect,
   and less than flat terrain (1).
 - Impact: on a 26.6° plane east- and west-facing slopes get about 11 % more light than north- and south-facing
@@ -200,6 +217,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-10 sky_illumination: the shaded uniform model is not divided by pi
 - Where: `rvt/vis.py:1815` at `start` (`uniform_sh_out = (0.8 * uniform_out + 0.2 * shadow_out)`), computed before
   `rvt/vis.py:1820` (`uniform_out = uniform_out / np.pi`).
+- Now: `sky_illumination` (`rvt/vis.py:2458`, `:2463`) (lines at `234b156`).
 - Impact: `sky_model="uniform", compute_shadow=True` returns values around 0.8 pi + 0.2 = 2.71 on flat terrain
   instead of values in [0, 1].
 - Repro:
@@ -213,6 +231,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/vis.py:831` and `rvt/vis.py:654` at `start`
   (`weight = (1 - w_m) * (np.cos((weight - w_a) / 2)) ** a_poly_level + w_m`, `weight` = the direction keys), keys from
   `rvt/vis.py:528-529` (key 0 north, 90 west).
+- Now: `sky_view_factor_compute` (`rvt/vis.py:1157`); `_svf_compute_window` (`rvt/vis.py:952`); `horizon_shift_vector`
+  (`rvt/vis.py:777-778`) (lines at `234b156`).
 - Description: `asvf_dir` is compared with keys measured counterclockwise from north, while `sun_azimuth` and
   `shadow_az` are clockwise. The default `asvf_dir = 315` weights the north-east sky most, not the north-west.
 - Impact: the anisotropic SVF is mirrored east-west relative to the azimuth convention of the other functions,
@@ -230,6 +250,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-12 local_dominance with max_rad = 0 returns an empty array
 - Where: `rvt/vis.py:1151` at `start`: `local_dom_out[pad_width:-pad_width, pad_width:-pad_width]` with
   `pad_width = 0` is `[0:-0]`.
+- Now: `local_dominance` (`rvt/vis.py:1555`) (lines at `234b156`).
 - Impact: edge case only (no shift exists then).
 - Repro: `v.local_dominance(np.zeros((10, 10), np.float32), 0, 0).shape   # -> (0, 0)`
 - Pinned: not pinned.
@@ -238,6 +259,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-13 max_elevation_deviation and mstp: a radius <= 0 contributes the elevation, shifted by one pixel
 - Where: `rvt/vis.py:2175` at `start` (`dev = dem_pad[maximum_radius:-(maximum_radius + 1), ...]`), which reproduces
   `topographic_dev` (`rvt/vis.py:2024`, returns the padded DEM for radius <= 0) and the reference crop.
+- Now: `max_elevation_deviation` (`rvt/vis.py:2926`); `topographic_dev` (`rvt/vis.py:2725`) (lines at `234b156`).
 - Description: for D <= 0 the "deviation" is the elevation itself, taken at (i - 1, j - 1), because the window
   centre is at +1 in the padded array.
 - Impact: `minimum_radius = 0`, which `mstp`'s checks allow, mixes elevations in metres into DEV_max.
@@ -248,6 +270,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-14 msrm divides by zero when only one filtered surface exists
 - Where: `rvt/vis.py:1960` at `start`: `msrm_out = relief_models_sum / nr_relief_models` with `nr_relief_models = 0`
   when i == n.
+- Now: `msrm` (`rvt/vis.py:2637`) (lines at `234b156`).
 - Impact: all-NaN output and a RuntimeWarning, e.g. for `feature_min == feature_max == resolution`.
 - Repro: `np.isnan(v.msrm(np.random.default_rng(2).random((20, 20)).astype(np.float32), 1, 1, 1, 1)).all()   # -> True`
 - Pinned: `tests/test_char_vis.py` (msrm with one scale).
@@ -258,6 +281,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   (`c_scale` set to 1, but the division uses `c_max - c_min`); `rvt/vis.py:94` (uint8 branch: `high + 1 = 256`
   overflows uint8 under numpy 2, and `return` inside the band loop); `rvt/vis.py:81` (no-data replaced in the
   bands, which are views of a 3D input).
+- Now: `byte_scale` (`rvt/vis.py:186`, `:169`, `:182`, `:174`, `:159`) (lines at `234b156`).
 - Impact: `low > 0` wraps the top values and the NaN code (255 + 10 = 9); a constant band becomes all 255; uint8
   input raises OverflowError with the default `high`, and with `high < 255` a 3D uint8 input returns only its first
   band; a 3D input with `no_data` is modified.
@@ -274,6 +298,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-16 slope_aspect: aspect in (-pi, pi], and "percent" leaves the aspect in radians
 - Where: `rvt/vis.py:202` at `start` (`np.arctan2`, no shift to [0, 2 pi)); `rvt/vis.py:203` (only "degree"
   converts the aspect).
+- Now: `slope_aspect` (`rvt/vis.py:295`, `:296`) (lines at `234b156`).
 - Description: the upstream docstring said "0 or 2pi for north" (a clockwise azimuth in [0, 2 pi)); the code
   returns north 0, east pi/2, south pi, west -pi/2. The 0.1.0 docstring describes the code.
 - Repro:
@@ -290,6 +315,10 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   and `shadow_horizon` (`:1550`), `msrm` (`:1931`), `mstp` (`:2268`). `slope_aspect` (`:170`) and `sky_view_factor`
   (`:969`) convert first and leave the input unchanged. `rvt/default.py:2564` (`get_raster_arr`) returns the data
   type of the file.
+- Now: `hillshade` (`rvt/vis.py:425`); `multi_hillshade` (`rvt/vis.py:534`); `slrm` (`rvt/vis.py:718`);
+  `local_dominance` (`rvt/vis.py:1476`); `sky_illumination` (`rvt/vis.py:2186`); `msrm` (`rvt/vis.py:2608`); `mstp`
+  (`rvt/vis.py:3039`); `slope_aspect` (`rvt/vis.py:263`); `sky_view_factor` (`rvt/vis.py:1317`); `get_raster_arr`
+  (`rvt/default.py:4154`) (lines at `234b156`).
 - Impact: the caller's DEM is modified. An integer DEM with `no_data` raises ValueError, so `save_hillshade`,
   `save_slrm`, `save_local_dominance`, `save_sky_illumination`, `save_msrm`, `save_mstp`, `save_multi_hillshade` (and
   the matching `get_*` with an integer array) fail on Int16/Int32 GeoTIFFs that carry a no-data value.
@@ -305,6 +334,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-18 horizon_generate_coarse_dem: the maximum starts at 0, and even scales wrap to the last row
 - Where: `rvt/vis.py:1195` at `start` (`dem_convolve = np.zeros(dem_fine.shape)`), `rvt/vis.py:1198` (`np.roll` over
   offsets 0..1 for scale 2 reaches one row/column before the first, which the padding does not supply).
+- Now: `horizon_generate_coarse_dem` (`rvt/vis.py:1642`, `:1645`) (lines at `234b156`).
 - Impact: coarse levels of a DEM below 0 m are 0 (the horizon search of below-sea-level terrain sees a flat 0 m far
   field); the first coarse row/column takes the maximum with the opposite edge of the level.
 - Repro:
@@ -321,6 +351,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-19 scale_within_0_and_1: the stretch limits are always 0 and 1, so scale_0_to_1 does not rescale
 - Where: `rvt/blend_func.py:564` and `:567` at `start` (`np.nanmax(np.array(0, actual_min))`); caller
   `scale_0_to_1` at `rvt/blend_func.py:603-609`.
+- Now: `scale_within_0_and_1` (`rvt/blend_func.py:1369`, `:1372`); `scale_0_to_1` (`rvt/blend_func.py:1437-1471`)
+  (lines at `234b156`).
 - Description: `np.array(0, actual_min)` passes the minimum as the *dtype* argument (numpy accepts a numpy scalar
   as dtype), so `norm_min_value` is always 0 and `norm_max_value` always 1, and `(x - 0) / (1 - 0)` returns the
   values unchanged.
@@ -337,6 +369,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-20 scale_within_0_and_1 overwrites NaN in the caller's array and loses the NaN mask
 - Where: `rvt/blend_func.py:561` at `start` (the restoring lines were commented out upstream).
+- Now: `scale_within_0_and_1` (`rvt/blend_func.py:1365`) (lines at `234b156`).
 - Impact: no-data pixels become valid values (the minimum) in the result and in the caller's array.
 - Repro:
   ```python
@@ -348,6 +381,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-21 scale_strict_0_to_1 raises ValueError for every non-constant array (chained comparison)
 - Where: `rvt/blend_func.py:598` at `start` (`scaled[0 > scaled > -0.01] = 0`); NaN set to 0 in place at `:590`;
   caller `scale_0_to_1` at `:603-609`.
+- Now: `scale_strict_0_to_1` (`rvt/blend_func.py:1432`, `:1424`); `scale_0_to_1` (`rvt/blend_func.py:1437-1471`)
+  (lines at `234b156`).
 - Description: the chained comparison is `(0 > scaled) and (scaled > -0.01)`; `and` asks for the truth value of an
   array. After the min-max stretch the minimum is 0, so the line is reached for every non-constant input and
   raises; NaN has already been replaced by 0 in the argument. A constant array gives all NaN.
@@ -364,6 +399,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-22 apply_opacity: opacity 1 means 100 %, values above 100 extrapolate
 - Where: `rvt/blend_func.py:613` at `start` (`if opacity > 1: opacity = opacity / 100`).
+- Now: `apply_opacity` (`rvt/blend_func.py:1499`) (lines at `234b156`).
 - Description: values <= 1 are used as fractions, values > 1 as percent; 1 % cannot be requested and 1.5 means
   1.5 %. There is no range check; 150 gives `1.5 * a - 0.5 * b`.
 - Repro:
@@ -376,6 +412,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-23 advanced_normalization(normalization=None) raises AttributeError
 - Where: `rvt/blend_func.py:206-210` at `start` (the `elif normalization is None` branch comes after `.lower()`).
+- Now: `advanced_normalization` (`rvt/blend_func.py:466-470`) (lines at `234b156`).
 - Impact: None cannot be used to skip normalization; the branch meant for it is unreachable.
 - Repro: `bf.advanced_normalization(np.arange(4.0), 0, 1, None)   # -> AttributeError: 'NoneType' object has no attribute 'lower'`
 - Pinned: `tests/test_char_blend_func.py:267`.
@@ -383,6 +420,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-24 advanced_normalization: the limit checks are case-sensitive
 - Where: `rvt/blend_func.py:197`, `:201` at `start` (`normalization == "value"`), while the dispatch uses `.lower()`.
+- Now: `advanced_normalization` (`rvt/blend_func.py:457`, `:461`) (lines at `234b156`).
 - Description: "Value", the spelling of the shipped JSON files, skips the `min == max` and `min > max` checks.
 - Impact: `min == max` gives an all-NaN layer, `min > max` an all -0.0 layer, without an error.
 - Repro:
@@ -396,6 +434,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-25 normalize_image: abbreviations and "percent" are case-sensitive
 - Where: `rvt/blend_func.py:625` at `start` (`normalization == "percent"`), `:632` ("mhs"), `:643-644` ("slp",
   "neg_opns").
+- Now: `normalize_image` (`rvt/blend_func.py:1549`, `:1556`, `:1567-1568`) (lines at `234b156`).
 - Description: the long visualization names are compared with `.lower()`, the abbreviations and "percent" exactly.
 - Impact: "SLP" is not inverted; "Percent" raises "Unknown normalization type".
 - Repro:
@@ -409,6 +448,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-26 cut_off_normalize: the limit checks are case-sensitive
 - Where: `rvt/blend_func.py:658`, `:661` at `start` (`mode == "value"`).
+- Now: `cut_off_normalize` (`rvt/blend_func.py:1617`, `:1620`) (lines at `234b156`).
 - Impact: "Value" with equal or reversed limits gives all NaN or all -0.0 without an error.
 - Repro:
   ```python
@@ -420,6 +460,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-27 cut_off_normalize accepts an unknown mode without an error
 - Where: `rvt/blend_func.py:666-689` at `start` (no `else` branch).
+- Now: `cut_off_normalize` (`rvt/blend_func.py:1625-1648`) (lines at `234b156`).
 - Impact: a typo in `mode` returns the argument unchanged.
 - Repro: `arg = np.arange(4.0); bf.cut_off_normalize(arg, "bogus", 0, 1) is arg   # -> True`
 - Pinned: `tests/test_char_blend_func.py:572`.
@@ -427,6 +468,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-28 channel_min and channel_max: NaN in r propagates, NaN in g or b is ignored
 - Where: `rvt/blend_func.py:244-259` at `start`.
+- Now: `channel_min` and `channel_max` (`rvt/blend_func.py:572-632`) (lines at `234b156`).
 - Description: the minimum starts as `r` and is replaced where `g < min` and then where `b < min`; a comparison with
   NaN is False.
 - Impact: the luminosity blend treats NaN differently per band (only reachable with NaN in some bands).
@@ -440,6 +482,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-29 clip_color with only one of min_c / max_c raises TypeError
 - Where: `rvt/blend_func.py:269` at `start` (both are computed only when both are None).
+- Now: `clip_color` (`rvt/blend_func.py:677`) (lines at `234b156`).
 - Repro: `bf.clip_color(np.full((3, 2, 2), 0.5), min_c=np.zeros((2, 2)))   # -> TypeError: '>' not supported ...`
 - Pinned: `tests/test_char_blend_func.py:752`.
 - Status: documented, not changed in 0.1.0.
@@ -447,6 +490,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-30 clip_color: a gray pixel below 0 becomes NaN (0 / 0); CRIM with a gray colormap gets NaN pixels
 - Where: `rvt/blend_func.py:231` at `start` (`matrix_eq_min_lt_zero`, called at `:274-276`); consequence in the
   luminosity layer of `color_relief_image_map`, `rvt/blend.py:1327-1329`.
+- Now: `matrix_eq_min_lt_zero` (`rvt/blend_func.py:537`); `clip_color` (`rvt/blend_func.py:682-684`);
+  `color_relief_image_map` (`rvt/blend.py:1956-1958`) (lines at `234b156`).
 - Description: for R = G = B < 0, `lum == min`, and the correction divides 0 by 0.
 - Impact: NaN pixels in luminosity blends onto gray backgrounds instead of 0; `color_relief_image_map` with a gray
   colormap has a larger NaN mask than the DEM.
@@ -463,6 +508,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-31 blend_soft_light: NaN in the active layer keeps the background value
 - Where: `rvt/blend_func.py:407-408` at `start` (reference masks), same masks in `_soft_light_masks` (`:388-389`).
+- Now: `_blend_soft_light_ref` (`rvt/blend_func.py:980-981`); `_soft_light_masks` (`rvt/blend_func.py:929-931`) (lines
+  at `234b156`).
 - Description: the branch is chosen by `active`; NaN matches neither `active < 0.5` nor `active >= 0.5`.
 - Impact: no-data in the active layer is not propagated (overlay does propagate NaN of `active`).
 - Repro: `bf.blend_soft_light(np.array([np.nan, 0.25]), np.array([0.5, 0.5]))   # -> [0.5   0.375]`
@@ -472,6 +519,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-32 equation_blend returns None for "normal", "luminosity" and unknown names
 - Where: `rvt/blend_func.py:442-450` at `start` (no `else` branch); consequence in `blend_multi_dim_images`
   (`:474-487`).
+- Now: `equation_blend` (`rvt/blend_func.py:1049-1079`); `blend_multi_dim_images` (`rvt/blend_func.py:1153-1166`)
+  (lines at `234b156`).
 - Impact: `blend_multi_dim_images` with such a mode returns None (2D) or an all-NaN array (RGB) without an error.
   `blend_images` is not affected (it handles normal and luminosity itself).
 - Repro:
@@ -486,6 +535,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/blend_func.py:379-380`, `:409-411` at `start` (reference), `:363-364` (blocked path); used by
   `BlenderCombination.render_all_images` at `rvt/blend.py:621` and `:626-630` (`top = blend_images(...)`, then
   `_render_images(top, background, ...)`).
+- Now: `_blend_overlay_ref` (`rvt/blend_func.py:890-891`); `_blend_soft_light_ref` (`rvt/blend_func.py:982-984`);
+  `_blend_in_place_blocked` (`rvt/blend_func.py:866-867`); `BlenderCombination.render_all_images` (`rvt/blend.py:979`,
+  `:984-988`) (lines at `234b156`).
 - Description: the result is written into `background` and returned; `render_images` then mixes `top` with the
   same array, so `top * p + top * (1 - p) = top` up to rounding.
 - Impact: in `render_all_images` the opacity of every overlay and soft_light layer acts as 100 %: CRIM overlay
@@ -501,6 +553,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-34 overlay and soft light of an RGB active layer on a gray background chain the bands
 - Where: `rvt/blend_func.py:478-481` at `start` (`blend_multi_dim_images`, case `a_rgb and not b_rgb`), with KI-33.
+- Now: `blend_multi_dim_images` (`rvt/blend_func.py:1157-1160`) (lines at `234b156`).
 - Description: each band writes its result into the same gray `background`, so band 1 is blended onto the result
   of band 0 and band 2 onto that of band 1.
 - Impact: wrong colors for an RGB layer (for example a colored hillshade) in overlay or soft_light mode over a gray
@@ -517,6 +570,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-35 create_blender_file_example: the default path has a backslash
 - Where: `rvt/blend.py:63` at `start` (`r"settings\blender_file_example.json"`, with `os.makedirs` at `:67-68`).
+- Now: `create_blender_file_example` (`rvt/blend.py:138`, `:142-143`) (lines at `234b156`).
 - Description: on POSIX `os.path.dirname` of that string is "" and `os.makedirs("")` raises FileNotFoundError.
 - Impact: `create_blender_file_example()` without a path fails on Linux and macOS.
 - Repro (POSIX path handling on any OS):
@@ -529,6 +583,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-36 BlenderLayer.check_data: the opacity check can never fail
 - Where: `rvt/blend.py:149` at `start` (`if 0 > self.opacity > 100`).
+- Now: `BlenderLayer.check_data` (`rvt/blend.py:280`) (lines at `234b156`).
 - Description: the chained comparison needs opacity < 0 and > 100 at once.
 - Impact: any opacity is accepted; values above 100 extrapolate in rendering (KI-22).
 - Repro:
@@ -542,6 +597,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-37 BlenderLayer.check_data accepts min == max for "value"
 - Where: `rvt/blend.py:143` at `start` (only `min > max` raises).
+- Now: `BlenderLayer.check_data` (`rvt/blend.py:274`) (lines at `234b156`).
 - Impact: with "value" `advanced_normalization` raises later; with "Value" (KI-24) a combination file with equal
   limits renders an all-NaN layer without an error.
 - Repro:
@@ -554,6 +610,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-38 BlenderCombination.layers_info never prints max_colormap_cut
 - Where: `rvt/blend.py:225` at `start` (the format string ends with "max_colormap_cut" without "= {}").
+- Now: `BlenderCombination.layers_info` (`rvt/blend.py:438`) (lines at `234b156`).
 - Impact: cosmetic; the value is missing from the description.
 - Repro:
   ```python
@@ -565,6 +622,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-39 BlenderCombination.read_from_json stores colormap cuts as strings
 - Where: `rvt/blend.py:272`, `:278` at `start` (`str(layer["min_colormap_cut"])`).
+- Now: `BlenderCombination.read_from_json` (`rvt/blend.py:521`, `:527`) (lines at `234b156`).
 - Impact: a combination file with colormap cuts fails to render (TypeError in `gray_scale_to_color_ramp`); a save /
   read round trip turns numbers into strings.
 - Repro:
@@ -581,6 +639,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-40 compare_2_combinations ignores normalization, min and max (possibly intended)
 - Where: `rvt/blend.py:789-800` at `start` (the three comparisons were commented out upstream at `:791-796`; the
   commented-out code was removed in 0.1.0 by commit 932172f and replaced by a one-line comment).
+- Now: `compare_2_combinations` (`rvt/blend.py:1207-1213`; the one-line comment at `rvt/blend.py:1209`) (lines at
+  `234b156`).
 - Description: only visualization name, blend mode and opacity are compared. This may be intended, because
   `TerrainSettings.apply_terrain` changes the limits of preset combinations, which then still match their preset.
 - Impact: `BlenderCombinations.combination_in_combinations` reports combinations with different limits as equal.
@@ -594,6 +654,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-41 TerrainSettings.read_from_json writes the sky illumination and local dominance stretches into neg_opns_stretch
 - Where: `rvt/blend.py:1119`, `:1124` at `start` (copies of `:1114`).
+- Now: `TerrainSettings.read_from_json` (`rvt/blend.py:1675`, `:1680`, `:1670`) (lines at `234b156`).
 - Description: `sim_stretch` and `ld_stretch` are never set; `neg_opns_stretch` gets the last of the three sections.
 - Impact: with `settings/default_terrains_settings.json`, `apply_terrain` gives negative openness layers the local
   dominance limits (0.5, 1.8) instead of (60, 95), and sky illumination and local dominance layers keep their own.
@@ -609,6 +670,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-42 TerrainsSettings.read_from_file appends instead of replacing
 - Where: `rvt/blend.py:1247-1256` at `start` (no reset of `terrains_settings`; `BlenderCombinations.read_from_file`
   does reset its list).
+- Now: `TerrainsSettings.read_from_file` (`rvt/blend.py:1828-1854`) (lines at `234b156`).
 - Impact: reading the file twice holds every preset twice.
 - Repro (from the repository root):
   ```python
@@ -621,6 +683,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-43 render_all_images: a colormap on a layer without an in-memory image raises AttributeError
 - Where: `rvt/blend.py:594` at `start` (`len(image.shape)` with `image = layer.image`, which is None for layers read
   from `image_path` and for layers computed with `save_visualizations=True`).
+- Now: `BlenderCombination.render_all_images` (`rvt/blend.py:952`) (lines at `234b156`).
 - Impact: colored layers work only with `image` given or computed in memory.
 - Repro:
   ```python
@@ -634,6 +697,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-44 render_all_images(save_visualizations=True): saved to the render directory, read from the DEM directory
 - Where: `rvt/blend.py:431-433`, `:442-444` at `start` and the same pattern for every visualization up to `:583`
   (`default.save_*(custom_dir=save_render_directory)`, then `default.get_*_path(self.dem_path)`).
+- Now: `BlenderCombination.render_all_images` (`rvt/blend.py:789-791`, `:800-802`, `:941`) (lines at `234b156`).
 - Impact: with `save_render_path` in another directory than the DEM, rendering fails after writing the
   visualization (AttributeError, or RuntimeError with GDAL exceptions on).
 - Repro:
@@ -649,6 +713,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-45 color_relief_image_map sets svf_r_max = 10 on the caller's DefaultValues; default instances are shared
 - Where: `rvt/blend.py:1303` at `start` (`default.svf_r_max = 10`); default arguments at `:1266`, `:1339`, `:1387`
   (`default=rvt.default.DefaultValues()` is evaluated once, at import).
+- Now: `color_relief_image_map` (`rvt/blend.py:1932`, `:1876`); `e3mstp` (`rvt/blend.py:1968`); `e4mstp`
+  (`rvt/blend.py:2040`) (lines at `234b156`).
 - Description: the function changes the object it receives, and `e3mstp` passes its own `default` on. The default
   argument is one object shared by all calls of each function.
 - Impact: after `e3mstp` or `color_relief_image_map`, SVF and openness computed with the same object use
@@ -663,6 +729,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-46 render_all_images: the blend mode and opacity of the bottom layer are never used
 - Where: `rvt/blend.py:600-605` at `start` (the first rendered layer becomes `rendered_image` as it is).
+- Now: `BlenderCombination.render_all_images` (`rvt/blend.py:958-963`) (lines at `234b156`).
 - Impact: a bottom layer with opacity below 100 % is rendered at full strength (there is nothing below it to mix
   with).
 - Repro:
@@ -677,6 +744,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-47 e4mstp: the slope in radians is normalized over 0..55
 - Where: `rvt/blend.py:1487` at `start` (`rvt.vis.slope_aspect` with its default `output_units="radian"`) and `:1512`
   (`minimum=0, maximum=55`).
+- Now: `e4mstp` (`rvt/blend.py:2160`, `:2185`) (lines at `234b156`).
 - Impact: slopes of 0..1.5 rad map to 0..0.027; after the inversion of "Slope gradient" the slope layer stays
   within about 0.97..1, so its Reds_r coloring is almost constant.
 - Repro:
@@ -689,6 +757,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-48 e3mstp: the upstream docstring named Reds_r(0.5-1); the code uses OrRd 0..1
 - Where: docstring `rvt/blend.py:1344` against code `rvt/blend.py:1366-1367` at `start`.
+- Now: `e3mstp` (`rvt/blend.py:1968`; the docstring states the discrepancy at `rvt/blend.py:2006-2007`, the code
+  is at `rvt/blend.py:2019-2020`) (lines at `234b156`).
 - Description: the 0.1.0 docstring describes the code (OrRd, cuts 0..1) and states the discrepancy (commit a9efeb7).
   Which colormap is intended is a question for the upstream authors.
 - Repro: `import inspect; 'colormap="OrRd", min_colormap_cut=0, max_colormap_cut=1' in inspect.getsource(rb.e3mstp)   # -> True`
@@ -700,6 +770,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   has the parameter); `rvt/blend.py:1368`, `:1442` (e3/e4 use `get_mstp`); `rvt/blend.py:1316-1321` (CRIM slope) and
   `:1487` (e4 slope) call `rvt.vis.slope_aspect` without `ve_factor`; `rvt/blend.py:1436-1439` (e4 flat-terrain SVF
   uses a new `DefaultValues`, ve_factor 1).
+- Now: `DefaultValues.get_mstp` (`rvt/default.py:3473-3508`); `e3mstp` (`rvt/blend.py:2021`); `e4mstp`
+  (`rvt/blend.py:2115`, `:2160`, `:2109-2112`); `color_relief_image_map` (`rvt/blend.py:1945-1950`) (lines at
+  `234b156`).
 - Impact: with `default.ve_factor != 1` only some layers of the composites are exaggerated, and MSTP does not follow
   the vertical exaggeration of the other `get_*` methods (its effect on MSTP would be small: about 2e-7 for
   `ve_factor` 5 on a 0-10 m test DEM, see the `mstp` Notes and KI-05).
@@ -715,6 +788,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-50 render_all_images: a missing dem_arr is not reported when dem_resolution is set
 - Where: `rvt/blend.py:401` at `start` (`self.dem_arr is None and self.dem_resolution is None`).
+- Now: `BlenderCombination.render_all_images` (`rvt/blend.py:759`) (lines at `234b156`).
 - Description: the check uses `and`; with only the resolution set, no explanatory exception is raised and the
   computation fails later inside `rvt.vis`.
 - Repro:
@@ -730,6 +804,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-51 Tile settings are not saved or read with the settings file
 - Where: `rvt/default.py:327` at `start` (`save_default_to_file` writes no `tile_size`, `tile_size_limit`) and
   `rvt/default.py:579` (`read_default_from_file` reads none).
+- Now: `DefaultValues.save_default_to_file` (`rvt/default.py:413`); `DefaultValues.read_default_from_file`
+  (`rvt/default.py:697`) (lines at `234b156`).
 - Impact: a settings round trip silently resets the tile settings to the defaults.
 - Repro:
   ```python
@@ -742,6 +818,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-52 save_default_to_file: the default path has a backslash
 - Where: `rvt/default.py:569` at `start` (`file_path = r"settings\default_settings.json"`), then `:573-574`
   (`os.makedirs(os.path.dirname(file_path))`).
+- Now: `DefaultValues.save_default_to_file` (`rvt/default.py:687`, `:691-692`) (lines at `234b156`).
 - Description: on Windows this is `settings/default_settings.json`; on Linux and macOS the backslash is part of the
   file name, `dirname` is "" and `os.makedirs("")` raises FileNotFoundError when the file does not exist yet.
 - Impact: `save_default_to_file()` without a path fails on non-Windows systems. The frozen test that pins the Windows
@@ -752,6 +829,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-53 .txt settings: "sun_elevation" is tested twice, mhs_sun_el cannot be set
 - Where: `rvt/default.py:607` (`hs_sun_el`) and `:613` (`mhs_sun_el`) at `start`, in one if/elif chain.
+- Now: `DefaultValues.read_default_from_file` (`rvt/default.py:775`, `:781`) (lines at `234b156`).
 - Repro:
   ```python
   open("s.txt", "w").write("sun_elevation = 50\n"); dv = DefaultValues(); dv.read_default_from_file("s.txt")
@@ -762,6 +840,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-54 read_default_from_file ignores an unknown extension without an error
 - Where: `rvt/default.py:582-583` and `:670` at `start` (only `.txt` and `.json` are handled; no `else`).
+- Now: `DefaultValues.read_default_from_file` (`rvt/default.py:750-751`, `:838`) (lines at `234b156`).
 - Impact: a typo in the extension, or a missing file with another extension, leaves all parameters unchanged.
 - Repro: `dv = DefaultValues(); dv.read_default_from_file("does_not_exist.yaml"); dv.overwrite   # -> 0, no error`
 - Pinned: `tests/test_char_default.py::test_txt_wrong_lines_warn_and_unknown_extension_is_ignored`.
@@ -770,6 +849,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-55 A json round trip turns the MSRM sizes into float and changes the MSRM file name
 - Where: `rvt/default.py:713-714` at `start` (`float(...)`; the defaults are int 0 and 20) and `:986-990`
   (formatted with `str`).
+- Now: `DefaultValues.read_default_from_file` (`rvt/default.py:881-882`); `DefaultValues.get_msrm_file_name`
+  (`rvt/default.py:1520-1524`) (lines at `234b156`).
 - Impact: the output name depends on whether the settings came from a file (`M0-20` against `M0.0-20.0`), so
   existing outputs are not found and are computed again under a second name.
 - Repro:
@@ -783,6 +864,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-56 get_neg_opns_file_name uses "_NRstrong" where the other names use "_NRhigh"
 - Where: `rvt/default.py:936` at `start` (`svf_noise == 3`); SVF, ASVF and positive openness use `_NRhigh`
   (`:872`, `:896`, `:916`).
+- Now: `DefaultValues.get_neg_opns_file_name` (`rvt/default.py:1374`); `DefaultValues.get_svf_file_name`
+  (`rvt/default.py:1209`); `DefaultValues.get_asvf_file_name` (`rvt/default.py:1267`);
+  `DefaultValues.get_opns_file_name` (`rvt/default.py:1320`) (lines at `234b156`).
 - Repro: `dv = DefaultValues(); dv.svf_noise = 3; dv.get_svf_file_name("dem.tif"), dv.get_neg_opns_file_name("dem.tif")`
   `# -> dem_SVF_R10_D16_NRhigh.tif dem_OPEN-NEG_R10_D16_NRstrong.tif`
 - Pinned: `tests/test_char_default.py` (line 388).
@@ -791,6 +875,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-57 Output file names cut the DEM name at its first dot
 - Where: `rvt/default.py:797` at `start` and the same expression in every `get_*_file_name`
   (`os.path.basename(dem_path).split(".")[0]`); `create_log_file` (`:2300`) uses `splitext` instead.
+- Now: `DefaultValues.get_shadow_file_name` (`rvt/default.py:979`); `DefaultValues.create_log_file`
+  (`rvt/default.py:3885`) (lines at `234b156`).
 - Impact: DEMs whose names differ only after the first dot get the same output names; outputs overwrite each other
   or are skipped as existing.
 - Repro: `DefaultValues().get_slope_file_name("my.site_v2.tif")   # -> my_SLOPE.tif`
@@ -801,6 +887,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/default.py:1116` at `start`:
   `if self.mhs_bytscl[0].lower() == "percent" or self.slp_bytscl[0].lower() == "perc":` (`mhs_bytscl` is probably
   meant in the second operand).
+- Now: `DefaultValues.float_to_8bit` (`rvt/default.py:1799`) (lines at `234b156`).
 - Impact: setting the slope stretch to "perc" switches the 8-bit multi hillshade to a percent stretch with the
   `mhs_bytscl` numbers.
 - Repro:
@@ -815,6 +902,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-59 The 8-bit multi hillshade ignores ve_factor
 - Where: `rvt/default.py:1110-1115` at `start` (`rvt.vis.hillshade` called without `ve_factor`); the float multi
   hillshade passes it (`:1400-1402`).
+- Now: `DefaultValues.float_to_8bit` (`rvt/default.py:1793-1798`); `DefaultValues.get_multi_hillshade`
+  (`rvt/default.py:2307-2309`) (lines at `234b156`).
 - Repro:
   ```python
   dv = DefaultValues(); a = dv.float_to_8bit(DEM.copy(), V.MULTI_HILLSHADE, x_res=1, y_res=1)
@@ -827,6 +916,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/default.py:1097` ff. at `start` -> `rvt.blend_func.normalize_image` -> `normalize_lin`, which clips in
   place (`rvt/blend_func.py:146-147` blocked path, `:158-159` reference path); `rvt/default.py:2260-2275`
   (`calculate_visualization`: `vis_float_arr = vis_arr`, then `float_to_8bit(vis_arr)`).
+- Now: `DefaultValues.float_to_8bit` (`rvt/default.py:1780`); `normalize_lin` (`rvt/blend_func.py:325-326`,
+  `:337-338`); `DefaultValues.calculate_visualization` (`rvt/default.py:3814-3829`) (lines at `234b156`).
 - Impact: the float array passed in changes. With `save_float` and `save_8bit` both true, `calculate_visualization`
   returns a float result limited to the stretch range (e.g. slope 0..51°), and so does the float raster written by
   `rvt.tile.save_rvt_visualization_tile_by_tile`. The untiled `save_*` methods are not affected (they write the float
@@ -849,6 +940,12 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   `elif not save_float and not save_8bit:` follows a check that already raised for that case;
   `not save_float and save_8bit` was meant (`save_sky_view_factor`, `:1631`, has it). `save_hillshade` also has no
   branch for float + 8-bit without shadow.
+- Now: `DefaultValues.save_slope` (`rvt/default.py:1998`); `DefaultValues.save_hillshade` (`rvt/default.py:2208`,
+  `:2214`); `DefaultValues.save_multi_hillshade` (`rvt/default.py:2395`); `DefaultValues.save_slrm`
+  (`rvt/default.py:2550`); `DefaultValues.save_neg_opns` (`rvt/default.py:2959`);
+  `DefaultValues.save_sky_illumination` (`rvt/default.py:3122`); `DefaultValues.save_local_dominance`
+  (`rvt/default.py:3279`); `DefaultValues.save_msrm` (`rvt/default.py:3431`); `DefaultValues.save_mstp`
+  (`rvt/default.py:3590`); `DefaultValues.save_sky_view_factor` (`rvt/default.py:2748`) (lines at `234b156`).
 - Impact: with only the 8-bit output requested and present and `overwrite = 0`, the DEM is read and the
   visualization computed for nothing, and 1 (not 0) is returned.
 - Repro:
@@ -862,6 +959,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-62 save_sky_view_factor returns early only when all three results are requested
 - Where: `rvt/default.py:1622-1634` at `start` (`os.path.isfile` of the SVF, ASVF and openness paths; the path of a
   result that is not requested is "", `:1594-1599`).
+- Now: `DefaultValues.save_sky_view_factor` (`rvt/default.py:2739-2751`, `:2711-2716`) (lines at `234b156`).
 - Impact: as KI-61; SVF is recomputed although its output exists.
 - Repro: `p = write_dem("dem.tif", DEM); [DefaultValues().save_sky_view_factor(p, save_svf=True, save_float=True, save_8bit=False) for _ in range(2)]   # -> [1, 1]`
 - Pinned: not pinned.
@@ -871,6 +969,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/default.py:1325` at `start`: `shadow_path = os.path.join(custom_dir, self.get_shadow_path(dem_path))`;
   `get_shadow_path` returns a path in the DEM directory, and `os.path.join` with an absolute second argument drops
   `custom_dir`.
+- Now: `DefaultValues.save_hillshade` (`rvt/default.py:2198`) (lines at `234b156`).
 - Impact: the shadow is written next to the DEM (for a relative `dem_path`: under `custom_dir/<dem dir>/`), while
   `create_log_file` lists it in `custom_dir`.
 - Repro:
@@ -886,6 +985,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/default.py:1373` at `start` (`get_hillshade(dem_arr, no_data=...)` sets the no-data pixels of
   `dem_arr` to NaN in place, KI-17), then `:1391` computes the shadow from the same array; one NaN makes the
   shadow all 0 (KI-07).
+- Now: `DefaultValues.save_hillshade` (`rvt/default.py:2246`, `:2264`) (lines at `234b156`).
 - Repro:
   ```python
   d = DEM * 10; d[5, 5] = -9999; p = write_dem("dem_nd.tif", d, nodata=-9999)
@@ -898,6 +998,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-65 get_neg_opns does not recognise no_data
 - Where: `rvt/default.py:1728` at `start` (`dem_arr = -1 * dem_arr`), then `:1729-1732` pass the unchanged
   `no_data` to `rvt.vis.sky_view_factor`, which compares it with the negated DEM. `save_neg_opns` inherits it.
+- Now: `DefaultValues.get_neg_opns` (`rvt/default.py:2877`, `:2878-2881`) (lines at `234b156`).
 - Impact: no-data pixels (-9999 becomes +9999) are processed as a 9999 m peak, which also distorts the openness of
   every pixel within `svf_r_max` px.
 - Repro:
@@ -912,6 +1013,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-66 save_mstp writes the 8-bit raster with no_data = NaN
 - Where: `rvt/default.py:2141-2147` at `start` (`no_data=np.nan` with `e_type=1`, byte).
+- Now: `DefaultValues.save_mstp` (`rvt/default.py:3633-3639`) (lines at `234b156`).
 - Description: the GeoTIFF tag then holds "nan", which no byte value matches; GDAL reports the no-data value as NaN,
   rasterio as None. The other `save_*` methods write no no-data value for 8-bit rasters.
 - Impact: readers disagree; no pixel is marked as no-data in the 8-bit raster.
@@ -925,6 +1027,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-67 create_log_file reads the whole DEM to get its shape
 - Where: `rvt/default.py:2281-2283` at `start` (`get_raster_arr(dem_path)`; `get_raster_size` would suffice).
+- Now: `DefaultValues.create_log_file` (`rvt/default.py:3866-3868`) (lines at `234b156`).
 - Impact: for DEMs above `tile_size_limit`, which the `save_*` methods process tile by tile because they do not fit
   in memory, `save_visualizations` can fail with MemoryError at the end, in the log.
 - Repro: wrap `rvt.default.get_raster_arr` with a counter and call `DefaultValues().create_log_file(p)`; it is called
@@ -934,6 +1037,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-68 Log file: the MSRM output line is doubled; MSTP lists the float file always and the 8-bit file never
 - Where: `rvt/default.py:2406-2407` at `start` (">> Output file:" twice for MSRM); `:2530-2532` (MSTP).
+- Now: `DefaultValues.create_log_file` (`rvt/default.py:3991-3992`, `:4115-4117`) (lines at `234b156`).
 - Impact: the log does not match the outputs.
 - Repro:
   ```python
@@ -948,6 +1052,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-69 An unknown visualization gives None without an error
 - Where: `get_visualization_file_name` / `get_visualization_path` (`rvt/default.py:1018-1084` at `start`) and
   `calculate_visualization` (`:2180-2276`) have no `else`; only `float_to_8bit` raises (`:1204`).
+- Now: `DefaultValues.get_visualization_file_name` (`rvt/default.py:1602-1703`);
+  `DefaultValues.calculate_visualization` (`rvt/default.py:3690-3830`); `DefaultValues.float_to_8bit`
+  (`rvt/default.py:1887`) (lines at `234b156`).
 - Impact: a wrong value (e.g. a string) gives None or `(None, None)`; the error surfaces later as AttributeError.
 - Repro: `dv = DefaultValues(); dv.get_visualization_file_name("slope", "dem.tif", False), dv.calculate_visualization("slope", DEM.copy(), 1, 1)   # -> None (None, None)`
 - Pinned: not pinned.
@@ -957,6 +1064,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-70 The MSRM overlap uses a size in metres as a pixel count
 - Where: `rvt/tile.py:289` at `start` (`return int(rvt_default.msrm_feature_max)`, in m).
+- Now: `_get_rvt_visualization_overlap` (`rvt/tile.py:450`) (lines at `234b156`).
 - Description: the largest filter radius of `rvt.vis.msrm` is `n ** scaling_factor` px with
   `n = ceil(((feature_max - res) / (2 res)) ** (1 / scaling_factor))`: 25 px at 0.5 m/px for the default 20 m, so the
   20 px overlap is too small below 1 m/px (and larger than needed above, e.g. 9 px needed at 2 m/px).
@@ -973,6 +1081,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-71 The shadow overlap is 1 px
 - Where: `rvt/tile.py:270-271` at `start`.
+- Now: `_get_rvt_visualization_overlap` (`rvt/tile.py:431-432`) (lines at `234b156`).
 - Description: a shadow of a relief of h m reaches h / tan(sun elevation) m (tens of px for a few metres of relief at
   35° sun elevation and 0.25 m/px).
 - Impact: the tiled shadow (`save_hillshade` with shadow on DEMs above `tile_size_limit`) differs from the untiled one
@@ -991,6 +1100,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Where: `rvt/tile.py:103`, `:105` at `start` (`save_visualization_tile_by_tile`), `:327`, `:329`, `:335`
   (`save_rvt_visualization_tile_by_tile`): `Exception("...")` without `raise`. The texts at `:327`, `:329`, `:335` also
   name the other function. A `msg:` commit cannot change these texts, because they are not inside `raise`.
+- Now: `save_visualization_tile_by_tile` (`rvt/tile.py:183`, `:185`); `save_rvt_visualization_tile_by_tile`
+  (`rvt/tile.py:524`, `:526`, `:532`) (lines at `234b156`).
 - Impact: with no output requested every tile is read and computed and nothing is written; tile sizes below 50 px
   are accepted; a missing DEM fails later in GDAL.
 - Repro:
@@ -1004,6 +1115,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 
 ### KI-73 save_visualization_tile_by_tile fills the None entries of the caller's parameter dict
 - Where: `rvt/tile.py:118-129` at `start` (writes `resolution*` and `no_data` into `function_parameters`).
+- Now: `save_visualization_tile_by_tile` (`rvt/tile.py:198-209`) (lines at `234b156`).
 - Impact: reusing the dict for another DEM keeps the first DEM's pixel size and no-data value.
 - Repro:
   ```python
@@ -1017,6 +1129,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-74 save_visualization_tile_by_tile(function_parameters=None) raises TypeError
 - Where: `rvt/tile.py:118` at `start` (`if "resolution" in function_parameters:` runs before the None branch at
   `:178-181`, which is therefore unreachable).
+- Now: `save_visualization_tile_by_tile` (`rvt/tile.py:198`, `:260-263`) (lines at `234b156`).
 - Impact: the `Optional` in the signature does not work; pass `{}`.
 - Repro: `rvt.tile.save_visualization_tile_by_tile(lambda dem: dem, None, Path(write_dem("dem.tif", DEM)), 0, 50, 50, Path("o.tif"))   # -> TypeError`
 - Pinned: not pinned.
@@ -1025,6 +1138,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-75 The y pixel size is -gt[5] without abs; south-up rasters fail when tiled
 - Where: `rvt/tile.py:111` and `:344` at `start` (`y_res = -gt[5]`); `get_raster_arr` uses `abs`
   (`rvt/default.py:2560`).
+- Now: `save_visualization_tile_by_tile` (`rvt/tile.py:191`); `save_rvt_visualization_tile_by_tile`
+  (`rvt/tile.py:541`); `get_raster_arr` (`rvt/default.py:4150`) (lines at `234b156`).
 - Impact: a south-up raster (`gt[5] > 0`) works untiled but raises when tiled (negative resolution).
 - Repro:
   ```python
@@ -1039,6 +1154,8 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 ### KI-76 The tiled float MSTP raster has one band for a three-band result
 - Where: `rvt/tile.py:237` at `start` (`nr_bands = 1` for every float raster except MULTI_HILLSHADE); `rvt.vis.mstp`
   returns 3 bands, and `:479-482` write band 2 into a 1-band file (GDAL returns None, AttributeError).
+- Now: `_create_rvt_visualization_blank_raster` (`rvt/tile.py:346`); `save_rvt_visualization_tile_by_tile`
+  (`rvt/tile.py:679-682`) (lines at `234b156`).
 - Impact: tiled MSTP float output fails and leaves a partly written file.
 - Repro:
   ```python
@@ -1076,7 +1193,8 @@ possible, 569 px. "Within tolerance" uses the 8-bit tolerance of the harness, ap
 | slope | 1 px = 0.25 m | 8 px = 2 m | 8 px = 2 m | 1 px |
 | hillshade | 1 px = 0.25 m | 8 px = 2 m | 8 px = 2 m | 1 px |
 
-The `rvt.tile` column is `_get_rvt_visualization_overlap` (`rvt/tile.py:263-292` at `start`). Because the harness
+The `rvt.tile` column is `_get_rvt_visualization_overlap` (`rvt/tile.py:263-292` at `start`; now
+`rvt/tile.py:372-453` at `234b156`). Because the harness
 tried only the buffers listed above, "32 px exact" means that 16 px was not exact and 32 px was; a value between
 the two was not tried. At 1 m/px the px values stay the same for radii defined in px; MSRM and the e4MSTP
 flat-terrain SVF use radii in m (`int(10 / resolution)` px).
@@ -1084,18 +1202,22 @@ flat-terrain SVF use radii in m (`int(10 / resolution)` px).
 ### Why some interiors never match exactly
 
 - sky_illumination: the horizon pyramid is built from the tile's own corner (KI-03, `rvt/vis.py:1156`
-  `horizon_generate_coarse_dem`, `rvt/vis.py:1218` `horizon_generate_pyramids` at `start`). Tile origins that are
-  multiples of 8 px give an identical interior with a 128 px buffer (synthetic 1024 px window, 512 px tiles);
-  origins congruent to 4, 6, 7 mod 8 differ by up to 1.9e-4, 3.1e-4, 6.1e-4. The overcast output is also divided by
-  the tile-wide maximum (`rvt/vis.py:1813`); in the synthetic test the maximum was reached inside every tile.
+  `horizon_generate_coarse_dem`, `rvt/vis.py:1218` `horizon_generate_pyramids` at `start`; now `rvt/vis.py:1560`,
+  `:1665` at `234b156`). Tile origins that are multiples of 8 px give an identical interior with a 128 px buffer
+  (synthetic 1024 px window, 512 px tiles); origins congruent to 4, 6, 7 mod 8 differ by up to 1.9e-4, 3.1e-4,
+  6.1e-4. The overcast output is also divided by the tile-wide maximum (`rvt/vis.py:1813` at `start`, now
+  `rvt/vis.py:2456` in `sky_illumination`); in the synthetic test the maximum was reached inside every tile.
 - mstp, e3mstp, e4mstp: exact equality was not reached within 569 px and the cause was not isolated. The summed-area
-  tables are accumulated in float64 from the tile corner (`rvt/vis.py:1965` `integral_image`), so their rounding
-  depends on the tile origin; this is a likely cause, not a measured one.
-- e3mstp, e4mstp: the blend rescales image-wide when an intermediate leaves [0, 1] (`rvt/blend_func.py:555-563`,
-  `scale_within_0_and_1`, see KI-19), a tile-wide statistic.
-- 8-bit conversion: the default display stretch of sky illumination is a percent cut (`rvt/default.py:319`,
-  `sim_bytscl = ("percent", 0.25, 0.00)`), computed per image with `np.nanpercentile` (`rvt/blend_func.py:177`), so
-  per-tile 8-bit output does not match a full-window stretch. The other visualizations use value stretches.
+  tables of the DEM and of its squares are accumulated in float64 from the tile corner (in place, with the same
+  cumulative sums as `integral_image`, in `max_elevation_deviation`: `rvt/vis.py:2892-2898` at `234b156`), so
+  their rounding depends on the tile origin; this is a likely cause, not a measured one.
+- e3mstp, e4mstp: the blend rescales image-wide when an intermediate leaves [0, 1] (`rvt/blend_func.py:555-563` at
+  `start`, now `rvt/blend_func.py:1361-1368`, `scale_within_0_and_1`, see KI-19), a tile-wide statistic.
+- 8-bit conversion: the default display stretch of sky illumination is a percent cut (`rvt/default.py:319` at
+  `start`, now `rvt/default.py:405` in `DefaultValues.__init__`, `sim_bytscl = ("percent", 0.25, 0.00)`), computed
+  per image with `np.nanpercentile` (`rvt/blend_func.py:177` at `start`, now `rvt/blend_func.py:378` in
+  `lin_cutoff_calc_from_perc`), so per-tile 8-bit output does not match a full-window stretch. The other
+  visualizations use value stretches.
 
 ### Practical consequences for a tiling pipeline (recommendations, not measured as a pipeline)
 
