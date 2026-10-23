@@ -1711,8 +1711,72 @@ class DefaultValues:
             y_res: float = None,
             no_data: Optional[float] = None
     ):
-        """Converts (byte scale) float visualization to 8bit. Resolution (x_res, y_res) and no_data needed only for
-         multiple directions hillshade! Method first normalize then byte scale (0-255)."""
+        """
+        Stretch a float visualization to 0..255 with the ``<vis>_bytscl`` setting of that visualization.
+
+        For every visualization except SHADOW and MULTI_HILLSHADE: ``rvt.blend_func.normalize_image`` with
+        ``<vis>_bytscl`` = (mode, min, max) maps the values to 0..1 (mode "value": linear between min and max;
+        "percent": cut off min % and max % of the histogram, then linear; values outside are clipped; slope and
+        negative openness are inverted, 1 - x), then ``rvt.vis.byte_scale(c_min=0, c_max=1)`` gives
+        ``floor(255.9999 * x)``; NaN becomes 255.
+
+        ===========================  ===================  ================================================
+        visualization                setting              note
+        ===========================  ===================  ================================================
+        SLOPE                        ``slp_bytscl``       inverted (steep is dark)
+        HILLSHADE                    ``hs_bytscl``
+        SHADOW                       none                 ``float_arr`` is returned unchanged
+        MULTI_HILLSHADE              ``mhs_bytscl``       ``float_arr`` is the DEM, see below
+        SIMPLE_LOCAL_RELIEF_MODEL    ``slrm_bytscl``
+        SKY_VIEW_FACTOR              ``svf_bytscl``
+        ANISOTROPIC_SKY_VIEW_FACTOR  ``asvf_bytscl``
+        POSITIVE_OPENNESS            ``pos_opns_bytscl``
+        NEGATIVE_OPENNESS            ``neg_opns_bytscl``  inverted
+        SKY_ILLUMINATION             ``sim_bytscl``
+        LOCAL_DOMINANCE              ``ld_bytscl``
+        MULTI_SCALE_RELIEF_MODEL     ``msrm_bytscl``
+        MULTI_SCALE_TOPOGRAPHIC_     ``mstp_bytscl``      3 bands in, 3 bands out
+        POSITION
+        ===========================  ===================  ================================================
+
+        MULTI_HILLSHADE: ``float_arr`` must be the DEM (m). Three hillshades with sun azimuth 315 (red), 22.5
+        (green) and 90 deg (blue) and sun elevation ``mhs_sun_el`` are computed with ``rvt.vis.hillshade`` and
+        each is stretched with ``rvt.blend_func.normalize_perc`` (mode "percent") or ``normalize_lin`` (any other
+        mode) and ``byte_scale``; no inversion.
+
+        Parameters
+        ----------
+        float_arr : numpy.ndarray
+            Float result of ``visualization``, (H, W) or (3, H, W) for MSTP; the DEM (H, W) for MULTI_HILLSHADE.
+        visualization : RVTVisualization
+            Selects the setting and the special cases above.
+        x_res : float or None
+            Pixel size in x (m/px); used only for MULTI_HILLSHADE.
+        y_res : float or None
+            Pixel size in y (m/px); used only for MULTI_HILLSHADE.
+        no_data : float or None
+            No-data value of the DEM; used only for MULTI_HILLSHADE.
+
+        Returns
+        -------
+        numpy.ndarray
+            uint8, same shape as ``float_arr``; (3, H, W) for MULTI_HILLSHADE; for SHADOW the input array itself.
+
+        Raises
+        ------
+        Exception
+            If ``visualization`` is not a member of ``RVTVisualization``; from ``rvt.blend_func`` if min and max
+            of a "value" stretch are equal or reversed, or the percentages are outside 0..100.
+
+        Notes
+        -----
+        Known issue: the stretch clips ``float_arr`` in place to the stretch range (the caller's array changes).
+        See docs/KNOWN_ISSUES.md.
+
+        Known issue: MULTI_HILLSHADE ignores ``ve_factor`` (the float multi hillshade uses it), and its mode test
+        is ``mhs_bytscl[0].lower() == "percent" or slp_bytscl[0].lower() == "perc"``: the slope setting can switch
+        the multi hillshade to the percent stretch. See docs/KNOWN_ISSUES.md.
+        """
         if visualization == RVTVisualization.HILLSHADE:
             norm_arr = rvt.blend_func.normalize_image(visualization="hs", image=float_arr,
                                                       min_norm=self.hs_bytscl[1], max_norm=self.hs_bytscl[2],
@@ -1824,16 +1888,86 @@ class DefaultValues:
             raise Exception("rvt.default.DefaultValues.float_to_8bit: Wrong visualization (visualization) parameter!")
 
     def get_slope(self, dem_arr, resolution_x, resolution_y, no_data=None):
+        """
+        Compute the slope gradient with ``rvt.vis.slope_aspect`` and the stored parameters.
+
+        Uses ``slp_output_units`` and ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution_x : float
+            Pixel size in x (m/px).
+        resolution_y : float
+            Pixel size in y (m/px).
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float32 (H, W), slope in ``slp_output_units``.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.slope_aspect`` works on a float32 copy, so ``dem_arr`` is not modified.
+        """
         slope_arr = rvt.vis.slope_aspect(dem=dem_arr, resolution_x=resolution_x, resolution_y=resolution_y,
                                          ve_factor=self.ve_factor, output_units=self.slp_output_units,
                                          no_data=no_data)["slope"]
         return slope_arr
 
     def save_slope(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Slope from dem (dem_path) with default parameters. If custom_dir is None it saves
-        in dem directory else in custom_dir. If path to file already exists we can overwrite file (overwrite=0) or
-        not (overwrite=1). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the slope of a DEM GeoTIFF with the stored parameters and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_slope`` and writes GeoTIFFs with the projection and geotransform of the DEM,
+        named by ``get_slope_file_name`` (pattern there). ``save_visualizations`` calls this method when
+        ``slp_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (slope in ``slp_output_units``, no-data NaN); None takes
+            ``slp_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``slp_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -1902,22 +2036,142 @@ class DefaultValues:
             return 1
 
     def get_shadow(self, dem_arr, resolution, no_data=None):
+        """
+        Compute the binary cast shadow with ``rvt.vis.shadow_horizon`` for the hillshade sun position.
+
+        Sun azimuth ``hs_sun_azi`` and elevation ``hs_sun_el`` (deg), ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution : float
+            Pixel size (m/px); the x pixel size is used for both axes.
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            int64 (H, W), 1 in shadow, 0 otherwise.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.shadow_horizon`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+
+        Known issue: one NaN anywhere in the DEM (also a no-data pixel) makes the whole shadow 0. See
+        docs/KNOWN_ISSUES.md.
+        """
         shadow_arr = rvt.vis.shadow_horizon(dem=dem_arr, resolution=resolution, shadow_az=self.hs_sun_azi,
                                             shadow_el=self.hs_sun_el, ve_factor=self.ve_factor,
                                             no_data=no_data)["shadow"]
         return shadow_arr
 
     def get_hillshade(self, dem_arr, resolution_x, resolution_y, no_data=None):
+        """
+        Compute the hillshade with ``rvt.vis.hillshade`` and the stored parameters.
+
+        Sun azimuth ``hs_sun_azi`` and elevation ``hs_sun_el`` (deg), ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution_x : float
+            Pixel size in x (m/px).
+        resolution_y : float
+            Pixel size in y (m/px).
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float64 (H, W), values 0..1.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.hillshade`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+        """
         hillshade_arr = rvt.vis.hillshade(dem=dem_arr, resolution_x=resolution_x, resolution_y=resolution_y,
                                           sun_azimuth=self.hs_sun_azi, sun_elevation=self.hs_sun_el,
                                           ve_factor=self.ve_factor, no_data=no_data)
         return hillshade_arr
 
     def save_hillshade(self, dem_path, custom_dir=None, save_float=None, save_8bit=None, save_shadow=None):
-        """Calculates and saves Hillshade from dem (dem_path) with default parameters. If custom_dir is None it saves
-        in dem directory else in custom_dir. If path to file already exists we can overwrite file (overwrite=1)
-        or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the hillshade (and optionally the shadow) of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_hillshade`` and writes GeoTIFFs with the projection and geotransform of the
+        DEM, named by ``get_hillshade_file_name`` (pattern there). ``save_visualizations`` calls this method when
+        ``hs_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (values 0..1, no-data NaN); None takes
+            ``hs_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``hs_save_8bit``.
+        save_shadow : bool or None
+            Also write the binary shadow (``get_shadow``, float32 0/1, name of ``get_shadow_file_name``);
+            None takes ``hs_shadow``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.hillshade`` assigns NaN to the no-data pixels before converting to float32, so a DEM
+        GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test covers only some combinations of the three flags; for
+        8-bit only, float + 8-bit without shadow and 8-bit + shadow it never returns 0 (the two branches
+        meant for the 8-bit cases test ``not save_float and not save_8bit`` and are unreachable; float + 8-bit
+        without shadow has no branch). See docs/KNOWN_ISSUES.md.
+
+        Known issue: with ``custom_dir`` the shadow path is ``os.path.join(custom_dir, get_shadow_path(dem_path))``;
+        ``get_shadow_path`` already holds the DEM directory, so the shadow is written next to the DEM
+        (for an absolute ``dem_path``). See docs/KNOWN_ISSUES.md.
+
+        Known issue: the shadow is computed from the array in which ``get_hillshade`` has already set the
+        no-data pixels to NaN, and one NaN makes the whole shadow 0, so a DEM with no-data pixels gives
+        an all-zero shadow. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2017,16 +2271,98 @@ class DefaultValues:
             return 1
 
     def get_multi_hillshade(self, dem_arr, resolution_x, resolution_y, no_data=None):
+        """
+        Compute hillshades from ``mhs_nr_dir`` sun azimuths with ``rvt.vis.multi_hillshade``.
+
+        Azimuths 0, 360 / mhs_nr_dir, ... deg; sun elevation ``mhs_sun_el`` (deg); ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution_x : float
+            Pixel size in x (m/px).
+        resolution_y : float
+            Pixel size in y (m/px).
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float64 (mhs_nr_dir, H-2, W-2), values 0..1: ``rvt.vis.multi_hillshade`` drops the
+            edge pixels (see its docstring).
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.multi_hillshade`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+        """
         multi_hillshade_arr = rvt.vis.multi_hillshade(dem=dem_arr, resolution_x=resolution_x, resolution_y=resolution_y,
                                                       nr_directions=self.mhs_nr_dir, sun_elevation=self.mhs_sun_el,
                                                       ve_factor=self.ve_factor, no_data=no_data)
         return multi_hillshade_arr
 
     def save_multi_hillshade(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Multidirectional hillshade from dem (dem_path) with default parameters.
-        If custom_dir is None it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the multi-direction hillshade of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_multi_hillshade`` and writes GeoTIFFs with the projection and geotransform of
+        the DEM, named by ``get_multi_hillshade_file_name`` (pattern there). ``save_visualizations`` calls this
+        method when ``mhs_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (``mhs_nr_dir`` bands, values 0..1, no-data NaN); None takes
+            ``mhs_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``mhs_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.multi_hillshade`` assigns NaN to the no-data pixels before converting to float32, so
+        a DEM GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        The float raster is ``(mhs_nr_dir, H-2, W-2)`` (``rvt.vis.multi_hillshade`` drops the edge pixels)
+        but is written with the geotransform of the DEM, so it is 2 px smaller and its pixel [i, j]
+        belongs to DEM pixel [i + 1, j + 1] (known issue, see docs/KNOWN_ISSUES.md). The 8-bit raster is not
+        derived from the float result: it is a 3-band RGB of hillshades at 315, 22.5 and 90 deg computed from
+        the DEM by ``float_to_8bit``.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2105,14 +2441,85 @@ class DefaultValues:
             return 1
 
     def get_slrm(self, dem_arr, no_data=None):
+        """
+        Compute the simple local relief model with ``rvt.vis.slrm`` and the stored parameters.
+
+        Trend radius ``slrm_rad_cell`` (px), ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float32 (H, W), elevation minus trend (m).
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.slrm`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+        """
         slrm_arr = rvt.vis.slrm(dem=dem_arr, radius_cell=self.slrm_rad_cell, ve_factor=self.ve_factor, no_data=no_data)
         return slrm_arr
 
     def save_slrm(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Simple local relief model from dem (dem_path) with default parameters.
-        If custom_dir is None it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the simple local relief model of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_slrm`` and writes GeoTIFFs with the projection and geotransform of the DEM,
+        named by ``get_slrm_file_name`` (pattern there). ``save_visualizations`` calls this method when
+        ``slrm_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (m, no-data NaN); None takes
+            ``slrm_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``slrm_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.slrm`` assigns NaN to the no-data pixels before converting to float32, so a DEM
+        GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2182,6 +2589,43 @@ class DefaultValues:
 
     def get_sky_view_factor(self, dem_arr, resolution, compute_svf=True, compute_asvf=False, compute_opns=False,
                             no_data=None):
+        """
+        Compute sky-view factor, anisotropic SVF and/or positive openness with ``rvt.vis.sky_view_factor``.
+
+        Uses ``svf_n_dir``, ``svf_r_max`` (px), ``svf_noise``, ``asvf_dir`` (deg), ``asvf_level`` and ``ve_factor``;
+        the three results come from one horizon search.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution : float
+            Pixel size (m/px); the x pixel size is used for both axes.
+        compute_svf : bool
+            Compute the sky-view factor (key "svf").
+        compute_asvf : bool
+            Compute the anisotropic sky-view factor (key "asvf").
+        compute_opns : bool
+            Compute the positive openness (key "opns").
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        dict
+            ``{"svf", "asvf", "opns"}`` for the requested results: float64 (H, W); SVF and ASVF
+            0..1, openness in deg.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.sky_view_factor`` works on a float32 copy, so ``dem_arr`` is not modified.
+        """
         dict_svf_asvf_opns = rvt.vis.sky_view_factor(dem=dem_arr, resolution=resolution, compute_svf=compute_svf,
                                                      compute_opns=compute_opns, compute_asvf=compute_asvf,
                                                      svf_n_dir=self.svf_n_dir, svf_r_max=self.svf_r_max,
@@ -2192,11 +2636,58 @@ class DefaultValues:
 
     def save_sky_view_factor(self, dem_path, save_svf=True, save_asvf=False, save_opns=False, custom_dir=None,
                              save_float=None, save_8bit=None):
-        """Calculates and saves Sky-view factor(save_svf=True), Anisotropic Sky-view factor(save_asvf=True) and
-        Positive Openness(save_opns=True) from dem (dem_path) with default parameters.
-        If custom_dir is None it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute SVF, anisotropic SVF and/or positive openness of a DEM GeoTIFF and write the rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_sky_view_factor`` and writes GeoTIFFs with the projection and geotransform of
+        the DEM, named by ``get_svf_file_name``, ``get_asvf_file_name`` and ``get_opns_file_name`` (patterns there).
+        ``save_visualizations`` calls this method when ``svf_compute``, ``asvf_compute`` or ``pos_opns_compute`` is
+        set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        save_svf : bool
+            Write the sky-view factor.
+        save_asvf : bool
+            Write the anisotropic sky-view factor.
+        save_opns : bool
+            Write the positive openness.
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (SVF and ASVF 0..1, openness in deg, no-data NaN); None takes
+            ``svf_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``svf_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        The three results come from one call of ``rvt.vis.sky_view_factor``; the flags ``svf_save_float``
+        and ``svf_save_8bit`` apply to all three.
+
+        Known issue: the "outputs exist" test checks the paths of all three results; the path of a result
+        that is not requested is "", so the method returns 0 only when all three are requested and
+        present. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2345,6 +2836,38 @@ class DefaultValues:
             return 1
 
     def get_neg_opns(self, dem_arr, resolution, no_data=None):
+        """
+        Compute the negative openness: positive openness of ``-1 * dem_arr`` with ``rvt.vis.sky_view_factor``.
+
+        Uses ``svf_n_dir``, ``svf_r_max`` (px), ``svf_noise`` and ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution : float
+            Pixel size (m/px); the x pixel size is used for both axes.
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float64 (H, W), openness in deg.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``dem_arr`` is not modified (the negation makes a new array).
+
+        Known issue: ``no_data`` is compared with the negated DEM, so a no-data value -9999 (now +9999) is
+        not recognised and is processed as a 9999 m peak. See docs/KNOWN_ISSUES.md.
+        """
         dem_arr = -1 * dem_arr
         dict_neg_opns = rvt.vis.sky_view_factor(dem=dem_arr, resolution=resolution, svf_n_dir=self.svf_n_dir,
                                                 svf_r_max=self.svf_r_max, svf_noise=self.svf_noise,
@@ -2354,10 +2877,51 @@ class DefaultValues:
         return neg_opns_arr
 
     def save_neg_opns(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Negative Openness from dem (dem_path) with default parameters. If custom_dir is None
-        it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the negative openness of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_neg_opns`` and writes GeoTIFFs with the projection and geotransform of the
+        DEM, named by ``get_neg_opns_file_name`` (pattern there). ``save_visualizations`` calls this method when
+        ``neg_opns_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (deg, no-data NaN); None takes
+            ``neg_opns_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``neg_opns_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the no-data value is not recognised (see ``get_neg_opns``). See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2429,6 +2993,41 @@ class DefaultValues:
             return 1
 
     def get_sky_illumination(self, dem_arr, resolution, no_data=None):
+        """
+        Compute the sky illumination with ``rvt.vis.sky_illumination`` and the stored parameters.
+
+        Uses ``sim_sky_mod``, ``sim_compute_shadow``, ``sim_shadow_dist`` (px, ``max_fine_radius``),
+        ``sim_nr_dir``, ``sim_shadow_az`` and ``sim_shadow_el`` (deg) and ``ve_factor``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution : float
+            Pixel size (m/px); the x pixel size is used for both axes.
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float64 (H, W).
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.sky_illumination`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+
+        Known issue: a single NaN (or no-data) pixel turns a large part of the output into NaN, not only
+        that pixel. See docs/KNOWN_ISSUES.md.
+        """
         sky_illumination_arr = rvt.vis.sky_illumination(dem=dem_arr, resolution=resolution, sky_model=self.sim_sky_mod,
                                                         compute_shadow=bool(self.sim_compute_shadow),
                                                         max_fine_radius=self.sim_shadow_dist,
@@ -2438,10 +3037,52 @@ class DefaultValues:
         return sky_illumination_arr
 
     def save_sky_illumination(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Sky illumination from dem (dem_path) with default parameters. If custom_dir is None
-        it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the sky illumination of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_sky_illumination`` and writes GeoTIFFs with the projection and geotransform
+        of the DEM, named by ``get_sky_illumination_file_name`` (pattern there). ``save_visualizations`` calls this
+        method when ``sim_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (no-data NaN); None takes
+            ``sim_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``sim_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.sky_illumination`` assigns NaN to the no-data pixels before converting to float32, so
+        a DEM GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2516,6 +3157,36 @@ class DefaultValues:
             return 1
 
     def get_local_dominance(self, dem_arr, no_data=None):
+        """
+        Compute the local dominance with ``rvt.vis.local_dominance`` and the stored parameters.
+
+        Uses ``ld_min_rad``, ``ld_max_rad``, ``ld_rad_inc`` (px), ``ld_anglr_res`` (deg), ``ld_observer_h`` (m) and
+        ``ve_factor``. The pixel size is not needed.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float64 (H, W).
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.local_dominance`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+        """
         local_dominance_arr = rvt.vis.local_dominance(dem=dem_arr, min_rad=self.ld_min_rad, max_rad=self.ld_max_rad,
                                                       rad_inc=self.ld_rad_inc, angular_res=self.ld_anglr_res,
                                                       observer_height=self.ld_observer_h, ve_factor=self.ve_factor,
@@ -2523,10 +3194,52 @@ class DefaultValues:
         return local_dominance_arr
 
     def save_local_dominance(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Local dominance from dem (dem_path) with default parameters. If custom_dir is None
-        it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the local dominance of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_local_dominance`` and writes GeoTIFFs with the projection and geotransform of
+        the DEM, named by ``get_local_dominance_file_name`` (pattern there). ``save_visualizations`` calls this
+        method when ``ld_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (no-data NaN); None takes
+            ``ld_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``ld_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.local_dominance`` assigns NaN to the no-data pixels before converting to float32, so
+        a DEM GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2597,16 +3310,90 @@ class DefaultValues:
             return 1
 
     def get_msrm(self, dem_arr, resolution, no_data=None):
+        """
+        Compute the multi-scale relief model with ``rvt.vis.msrm`` and the stored parameters.
+
+        Uses ``msrm_feature_min``, ``msrm_feature_max`` (m), ``msrm_scaling_factor`` and ``ve_factor``;
+        ``resolution`` converts the feature sizes from m to px.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        resolution : float
+            Pixel size (m/px); the x pixel size is used for both axes.
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float64 (H, W), relief in m.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.msrm`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+        """
         msrm_arr = rvt.vis.msrm(dem=dem_arr, resolution=resolution, feature_min=self.msrm_feature_min,
                                 feature_max=self.msrm_feature_max, scaling_factor=self.msrm_scaling_factor,
                                 ve_factor=self.ve_factor, no_data=no_data)
         return msrm_arr
 
     def save_msrm(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Multi-scale relief model from dem (dem_path) with default parameters.
-        If custom_dir is None it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0). If save_float is True method creates Gtiff with real values,
-        if save_8bit is True method creates GTiff with bytescaled values (0-255)."""
+        """
+        Compute the multi-scale relief model of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_msrm`` and writes GeoTIFFs with the projection and geotransform of the DEM,
+        named by ``get_msrm_file_name`` (pattern there). ``save_visualizations`` calls this method when
+        ``msrm_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (m, no-data NaN); None takes
+            ``msrm_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``msrm_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.msrm`` assigns NaN to the no-data pixels before converting to float32, so a DEM
+        GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2678,14 +3465,93 @@ class DefaultValues:
             return 1
 
     def get_mstp(self, dem_arr, no_data=None):
+        """
+        Compute the multi-scale topographic position (RGB) with ``rvt.vis.mstp`` and the stored parameters.
+
+        Uses ``mstp_local_scale``, ``mstp_meso_scale``, ``mstp_broad_scale`` (px) and ``mstp_lightness``.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D elevation array (m), shape (H, W).
+        no_data : float or None
+            Value marking no-data pixels; they are set to NaN before the computation. None: no masking.
+
+        Returns
+        -------
+        numpy.ndarray
+            float32 (3, H, W), bands R = broad, G = meso, B = local scale,
+            values 0..1.
+
+        Raises
+        ------
+        Exception
+            From ``rvt.vis`` if a stored parameter is out of range (e.g. ``ve_factor`` outside
+            [-10000, 10000]).
+
+        Notes
+        -----
+        ``rvt.vis.mstp`` sets the no-data pixels to NaN in the caller's array before converting it to
+        float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
+        ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
+
+        Known issue: ``ve_factor`` is not passed to ``rvt.vis.mstp`` (which then uses 1), unlike every
+        other ``get_<vis>``. See docs/KNOWN_ISSUES.md.
+        """
         mstp_arr = rvt.vis.mstp(dem=dem_arr, local_scale=self.mstp_local_scale, meso_scale=self.mstp_meso_scale,
                                 broad_scale=self.mstp_broad_scale, lightness=self.mstp_lightness, no_data=no_data)
         return mstp_arr
 
     def save_mstp(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
-        """Calculates and saves Multi-scale topographic position from dem (dem_path) with default parameters.
-        If custom_dir is None it saves in dem directory else in custom_dir. If path to file already exists we can
-        overwrite file (overwrite=1) or not (overwrite=0)."""
+        """
+        Compute the multi-scale topographic position (RGB) of a DEM GeoTIFF and write the result rasters.
+
+        Reads the DEM with ``get_raster_arr`` (whole raster, one band expected; pixel size and no-data value from
+        the file), computes with ``get_mstp`` and writes GeoTIFFs with the projection and geotransform of the DEM,
+        named by ``get_mstp_file_name`` (pattern there). ``save_visualizations`` calls this method when
+        ``mstp_compute`` is set.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory; None writes next to the DEM.
+        save_float : bool or None
+            Write the float32 GeoTIFF (3 bands R, G, B = broad, meso, local, values 0..1, no-data NaN); None takes
+            ``mstp_save_float``.
+        save_8bit : bool or None
+            Write the 8-bit GeoTIFF (stretch of ``float_to_8bit``, NaN becomes 255); None takes
+            ``mstp_save_8bit``.
+
+        Returns
+        -------
+        int
+            0 if every requested output file exists and ``overwrite`` is 0 (nothing is computed),
+            otherwise 1. With ``overwrite`` 0 an existing output file is never replaced.
+
+        Raises
+        ------
+        Exception
+            If both ``save_float`` and ``save_8bit`` are false (after the defaults are applied), or
+            ``dem_path`` is not a file; also exceptions of ``rvt.vis`` for parameters out of range.
+
+        Notes
+        -----
+        Known issue: ``rvt.vis.mstp`` assigns NaN to the no-data pixels before converting to float32, so a DEM
+        GeoTIFF with an integer data type and a no-data value raises ValueError. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the "outputs exist" test for the 8-bit-only case is written as
+        ``elif not save_float and not save_8bit`` (unreachable after the check above), so with only the 8-bit
+        output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
+        written and 1 is returned. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the 8-bit raster is written with ``no_data=np.nan``, which a byte band cannot hold;
+        the file records no no-data value. See docs/KNOWN_ISSUES.md.
+
+        Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
+        which replaces existing files and has its own known issues (see there).
+        """
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
@@ -2769,8 +3635,26 @@ class DefaultValues:
             return 1
 
     def save_visualizations(self, dem_path, custom_dir=None):
-        """Save all visualizations where self.'visualization'_compute = True also saves float where self.'visualization'
-        _save_float = True and 8bit where self.'visualization'_save_8bit = True. In the end method creates log file."""
+        """
+        Compute and save every visualization whose ``<vis>_compute`` flag is set, then write a log file.
+
+        Calls, in this order and with the stored ``<vis>_save_float`` / ``<vis>_save_8bit`` flags:
+        ``save_slope``, ``save_hillshade``, ``save_multi_hillshade``, ``save_slrm``, ``save_sky_view_factor``
+        (once for SVF, anisotropic SVF and positive openness), ``save_neg_opns``, ``save_sky_illumination``,
+        ``save_local_dominance``, ``save_msrm``, ``save_mstp``; then ``create_log_file`` with the elapsed time.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF (elevation in m).
+        custom_dir : str or None
+            Output directory for rasters and log; None uses the DEM directory.
+
+        Raises
+        ------
+        Exception
+            From the ``save_<vis>`` methods, e.g. when both save flags of a computed visualization are 0.
+        """
         start_time = time.time()
         if self.slp_compute:
             self.save_slope(dem_path, custom_dir=custom_dir)
@@ -2807,6 +3691,50 @@ class DefaultValues:
             save_float: bool = True,
             save_8bit: bool = False
     ) -> Optional[Tuple[np.array, np.array]]:  # tuple[vis_float_arr, vis_8bit_arr]
+        """
+        Compute the float and/or 8-bit result of one visualization from a DEM array with the stored parameters.
+
+        Dispatches to the ``get_<vis>`` method of ``visualization`` and to ``float_to_8bit``. ``rvt.tile`` calls
+        it once per tile.
+
+        Parameters
+        ----------
+        visualization : RVTVisualization
+            Visualization to compute.
+        dem : numpy.ndarray
+            2D elevation array (m), shape (H, W). May be modified in place (no-data set to NaN, see the
+            ``get_<vis>`` methods).
+        resolution_x : float
+            Pixel size in x (m/px); the only pixel size for visualizations that take one ``resolution``.
+        resolution_y : float
+            Pixel size in y (m/px); used by SLOPE, HILLSHADE and MULTI_HILLSHADE only.
+        no_data : float or None
+            No-data value of the DEM; None: no masking.
+        save_float : bool
+            Return the float result.
+        save_8bit : bool
+            Return the 8-bit result (``float_to_8bit``; for MULTI_HILLSHADE computed from ``dem``).
+
+        Returns
+        -------
+        tuple
+            ``(vis_float_arr, vis_8bit_arr)``; an entry is None when its flag is false. Dtypes and shapes are
+            those of the ``get_<vis>`` method (e.g. float32 (H, W) for SLOPE, float64 (16, H-2, W-2) for
+            MULTI_HILLSHADE, float32 (3, H, W) for MSTP) and of ``float_to_8bit`` (uint8; int64 for SHADOW).
+            For a value that is not a member of ``RVTVisualization`` the float entry is None.
+
+        Raises
+        ------
+        Exception
+            From ``float_to_8bit`` for an unknown visualization when ``save_8bit`` is true, and from ``rvt.vis``
+            for parameters out of range.
+
+        Notes
+        -----
+        Known issue: with ``save_float`` and ``save_8bit`` both true the float result is the same array object
+        that ``float_to_8bit`` clips in place, so the returned float result is clipped to the stretch range
+        (e.g. slope limited to 0..51 deg). See docs/KNOWN_ISSUES.md.
+        """
         vis_arr = None
         vis_float_arr = None
         vis_8bit_arr = None
@@ -2896,8 +3824,39 @@ class DefaultValues:
         return vis_float_arr, vis_8bit_arr
 
     def create_log_file(self, dem_path, custom_dir=None, compute_time=None):
-        """Creates log file in custom_dir, if custom_dir=None it creates it in dem directory (dem_path).
-        Be aware, all default parameters have to be right! Parameter compute_time is in seconds."""
+        """
+        Write a text log of the DEM metadata, the selected parameters and the output file names.
+
+        The log is ``<dem>_vis_log_<YYYY-mm-dd_HH-MM-SS>.txt`` (local time; ``<dem>`` is the base name without
+        its last extension) in ``custom_dir`` or the DEM directory. It lists, for every visualization whose
+        ``<vis>_compute`` flag is set, its parameters and the absolute paths of the outputs selected by the
+        ``<vis>_save_float`` / ``<vis>_save_8bit`` flags. It describes the current attributes; it does not check
+        which files were written.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF.
+        custom_dir : str or None
+            Directory of the log and of the listed outputs; None uses the DEM directory.
+        compute_time : float or None
+            Processing time (s) written at the end; None omits the line.
+
+        Notes
+        -----
+        Known issue: the whole DEM is read into memory (``get_raster_arr``) to get its shape, also for rasters
+        above ``tile_size_limit`` that the ``save_<vis>`` methods process tile by tile. See docs/KNOWN_ISSUES.md.
+
+        Known issue: for MSRM the line ">> Output file:" is written twice; for MSTP the float file is listed
+        whatever ``mstp_save_float`` is and the 8-bit file is never listed. See docs/KNOWN_ISSUES.md.
+        """
+        # Structure of this method:
+        #   1. read the DEM (array shape, resolution); number of bands, rows, columns
+        #   2. log directory and time-stamped log name
+        #   3. header, input metadata, general parameters (overwrite, ve_factor, tiling on/off)
+        #   4. one block per visualization with *_compute set: hillshade (+ shadow), multi hillshade, slope,
+        #      SLRM, MSRM, SVF, ASVF, positive and negative openness, sky illumination, local dominance, MSTP
+        #   5. computation time, close the file
         dict_arr_res = get_raster_arr(raster_path=dem_path)
         resolution = dict_arr_res["resolution"]
         arr_shape = np.array(dict_arr_res["array"]).shape
@@ -3159,20 +4118,25 @@ class DefaultValues:
 
 def get_raster_arr(raster_path):
     """
-    Reads raster from raster_path and returns its array(value) and resolution.
+    Read a raster with GDAL and return its pixel values, pixel size and no-data value.
 
     Parameters
     ----------
     raster_path : str
-        Path to raster
+        Path of the raster (any format GDAL reads, normally a GeoTIFF).
 
     Returns
     -------
-    dict_out : dict
-        Returns {"array": array, "resolution": (x_res, y_res), "no_data": no_data} : dict("array": np.array,
-        "resolution": tuple(float, float), "no_data": float).
-        Returns dictionary with keys: array, resolution and no_data. Key resolution is tuple where first element is x
-        resolution and second is y resolution. Key no_data represent value of no data.
+    dict
+        ``{"array": numpy.ndarray, "resolution": (x_res, y_res), "no_data": float or None}``. The array has the
+        data type of the file (not converted to float32): (H, W) for one band, (B, H, W) for several bands.
+        ``x_res = abs(gt[1])`` and ``y_res = abs(gt[5])`` (m/px for a projected raster). ``no_data`` is the
+        no-data value of band 1 (assumed for all bands), None if the file has none.
+
+    Notes
+    -----
+    The whole raster is read into memory. ``gdal.Open`` returns None for a missing file, so a missing path
+    raises AttributeError here (or RuntimeError when GDAL exceptions are enabled).
     """
     data_set = gdal.Open(raster_path)
     gt = data_set.GetGeoTransform()
@@ -3197,18 +4161,20 @@ def get_raster_arr(raster_path):
 
 
 def get_raster_size(raster_path, band=1):
-    """Opens raster path and returns selected band size.
+    """
+    Return the size in px of one band of a raster without reading its pixels.
 
     Parameters
     ----------
     raster_path : str
-        Path to raster.
+        Path of the raster.
     band : int
-        Selected band number.
+        Band number, starting at 1.
 
     Returns
     -------
-    tuple(x_size, y_size)
+    tuple of int
+        ``(x_size, y_size)`` = (number of columns, number of rows).
     """
     data_set = gdal.Open(raster_path)  # Open dem raster
     band = data_set.GetRasterBand(band)
@@ -3220,20 +4186,33 @@ def get_raster_size(raster_path, band=1):
 
 
 def save_raster(src_raster_path, out_raster_path, out_raster_arr: np.ndarray, no_data=None, e_type=6):
-    """Saves raster array (out_rast_arr) to out_raster_path (GTiff), using src_rast_path information.
+    """
+    Write an array to a GeoTIFF with the projection and geotransform of a source raster.
 
     Parameters
     ----------
     src_raster_path : str
-        Path to source raster.
+        Path of the raster whose projection and geotransform are copied (normally the DEM).
     out_raster_path : str
-        Path to new file, where to save raster (GTiff).
-    out_raster_arr : np.array (2D - one band, 3D - multiple bands)
-        Array with raster data.
-    no_data : float
-        Value that represents no data pixels.
-    e_type : GDALDataType
-        https://gdal.org/api/raster_c_api.html#_CPPv412GDALDataType, (GDT_Float32 = 6, GDT_UInt8 = 1, ...)
+        Path of the GeoTIFF to write; an existing file is replaced.
+    out_raster_arr : numpy.ndarray
+        (H, W) for one band or (B, H, W) for B bands. Its size is used as is; it is not checked against the
+        source raster.
+    no_data : float or None
+        No-data value stored in the file (set on band 1; a GeoTIFF holds one value for all bands). None stores
+        none. NaN cannot be stored for a byte raster.
+    e_type : int
+        GDAL data type code: 6 = ``GDT_Float32`` (default), 1 = ``GDT_Byte``; see
+        https://gdal.org/api/raster_c_api.html#_CPPv412GDALDataType. Values are converted by GDAL.
+
+    Raises
+    ------
+    Exception
+        If ``out_raster_arr`` is not 2D or 3D.
+
+    Notes
+    -----
+    Creation options ``COMPRESS=LZW`` and ``BIGTIFF=IF_SAFER``.
     """
     src_data_set = gdal.Open(src_raster_path)
     gtiff_driver = gdal.GetDriverByName("GTiff")
