@@ -1,7 +1,59 @@
 """
-Relief Visualization Toolbox – Visualization Functions
+Relief Visualization Toolbox – visualization algorithms (``rvt.vis``).
 
-Contains functions for computing the visualizations.
+This module holds the numerical algorithms of rvt. Every function takes a 2D elevation array in memory and
+returns arrays; there is no file I/O here. Callers:
+
+- ``rvt.default.DefaultValues.get_*`` (and through them ``save_*`` and ``rvt.tile``) call the public
+  functions with the settings of a ``DefaultValues`` object;
+- ``rvt.blend`` calls ``hillshade``, ``slope_aspect`` and ``byte_scale`` for blending layers and the
+  e3MSTP / e4MSTP recipes;
+- ``rvt.tile`` runs any of them tile by tile on large rasters (via ``rvt.default``).
+
+Contents:
+
+- terrain derivatives: ``slope_aspect``, ``roll_fill_nans``, ``hillshade``, ``multi_hillshade``;
+- local relief: ``mean_filter``, ``slrm`` (simple local relief model), ``msrm`` (multi-scale relief model);
+- horizon based: ``horizon_shift_vector``, ``sky_view_factor_compute``, ``sky_view_factor`` (SVF,
+  anisotropic SVF, openness), ``local_dominance``;
+- sky illumination: ``horizon_generate_coarse_dem``, ``horizon_generate_pyramids``, ``sky_illumination``,
+  ``shadow_horizon``;
+- topographic position: ``integral_image``, ``topographic_dev``, ``max_elevation_deviation``, ``mstp``;
+- utilities: ``byte_scale`` (float to uint8), ``fill_where_nan`` (NaN interpolation).
+
+Accelerated paths
+-----------------
+Five functions have a faster path that returns bitwise identical results to the original numpy code:
+
+- ``mean_filter``, ``sky_view_factor_compute``, ``local_dominance``, ``sky_illumination`` and
+  ``max_elevation_deviation`` (used by ``mstp``) compute only the output window, as slices of the padded
+  array instead of ``np.roll`` copies. The slices equal the rolled arrays wherever the output is kept,
+  because every shift is at most the padding width; where this is not guaranteed by construction the
+  function checks it at run time and otherwise runs its original full-extent loop, which is kept as the
+  reference. SVF, local dominance and sky illumination work in row blocks of about 32768 elements
+  (256 KiB of float64 per buffer) so that the per-block buffers stay in the CPU cache;
+- the inner loops of four of them (SVF horizon scan, local dominance, sky illumination level search,
+  MSTP deviation) also have a numba kernel, registered with ``rvt._accel.jit_kernel`` and run through
+  ``rvt._accel.call``. When numba is missing, fails, or ``RVT_NO_ACCEL=1`` is set, the call returns False
+  and the numpy path runs. Each kernel performs the same IEEE operations as its numpy path, in the same
+  order and in the same dtypes (no fastmath, no FMA, no reassociation); its docstring states the exact
+  equivalence contract;
+- the kernels are serial, so results do not depend on the thread count (``RVT_NUM_THREADS``,
+  ``NUMBA_NUM_THREADS``; see ``rvt._accel``).
+
+Conventions (docs/CONVENTIONS.md)
+---------------------------------
+- Elevation in metres, 2D ``numpy.ndarray``, row 0 is north. Pixel size (``resolution*``) in m/px.
+- Radii and distances in px unless the parameter says m (MSRM feature sizes are in m).
+- ``no_data``: pixels equal to it are set to NaN. Several functions do this in the caller's array before
+  converting the dtype; each docstring states whether the input is modified.
+- Inputs are converted to float32; outputs are float32 or float64, stated per function.
+- NaN in the input stays NaN in the output at the same pixels unless stated otherwise.
+- Edges: each function pads with its own mode (edge, reflect, symmetric, constant), stated per function.
+- ``ve_factor`` (vertical exaggeration) is checked to lie in [-10000, 10000] (``mstp``: [-1000, 10000]).
+
+Behaviour that looks unintended is described in the Notes of the function concerned and listed in
+docs/KNOWN_ISSUES.md; it is kept unchanged.
 
 Credits:
     Žiga Kokalj (ziga.kokalj@zrc-sazu.si)
