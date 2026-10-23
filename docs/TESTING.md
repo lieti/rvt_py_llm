@@ -252,5 +252,23 @@ so the package that was measured is the released one.
 Incident during these measurements: a stray `python -` process left by a crashed Git Bash command (not related to
 rvt) occupied one CPU core from 12:03 to 17:38, so the bench quick run and most of the final gate ran with one core
 busy. Baseline and candidate are timed alternately in the same rounds, and the 1-thread pipeline factor agrees
-with the opt/perf gate within 0.3 % (intervals overlap), so the comparison is not biased; absolute times may be
-slightly longer than on an idle machine.
+with the opt/perf gate within 0.3 % (x11.41 against x11.44, intervals overlap), so the comparison is not biased.
+
+The absolute times are not comparable with the opt/perf gate. In the release run (report
+`bench_final_1t_20261023-170737_32096.json`) baseline and candidate medians are both 2.30-2.45 times longer than in
+the final gate of the optimization run on an idle machine (2026-10-23 08:20, report
+`bench_final_1t_20261023-082005_12380.json` in `out/gate_final/` of the optimization workspace), for every one of
+the 33 rows (11 targets x 3 windows); per-row speed-ups agree within 2.2 %, except slope on the synthetic window
+(x1.00 against x0.95, 4.6 %). Medians, `medium` window, opt/perf gate -> release run:
+
+| target | baseline | candidate | speed-up |
+|---|---|---|---|
+| local dominance | 33.97 s -> 80.51 s (x2.37) | 0.429 s -> 1.014 s (x2.36) | x79.16 -> x79.36 |
+| sky illumination | 38.17 s -> 87.67 s (x2.30) | 5.629 s -> 12.991 s (x2.31) | x6.78 -> x6.75 |
+| e4MSTP | 67.27 s -> 158.52 s (x2.36) | 4.136 s -> 9.780 s (x2.36) | x16.26 -> x16.21 |
+
+A uniform factor of about 2.4 on both sides is not what one busy core of 32 does to processes free to run
+elsewhere. The probable cause (not verified) is that the harness pins each timed 1-thread process to the first CPU
+of its affinity list (`eval/run_impl.py:88` of the workspace, `cpu_affinity(cpus[: max(1, a.threads)])`), and the stray
+process ran on that same CPU, so every timed process shared its CPU with it. Absolute times of this release are
+therefore quoted from the opt/perf gate, with that report named next to them.

@@ -22,6 +22,12 @@ return shapes and dtypes, exception types) is unchanged.
   12.11 s -> 0.892 s (x13.6), e4MSTP 67.27 s -> 4.136 s (x16.3), e3MSTP 23.17 s -> 2.891 s (x8.0), SVF + anisotropic
   SVF + openness 5.53 s -> 0.775 s (x7.1), negative openness x8.2, sky illumination x6.8, MSRM x4.8, SLRM x4.4; slope
   and hillshade are unchanged (x1.0). Peak memory added by a call is lower or equal (ratio 0.29-1.00).
+  Source of these absolute times and ratios: the final gate of the optimization run on `opt/perf` (= tag `start`),
+  2026-10-23 08:20, idle machine, report `bench_final_1t_20261023-082005_12380.json` in `out/gate_final/` of the
+  optimization workspace (not in this repository). The release evidence of 0.1.0
+  ([bench_final_1t_20261023-170737_32096.json](release_evidence/0.1.0/bench_final_1t_20261023-170737_32096.json))
+  has the same ratios with absolute times about 2.4 times longer, e.g. local dominance 80.51 s -> 1.014 s (x79.4),
+  pipeline x11.41 [11.32-11.43]; [TESTING.md](TESTING.md) section 6 explains the difference.
 - **Same pictures.** Every output is bitwise identical to the fixed baseline (`baseline-fixed`) on all evaluation
   sets, with and without numba, for 1, 2 and the default number of threads.
 - **MSTP, e3MSTP and e4MSTP differ from raw upstream**, because of the precision fix. Upstream squares the padded DEM
