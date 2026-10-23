@@ -86,31 +86,56 @@ def byte_scale(data,
                no_data=None
                ):
     """
-    Remade old scipy function.
-    Byte scales an array (image). Linear scale.
+    Scale an array linearly to uint8 (byte scaling, after IDL BYTSCL).
 
-    Byte scaling means converting the input image to uint8 dtype and scaling
-    the range to ``(low, high)`` (default 0-255).
+    Each band is scaled with ``(high + 0.9999) * (data - c_min) / (c_max - c_min)``, clipped to [0, high],
+    NaN set to 255, truncated to uint8, and ``low`` is added. This replaces the removed
+    ``scipy.misc.bytescale``; its rounding differs from it.
 
     Parameters
     ----------
     data : numpy.ndarray
-        Input data (visualization) as 2D or multi-D numpy array.
-    c_min : int or float
-        Scalar, Bias scaling of small values. Default is ``data.min()``.
-    c_max : int or float
-        Scalar, Bias scaling of large values. Default is ``data.max()``.
+        2D array (H, W), or 3D array (B, H, W) whose bands are scaled independently. Any numeric dtype;
+        uint8 input takes a separate branch (see Notes).
+    c_min : int or float or None
+        Value mapped to 0. Default None: ``np.nanmin`` of each band.
+    c_max : int or float or None
+        Value mapped to ``high``. Default None: ``np.nanmax`` of each band.
     high : int
-        Scalar, Scale max value to `high`.  Default is 255.
+        Upper end of the output range before ``low`` is added. Default 255.
     low : int
-        Scalar, Scale min value to `low`.  Default is 0.
-    no_data : int or float
-        Value that represents no_data, it is changed to np.nan .
+        Offset added after scaling and clipping (uint8 addition, wraps above 255). Default 0.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN and end up as 255 + ``low``. For a 3D input this is done in the
+        caller's array (the bands are views of it); a 2D input is copied first and is not modified.
+        Default None.
 
     Returns
     -------
-    img_array : uint8 numpy.ndarray
-        The byte-scaled array.
+    numpy.ndarray
+        uint8, same shape as ``data`` (for uint8 input see Notes).
+
+    Raises
+    ------
+    ValueError
+        If ``high < low`` or ``c_max < c_min``.
+    OverflowError
+        For uint8 input with ``high = 255`` (numpy 2: ``high + 1 = 256`` does not fit uint8).
+
+    Notes
+    -----
+    Known issues (see docs/KNOWN_ISSUES.md):
+
+    - ``low`` is added after clipping, so the maximum is ``high + low``, and the NaN code 255 wraps
+      (255 + 10 = 9 in uint8);
+    - for a constant band ``c_scale`` is set to 1 but the division still uses ``c_max - c_min = 0``, so
+      every pixel becomes 0 / 0 = NaN and then 255;
+    - uint8 input uses ``(high + 1) * (data - c_min - 1) / (c_max - c_min)`` in uint8 arithmetic and
+      returns from inside the band loop, so a 3D uint8 input returns only its first band.
+
+    See Also
+    --------
+    rvt.default.DefaultValues.float_to_8bit
     """
     is_2d_arr = False
     data_bands = data
@@ -175,37 +200,53 @@ def slope_aspect(dem,
                  no_data=None
                  ):
     """
-    Procedure can return terrain slope and aspect in radian units (default) or in alternative units (if specified).
-    Available alternative units are 'degree' and 'percent'.
-    Slope is defined as 0 for horizontal plane and pi/2 for vertical plane.
-    Aspect is defined as geographic azimuth: clockwise increasing, 0 or 2pi for the North direction.
-         0
-     270    90
-        180
-    Currently applied finite difference method.
+    Compute slope and aspect with central finite differences.
+
+    The DEM is converted to float32, padded by 1 px in edge mode, multiplied by ``ve_factor``, and
+    differentiated with central differences ``dz/dx = (z[i, j-1] - z[i, j+1]) / (2 * resolution_x)`` and
+    ``dz/dy = (z[i+1, j] - z[i-1, j]) / (2 * resolution_y)``. A NaN neighbour is replaced by the centre
+    pixel (``roll_fill_nans``), so next to NaN and at the raster edge the difference is half the one-sided
+    difference. Slope is 0 for a horizontal plane and pi/2 for a vertical one. NaN input pixels are NaN
+    in both outputs.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W). Converted to float32 (a copy); the caller's array is not
+        modified.
     resolution_x : float
-        DEM resolution in X direction.
+        Pixel size in x (m/px). Default 1. Negative values raise; 0 is not rejected.
     resolution_y : float
-        DEM resolution in Y direction.
+        Pixel size in y (m/px). Default 1.
     output_units : str
-        Output units, you can choose between: percent, degree, radian. Default value is radian.
+        ``"radian"`` (default), ``"degree"`` or ``"percent"``. Applies to the slope; the aspect is in
+        degrees for ``"degree"`` and in radians otherwise.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan. Only has to be specified if
-        a numerical value is used for nodata (e.g. -9999).
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it (after the float32 conversion) are set to NaN. Default None.
 
     Returns
     -------
-    dict_out: dict
-        Returns {"slope": slope_out, "aspect": aspect_out};
-        slope_out, slope gradient : 2D numpy array (numpy.ndarray) of slope;
-        aspect_out, aspect : 2D numpy array (numpy.ndarray) of aspect.
+    dict
+        ``{"slope": numpy.ndarray float32 (H, W), "aspect": numpy.ndarray float32 (H, W)}``.
+
+    Raises
+    ------
+    Exception
+        If ``dem`` is not 2D, ``ve_factor`` is outside [-10000, 10000], a resolution is negative, or
+        ``output_units`` is not one of the three names.
+
+    Notes
+    -----
+    Aspect is ``arctan2(dz/dx, dz/dy)``, the down-slope direction measured clockwise from north, in
+    (-pi, pi]: north 0, east pi/2, south pi, west -pi/2. Where ``dz/dy == 0`` it is replaced by 1e-8 for
+    numeric stability, so a flat pixel has aspect 0. Known issue (see docs/KNOWN_ISSUES.md): earlier
+    documentation said "0 or 2pi for north", i.e. [0, 2pi); the code returns (-pi, pi].
+
+    See Also
+    --------
+    hillshade, roll_fill_nans
     """
     if dem.ndim != 2:
         raise Exception("rvt.visualization.slope_aspect: dem has to be 2D np.array!")
@@ -268,10 +309,35 @@ def slope_aspect(dem,
 
 def roll_fill_nans(dem, shift, axis):
     """
-    Uses numpy.roll() function to roll array, then checks element-wise if new array has NaN value, but there was a
-    numerical value in the source array, then use the original value instead of NaN. It is equivalent to edge padding.
+    Return ``np.roll(dem, shift, axis)`` with NaN replaced by the pixel's own value.
 
-    https://numpy.org/doc/stable/reference/generated/numpy.roll.html#numpy.roll
+    Where the rolled array and ``dem`` differ in NaN-ness, the rolled value is replaced by the value of
+    ``dem`` at the same position: a NaN neighbour becomes the centre value, and a NaN centre stays NaN.
+    For a finite difference this acts like edge padding at NaN borders.
+
+    Parameters
+    ----------
+    dem : numpy.ndarray
+        Array to roll (any shape, floating dtype). Not modified.
+    shift : int
+        Number of pixels to roll by, as in ``numpy.roll``.
+    axis : int
+        Axis to roll along.
+
+    Returns
+    -------
+    numpy.ndarray
+        New array, same shape and dtype as ``dem``.
+
+    Notes
+    -----
+    ``np.roll`` wraps around, so the first/last row or column receives the opposite edge.
+    ``slope_aspect`` pads by 1 px before rolling and crops afterwards, so wrapped values never reach its
+    output.
+
+    See Also
+    --------
+    slope_aspect, numpy.roll
     """
     out = np.roll(dem, shift, axis=axis)
 
@@ -292,33 +358,58 @@ def hillshade(dem,
               no_data=None
               ):
     """
-    Compute hillshade.
+    Compute analytical hillshading (cosine of the solar incidence angle).
+
+    ``cos(zenith) * cos(slope) + sin(zenith) * sin(slope) * cos(aspect - azimuth)``, with negative values
+    set to 0. When ``slope`` or ``aspect`` is None, both are computed with ``slope_aspect`` from the DEM
+    padded by 1 px in edge mode and multiplied by ``ve_factor``; the result is then cropped by 1 px on each
+    side back to (H, W).
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
-    resolution_x : int
-        DEM resolution in X direction.
-    resolution_y : int
-        DEM resolution in Y direction.
+        2D elevation array (m), shape (H, W).
+    resolution_x : float
+        Pixel size in x (m/px). Must not be negative.
+    resolution_y : float
+        Pixel size in y (m/px). Must not be negative.
     sun_azimuth : int or float
-        Solar azimuth angle (clockwise from North) in degrees.
+        Sun azimuth in degrees clockwise from north, in [0, 360]. Default 315.
     sun_elevation : int or float
-        Solar vertical angle (above the horizon) in degrees.
-    slope : numpy.ndarray
-        Slope arr in radians if you don't input it, it is calculated.
-    aspect : numpy.ndarray
-        Aspect arr in radians if you don't input it, it is calculated.
+        Sun elevation in degrees above the horizon, in [0, 90]. Default 35.
+    slope : numpy.ndarray or None
+        Precomputed slope (radians). Used only together with ``aspect``; see Notes for the shape.
+        Default None (computed).
+    aspect : numpy.ndarray or None
+        Precomputed aspect (radians, as returned by ``slope_aspect``). Default None (computed).
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan.
+        Vertical exaggeration, in [-10000, 10000]. Default 1. Not used when ``slope`` and ``aspect`` are
+        given.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion (an
+        integer array raises ValueError then). Default None.
 
     Returns
     -------
-    hillshade_out : numpy.ndarray
-        Result hillshade 2D numpy array.
+    numpy.ndarray
+        float64, (H, W) when slope and aspect are computed; values in [0, 1], NaN where the input is NaN.
+
+    Raises
+    ------
+    Exception
+        If ``dem`` is not 2D, ``ve_factor`` is outside [-10000, 10000], the sun angles are outside their
+        ranges, or a resolution is negative.
+
+    Notes
+    -----
+    The output is always cropped by 1 px on each side. This fits the internally computed slope, which has
+    the padded shape (H + 2, W + 2). A ``slope`` and ``aspect`` passed in must therefore have shape
+    (H + 2, W + 2) (computed from the edge-padded DEM) to give an (H, W) result; an (H, W) slope gives an
+    (H - 2, W - 2) result. Known issue, see docs/KNOWN_ISSUES.md; ``multi_hillshade`` is affected.
+
+    See Also
+    --------
+    slope_aspect, multi_hillshade
     """
     if dem.ndim != 2:
         raise Exception("rvt.visualization.hillshade: dem has to be 2D np.array!")
@@ -376,33 +467,56 @@ def multi_hillshade(dem,
                     no_data=None
                     ):
     """
-    Calculates hillshades from multiple directions.
+    Compute hillshades for ``nr_directions`` sun azimuths spaced evenly from north.
+
+    The azimuths are ``360 / nr_directions * k`` degrees for k = 0 .. nr_directions - 1 (0, 22.5, ... for
+    16). Slope and aspect are computed once from the DEM multiplied by ``ve_factor`` (unless given) and
+    passed to ``hillshade`` for every azimuth.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
-    resolution_x : int
-        DEM resolution in X direction.
-    resolution_y : int
-        DEM resolution in Y direction.
+        2D elevation array (m), shape (H, W).
+    resolution_x : float
+        Pixel size in x (m/px). Must not be negative.
+    resolution_y : float
+        Pixel size in y (m/px). Must not be negative.
     nr_directions : int
-        Number of solar azimuth angles (clockwise from North).
+        Number of sun azimuths, at least 1. Default 16.
     sun_elevation : int or float
-        Solar vertical angle (above the horizon) in degrees.
-    slope : numpy.ndarray
-        Slope in radians if you don't input it, it is calculated.
-    aspect : numpy.ndarray
-        Aspect in radians if you don't input it, it is calculated.
+        Sun elevation in degrees above the horizon, in [0, 90]. Default 35.
+    slope : numpy.ndarray or None
+        Precomputed slope (radians), used together with ``aspect``. Default None (computed).
+    aspect : numpy.ndarray or None
+        Precomputed aspect (radians). Default None (computed).
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
+        Default None.
 
     Returns
     -------
-    multi_hillshade_out : numpy.ndarray
-        Result multiple direction hillshade multidimensional (nr_directions=dimensions) numpy array.
+    numpy.ndarray
+        float64, shape (nr_directions, H - 2, W - 2) (see Notes); band k is lit from azimuth
+        ``360 / nr_directions * k``.
+
+    Raises
+    ------
+    Exception
+        If ``dem`` is not 2D, ``sun_elevation`` is outside [0, 90], a resolution is negative,
+        ``nr_directions < 1``, or ``ve_factor`` is outside [-10000, 10000].
+
+    Notes
+    -----
+    Known issue (see docs/KNOWN_ISSUES.md): the slope and aspect computed here have the shape (H, W) of
+    the unpadded DEM, and ``hillshade`` crops 1 px on each side of whatever it receives, so the result is
+    (nr_directions, H - 2, W - 2), not (nr_directions, H, W). The one-pixel border is lost; the other
+    pixels equal ``hillshade`` of the same DEM.
+
+    See Also
+    --------
+    hillshade, slope_aspect
     """
     if dem.ndim != 2:
         raise Exception("rvt.visualization.multi_hillshade: dem has to be 2D np.array!")
@@ -441,9 +555,46 @@ def multi_hillshade(dem,
 
 
 def mean_filter(dem, kernel_radius):
-    """Applies mean filter (low pass filter) on DEM. Kernel radius is in pixels. Kernel size is 2 * kernel_radius + 1.
-    It uses matrix shifting (roll) instead of convolutional approach (works faster).
-    It returns mean filtered dem as numpy.ndarray (2D numpy array)."""
+    """
+    Apply a square mean (low-pass) filter, ignoring NaN.
+
+    Each output pixel is the mean of the non-NaN pixels in the (2r + 1) x (2r + 1) window centred on it,
+    with r = ``int(kernel_radius)``. The DEM is padded in edge mode, so windows at the border repeat the
+    edge pixels. Window sums come from a float64 summed-area table (integral image).
+
+    Parameters
+    ----------
+    dem : numpy.ndarray
+        2D array (m), shape (H, W), floating dtype (NaN is detected with ``np.isnan``). Not modified.
+    kernel_radius : int or float
+        Window radius r in px (window 2r + 1 px wide), e.g. r = 10 px = 2.5 m at 0.25 m/px. Truncated with
+        ``int``.
+
+    Returns
+    -------
+    numpy.ndarray
+        float32 (H, W); NaN where ``dem`` is NaN. For ``kernel_radius == 0`` the input array itself is
+        returned (same object, not a copy).
+
+    Notes
+    -----
+    The sums are taken in float64 because a float32 cumulative sum over a large raster loses the small
+    differences between neighbouring windows; the mean is rounded to float32 at the end.
+
+    Implementation: the padding is (r + 1) before and r after each axis, so the table has a leading zero
+    row and column and the box sum of output pixel (i, j) is ``I[i, j] + I[i+2r+1, j+2r+1] - I[i+2r+1, j]
+    - I[i, j+2r+1]`` with plain slices. The original code took these four terms with ``np.roll`` of the
+    padded tables and cropped afterwards; on the kept window no roll wraps, so the slices give the same
+    float64 values in the same order (bitwise identical). Without NaN the pixel count is the constant
+    (2r + 1)^2 as int64; with NaN it is a box sum of an int64 table of the non-NaN mask.
+
+    A ``kernel_radius`` in (0, 1) is not the shortcut for 0 but gives r = 0, a 1 x 1 window, i.e. a float32
+    copy of ``dem``.
+
+    See Also
+    --------
+    slrm, msrm, integral_image
+    """
     radius_cell = int(kernel_radius)
 
     if kernel_radius == 0:
@@ -506,23 +657,41 @@ def slrm(dem,
          no_data=None
          ):
     """
-    Calculates Simple local relief model.
+    Compute the simple local relief model (SLRM): the DEM minus its mean-filtered trend.
+
+    ``slrm = z - mean_filter(z, radius_cell)`` with z the float32 DEM multiplied by ``ve_factor``
+    (Hesse 2010; method description in docs/listofvis_slrm.rst).
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W).
     radius_cell : int
-        Radius for trend assessment in pixels.
+        Radius of the trend window in px, in [10, 50]; e.g. r = 20 px = 5 m at 0.25 m/px. Default 20.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
+        Default None.
 
     Returns
     -------
-    slrm_out : numpy.ndarray
-        Simple local relief model 2D numpy array.
+    numpy.ndarray
+        float32 (H, W), local relief in m (times ``ve_factor``); NaN where the input is NaN.
+
+    Raises
+    ------
+    Exception
+        If ``dem`` is not 2D, ``radius_cell`` is outside [10, 50], or ``ve_factor`` is outside
+        [-10000, 10000].
+
+    Notes
+    -----
+    Edges: ``mean_filter`` pads in edge mode. NaN pixels are ignored in the trend.
+
+    See Also
+    --------
+    mean_filter, msrm
     """
     if dem.ndim != 2:
         raise Exception("rvt.visualization.slrm: dem has to be 2D np.array!")
