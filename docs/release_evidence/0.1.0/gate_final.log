@@ -1,0 +1,389 @@
+
+=== check.py --cand rvt_py_llm --set dev
+local_dominance  real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\.pixi\envs\default\Lib\site-packages\numpy\lib\_nanfunctions_impl.py:1396: RuntimeWarning: All-NaN slice encountered
+  return _nanquantile_unchecked(
+D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\eval\common.py:229: RuntimeWarning: invalid value encountered in cast
+  return np.rint(np.clip(scaled, 0.0, 1.0) * 255.0).astype(np.int16)
+sky_illumination syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+CHECK dev PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261023-144312_19692.json
+
+=== check.py --cand rvt_py_llm --set dev --no-accel
+local_dominance  real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_1024_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_1024_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_1024_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\.pixi\envs\default\Lib\site-packages\numpy\lib\_nanfunctions_impl.py:1396: RuntimeWarning: All-NaN slice encountered
+  return _nanquantile_unchecked(
+D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\eval\common.py:229: RuntimeWarning: invalid value encountered in cast
+  return np.rint(np.clip(scaled, 0.0, 1.0) * 255.0).astype(np.int16)
+sky_illumination syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_off0           p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_off2500        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_512_off300         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_odd_611x1033       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+CHECK dev_noaccel PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261023-144549_19088.json
+
+=== check.py --cand rvt_py_llm --set holdout
+local_dominance  real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_1024_high_q80     p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_1024_medium_q80   p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\.pixi\envs\default\Lib\site-packages\numpy\lib\_nanfunctions_impl.py:1396: RuntimeWarning: All-NaN slice encountered
+  return _nanquantile_unchecked(
+D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\eval\common.py:229: RuntimeWarning: invalid value encountered in cast
+  return np.rint(np.clip(scaled, 0.0, 1.0) * 255.0).astype(np.int16)
+sky_illumination syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_768_nan            p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_768_off1200        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+CHECK holdout PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_holdout_20261023-144724_30768.json
+
+=== check.py --cand rvt_py_llm --set bench_final
+local_dominance  real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_2048_high         p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        real_2048_medium       p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+local_dominance  syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+svf_asvf_opns    syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+neg_opns         syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+sky_illumination syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+msrm             syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+mstp             syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e3mstp           syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+e4mstp           syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slrm             syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+slope            syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+hillshade        syn_2048_off300        p99.9=  0.0 max=   0 mean= 0.00 local= 0.00 exact  PASS
+CHECK bench_final PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_bench_final_20261023-144937_33688.json
+
+=== check.py --cand rvt_py_llm --determinism
+local_dominance  real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+svf_asvf_opns    real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+neg_opns         real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+sky_illumination real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+msrm             real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+mstp             real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+e3mstp           real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+e4mstp           real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+slrm             real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+slope            real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+hillshade        real_1024_high         repeat/1 thread/2 threads bitwise: PASS
+CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261023-145142_29184.json
+
+=== bench.py --cand rvt_py_llm --mode final
+local_dominance  real_2048_high         ref    68.42s  cand     1.02s  x67.40 [66.92-68.17]    4.13 Mpx/s  mem x0.41  worst p99.9 0 DN
+local_dominance  real_2048_medium       ref    80.51s  cand     1.01s  x79.36 [78.37-79.61]    4.13 Mpx/s  mem x0.40  worst p99.9 0 DN
+local_dominance  syn_2048_off300        ref    81.53s  cand     1.02s  x80.31 [79.96-82.00]    4.13 Mpx/s  mem x0.40  worst p99.9 0 DN
+svf_asvf_opns    real_2048_high         ref    13.46s  cand     1.94s  x 6.96 [6.58-7.15]    2.17 Mpx/s  mem x0.99  worst p99.9 0 DN
+svf_asvf_opns    real_2048_medium       ref    13.14s  cand     1.88s  x 6.98 [6.87-7.09]    2.23 Mpx/s  mem x0.99  worst p99.9 0 DN
+svf_asvf_opns    syn_2048_off300        ref    13.05s  cand     1.85s  x 7.06 [7.02-7.12]    2.27 Mpx/s  mem x0.99  worst p99.9 0 DN
+neg_opns         real_2048_high         ref    10.16s  cand     1.34s  x 7.59 [7.21-7.66]    3.13 Mpx/s  mem x0.69  worst p99.9 0 DN
+neg_opns         real_2048_medium       ref    10.36s  cand     1.25s  x 8.31 [8.12-8.40]    3.37 Mpx/s  mem x0.69  worst p99.9 0 DN
+neg_opns         syn_2048_off300        ref    10.40s  cand     1.26s  x 8.23 [7.96-8.47]    3.32 Mpx/s  mem x0.70  worst p99.9 0 DN
+sky_illumination real_2048_high         ref    88.27s  cand    12.29s  x 7.18 [6.98-7.31]    0.34 Mpx/s  mem x0.80  worst p99.9 0 DN
+sky_illumination real_2048_medium       ref    87.67s  cand    12.99s  x 6.75 [6.71-6.82]    0.32 Mpx/s  mem x0.80  worst p99.9 0 DN
+sky_illumination syn_2048_off300        ref    87.67s  cand    13.09s  x 6.70 [6.64-6.72]    0.32 Mpx/s  mem x0.80  worst p99.9 0 DN
+msrm             real_2048_high         ref     4.76s  cand     1.00s  x 4.73 [4.68-4.76]    4.18 Mpx/s  mem x0.51  worst p99.9 0 DN
+msrm             real_2048_medium       ref     4.75s  cand     1.00s  x 4.75 [4.70-4.79]    4.19 Mpx/s  mem x0.51  worst p99.9 0 DN
+msrm             syn_2048_off300        ref     4.75s  cand     1.00s  x 4.76 [4.64-4.79]    4.20 Mpx/s  mem x0.51  worst p99.9 0 DN
+mstp             real_2048_high         ref    28.51s  cand     2.17s  x13.13 [13.06-13.34]    1.93 Mpx/s  mem x0.29  worst p99.9 0 DN
+mstp             real_2048_medium       ref    29.11s  cand     2.11s  x13.77 [12.98-14.32]    1.98 Mpx/s  mem x0.29  worst p99.9 0 DN
+mstp             syn_2048_off300        ref    28.54s  cand     2.05s  x13.94 [13.84-14.28]    2.05 Mpx/s  mem x0.29  worst p99.9 0 DN
+e3mstp           real_2048_high         ref    54.95s  cand     7.11s  x 7.72 [7.64-7.74]    0.59 Mpx/s  mem x0.58  worst p99.9 0 DN
+e3mstp           real_2048_medium       ref    55.17s  cand     6.90s  x 7.99 [7.27-8.04]    0.61 Mpx/s  mem x0.78  worst p99.9 0 DN
+e3mstp           syn_2048_off300        ref    54.64s  cand     6.77s  x 8.07 [8.02-8.09]    0.62 Mpx/s  mem x0.58  worst p99.9 0 DN
+e4mstp           real_2048_high         ref   147.20s  cand    10.08s  x14.61 [14.24-14.92]    0.42 Mpx/s  mem x0.65  worst p99.9 0 DN
+e4mstp           real_2048_medium       ref   158.52s  cand     9.78s  x16.21 [16.17-16.26]    0.43 Mpx/s  mem x0.65  worst p99.9 0 DN
+e4mstp           syn_2048_off300        ref   159.40s  cand     9.73s  x16.39 [16.13-16.48]    0.43 Mpx/s  mem x0.65  worst p99.9 0 DN
+slrm             real_2048_high         ref     0.69s  cand     0.16s  x 4.39 [4.36-4.49]   26.57 Mpx/s  mem x0.42  worst p99.9 0 DN
+slrm             real_2048_medium       ref     0.69s  cand     0.15s  x 4.47 [4.39-4.68]   27.12 Mpx/s  mem x0.42  worst p99.9 0 DN
+slrm             syn_2048_off300        ref     0.68s  cand     0.16s  x 4.38 [4.35-4.44]   26.86 Mpx/s  mem x0.42  worst p99.9 0 DN
+slope            real_2048_high         ref     0.38s  cand     0.38s  x 1.00 [0.95-1.01]   11.07 Mpx/s  mem x1.00  worst p99.9 0 DN
+slope            real_2048_medium       ref     0.39s  cand     0.39s  x 1.00 [0.98-1.03]   10.86 Mpx/s  mem x1.00  worst p99.9 0 DN
+slope            syn_2048_off300        ref     0.36s  cand     0.38s  x 0.95 [0.94-1.01]   11.13 Mpx/s  mem x1.00  worst p99.9 0 DN
+hillshade        real_2048_high         ref     0.57s  cand     0.57s  x 1.00 [0.96-1.01]    7.42 Mpx/s  mem x1.00  worst p99.9 0 DN
+hillshade        real_2048_medium       ref     0.58s  cand     0.58s  x 1.01 [1.00-1.01]    7.24 Mpx/s  mem x1.00  worst p99.9 0 DN
+hillshade        syn_2048_off300        ref     0.56s  cand     0.55s  x 1.00 [0.96-1.02]    7.56 Mpx/s  mem x1.00  worst p99.9 0 DN
+local_dominance  geomean x75.46  weight 1  ok  mem ok
+svf_asvf_opns    geomean x7.00  weight 1  ok  mem ok
+neg_opns         geomean x8.04  weight 1  ok  mem ok
+sky_illumination geomean x6.87  weight 1  ok  mem ok
+msrm             geomean x4.75  weight 1  ok  mem ok
+mstp             geomean x13.61  weight 1  ok  mem ok
+e3mstp           geomean x7.93  weight 1  ok  mem ok
+e4mstp           geomean x15.71  weight 1  ok  mem ok
+slrm             geomean x4.41  weight 1  ok  mem ok
+slope            geomean x0.98  weight 1  ok  mem ok
+hillshade        geomean x1.00  weight 1  ok  mem ok
+PIPELINE x11.41 [11.32-11.43] over 11 target(s)
+BENCH final threads=1 PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\bench_final_1t_20261023-170737_32096.json
+
+=== bench.py --cand rvt_py_llm --mode final --threads default --rounds 3
+local_dominance  real_2048_high         ref    28.89s  cand     0.43s  x66.59 [64.89-67.70]    9.67 Mpx/s  mem x0.41  worst p99.9 0 DN
+local_dominance  real_2048_medium       ref    34.28s  cand     0.43s  x79.83 [78.99-80.16]    9.77 Mpx/s  mem x0.40  worst p99.9 0 DN
+local_dominance  syn_2048_off300        ref    34.48s  cand     0.44s  x78.40 [76.64-80.52]    9.54 Mpx/s  mem x0.40  worst p99.9 0 DN
+svf_asvf_opns    real_2048_high         ref     5.53s  cand     0.80s  x 6.89 [6.79-6.91]    5.22 Mpx/s  mem x0.99  worst p99.9 0 DN
+svf_asvf_opns    real_2048_medium       ref     5.52s  cand     0.77s  x 7.17 [7.08-7.18]    5.45 Mpx/s  mem x0.99  worst p99.9 0 DN
+svf_asvf_opns    syn_2048_off300        ref     5.58s  cand     0.78s  x 7.11 [7.09-7.15]    5.35 Mpx/s  mem x0.99  worst p99.9 0 DN
+neg_opns         real_2048_high         ref     4.34s  cand     0.56s  x 7.75 [7.59-7.83]    7.49 Mpx/s  mem x0.69  worst p99.9 0 DN
+neg_opns         real_2048_medium       ref     4.29s  cand     0.52s  x 8.19 [8.12-8.23]    8.00 Mpx/s  mem x0.69  worst p99.9 0 DN
+neg_opns         syn_2048_off300        ref     4.25s  cand     0.52s  x 8.19 [8.08-8.33]    8.08 Mpx/s  mem x0.70  worst p99.9 0 DN
+sky_illumination real_2048_high         ref    37.07s  cand     5.18s  x 7.16 [7.09-7.25]    0.81 Mpx/s  mem x0.80  worst p99.9 0 DN
+sky_illumination real_2048_medium       ref    37.45s  cand     5.51s  x 6.80 [6.76-6.87]    0.76 Mpx/s  mem x0.80  worst p99.9 0 DN
+sky_illumination syn_2048_off300        ref    37.68s  cand     5.60s  x 6.73 [6.63-6.81]    0.75 Mpx/s  mem x0.80  worst p99.9 0 DN
+msrm             real_2048_high         ref     2.01s  cand     0.42s  x 4.75 [4.73-4.80]    9.89 Mpx/s  mem x0.51  worst p99.9 0 DN
+msrm             real_2048_medium       ref     2.04s  cand     0.43s  x 4.78 [4.65-4.91]    9.82 Mpx/s  mem x0.51  worst p99.9 0 DN
+msrm             syn_2048_off300        ref     2.01s  cand     0.43s  x 4.68 [4.64-4.76]    9.76 Mpx/s  mem x0.51  worst p99.9 0 DN
+mstp             real_2048_high         ref    12.14s  cand     0.93s  x13.09 [12.85-13.18]    4.52 Mpx/s  mem x0.29  worst p99.9 0 DN
+mstp             real_2048_medium       ref    12.15s  cand     0.90s  x13.55 [13.51-13.74]    4.68 Mpx/s  mem x0.29  worst p99.9 0 DN
+mstp             syn_2048_off300        ref    12.17s  cand     0.87s  x13.96 [13.70-14.10]    4.81 Mpx/s  mem x0.29  worst p99.9 0 DN
+e3mstp           real_2048_high         ref    23.36s  cand     3.03s  x 7.71 [7.63-7.77]    1.38 Mpx/s  mem x0.58  worst p99.9 0 DN
+e3mstp           real_2048_medium       ref    23.78s  cand     3.21s  x 7.41 [7.30-8.02]    1.31 Mpx/s  mem x0.78  worst p99.9 0 DN
+e3mstp           syn_2048_off300        ref    23.26s  cand     2.89s  x 8.06 [7.95-8.14]    1.45 Mpx/s  mem x0.58  worst p99.9 0 DN
+e4mstp           real_2048_high         ref    62.47s  cand     4.28s  x14.60 [14.45-14.64]    0.98 Mpx/s  mem x0.65  worst p99.9 0 DN
+e4mstp           real_2048_medium       ref    67.86s  cand     4.18s  x16.23 [15.60-16.59]    1.00 Mpx/s  mem x0.65  worst p99.9 0 DN
+e4mstp           syn_2048_off300        ref    69.28s  cand     4.22s  x16.40 [16.09-18.40]    0.99 Mpx/s  mem x0.65  worst p99.9 0 DN
+slrm             real_2048_high         ref     0.29s  cand     0.07s  x 4.16 [3.78-4.39]   59.22 Mpx/s  mem x0.42  worst p99.9 0 DN
+slrm             real_2048_medium       ref     0.29s  cand     0.06s  x 4.54 [3.23-6.26]   65.64 Mpx/s  mem x0.42  worst p99.9 0 DN
+slrm             syn_2048_off300        ref     0.29s  cand     0.07s  x 4.46 [4.16-4.47]   63.98 Mpx/s  mem x0.42  worst p99.9 0 DN
+slope            real_2048_high         ref     0.16s  cand     0.16s  x 1.01 [0.99-1.02]   26.16 Mpx/s  mem x1.00  worst p99.9 0 DN
+slope            real_2048_medium       ref     0.16s  cand     0.16s  x 0.99 [0.97-1.03]   25.77 Mpx/s  mem x1.00  worst p99.9 0 DN
+slope            syn_2048_off300        ref     0.15s  cand     0.15s  x 1.00 [0.99-1.01]   27.43 Mpx/s  mem x1.00  worst p99.9 0 DN
+hillshade        real_2048_high         ref     0.24s  cand     0.24s  x 1.00 [0.98-1.01]   17.39 Mpx/s  mem x1.00  worst p99.9 0 DN
+hillshade        real_2048_medium       ref     0.25s  cand     0.25s  x 1.00 [0.98-1.01]   16.93 Mpx/s  mem x1.00  worst p99.9 0 DN
+hillshade        syn_2048_off300        ref     0.24s  cand     0.23s  x 1.01 [1.00-1.04]   17.87 Mpx/s  mem x1.00  worst p99.9 0 DN
+local_dominance  geomean x74.70  weight 1  ok  mem ok
+svf_asvf_opns    geomean x7.05  weight 1  ok  mem ok
+neg_opns         geomean x8.04  weight 1  ok  mem ok
+sky_illumination geomean x6.89  weight 1  ok  mem ok
+msrm             geomean x4.74  weight 1  ok  mem ok
+mstp             geomean x13.53  weight 1  ok  mem ok
+e3mstp           geomean x7.72  weight 1  ok  mem ok
+e4mstp           geomean x15.72  weight 1  ok  mem ok
+slrm             geomean x4.38  weight 1  ok  mem ok
+slope            geomean x1.00  weight 1  ok  mem ok
+hillshade        geomean x1.00  weight 1  ok  mem ok
+PIPELINE x11.37 [11.31-11.57] over 11 target(s)
+BENCH final threads=default PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\bench_final_mt_20261023-174445_18544.json
+
+GATE FINAL PASS {'check_dev': 0, 'check_dev_noaccel': 0, 'check_holdout': 0, 'check_bench_final': 0, 'determinism': 0, 'bench': 0, 'bench_default_threads_info': 0}

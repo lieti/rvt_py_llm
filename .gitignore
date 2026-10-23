@@ -147,3 +147,6 @@ cython_debug/
 
 # scratch trees and logs of the proof tools (tools/proof/)
 .proof_scratch/
+
+# release evidence logs are part of the repository
+!docs/release_evidence/**/*.log

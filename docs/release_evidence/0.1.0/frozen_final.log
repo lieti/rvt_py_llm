@@ -1,0 +1,4 @@
+[accel] 1093 passed, 3 warnings in 10.18s; frozen nodes PASSED: 1089/1089
+[RVT_NO_ACCEL=1] 1093 passed, 3 warnings in 9.73s; frozen nodes PASSED: 1089/1089
+checked main (02f0b11) against tests-frozen
+FROZEN PASS
