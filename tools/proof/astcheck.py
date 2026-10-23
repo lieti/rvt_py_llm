@@ -4,9 +4,12 @@ Proves without running anything that a commit cannot change behaviour:
 
 - ``docs``: the AST of every ``rvt/**/*.py`` file, with docstrings removed, is identical before and
   after (comments and blank lines are not in the AST at all).
-- ``msg``: as ``docs``, but string constants inside ``raise`` statements and ``warn(...)`` calls may
-  differ (exception and warning texts). Every other node must be identical.
+- ``msg``: as ``docs``, but the message arguments of exception constructors in ``raise`` statements and
+  of ``warn(...)`` calls may differ (literal text only; see ``_MaskMessages``). Every other node must be
+  identical.
 - ``meta``: no file under ``rvt/`` changes.
+- ``docs``, ``msg`` and ``meta`` also may not change ``settings/`` or ``test_data/``, which the package reads
+  at run time.
 - ``test``: only files under ``tests/`` are added; no existing file under ``tests/`` changes.
 - ``refactor``: any change is allowed here; such commits must be proven by ``equiv.py`` and the tests.
 
@@ -28,6 +31,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]  # repository root
 CLASSES = ("docs", "msg", "meta", "test", "refactor")
+RUNTIME_DATA = ("settings/", "test_data/")  # read by rvt.default / rvt.blend at run time
 MSG_PLACEHOLDER = "<message>"
 
 
@@ -53,32 +57,48 @@ def strip_docstrings(tree):
     return tree
 
 
+def _mask_message(expr):
+    """Mask a message argument: a str literal, or the literal parts of an f-string.
+
+    Expressions inside an f-string (``{name}``) and any other expression stay as they are, so a change of
+    what is formatted into the message, or of a non-literal argument, is still a difference.
+    """
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        return ast.copy_location(ast.Constant(MSG_PLACEHOLDER), expr)
+    if isinstance(expr, ast.JoinedStr):
+        values = [ast.Constant(MSG_PLACEHOLDER) if isinstance(v, ast.Constant) and isinstance(v.value, str) else v
+                  for v in expr.values]
+        return ast.copy_location(ast.JoinedStr(values=values), expr)
+    return expr
+
+
 class _MaskMessages(ast.NodeTransformer):
-    """Replace str constants inside ``raise`` and ``*.warn(...)``/``warn(...)`` by a placeholder."""
+    """Mask only the message arguments of exception constructors in ``raise`` and of ``warn(...)`` calls.
 
-    def __init__(self):
-        self.depth = 0
-
-    def _masked(self, node):
-        self.depth += 1
-        self.generic_visit(node)
-        self.depth -= 1
-        return node
+    ``raise E("text")``: the positional and keyword arguments of the constructor call ``E(...)`` that are
+    literals or f-strings. ``warn("text", ...)`` / ``warnings.warn(message="text")``: the first positional
+    argument and the ``message`` keyword. Strings nested deeper (dict keys, subscripts, arguments of other
+    calls) are not masked, so ``raise E(d["a"])`` -> ``raise E(d["b"])`` is a difference.
+    """
 
     def visit_Raise(self, node):
-        return self._masked(node)
+        self.generic_visit(node)
+        if isinstance(node.exc, ast.Call):
+            node.exc.args = [_mask_message(a) for a in node.exc.args]
+            for kw in node.exc.keywords:
+                kw.value = _mask_message(kw.value)
+        return node
 
     def visit_Call(self, node):
+        self.generic_visit(node)
         f = node.func
         name = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", None)
         if name == "warn":
-            return self._masked(node)
-        self.generic_visit(node)
-        return node
-
-    def visit_Constant(self, node):
-        if self.depth and isinstance(node.value, str):
-            return ast.copy_location(ast.Constant(MSG_PLACEHOLDER), node)
+            if node.args:
+                node.args[0] = _mask_message(node.args[0])
+            for kw in node.keywords:
+                if kw.arg == "message":
+                    kw.value = _mask_message(kw.value)
         return node
 
 
@@ -94,10 +114,14 @@ def check(repo, base, head, cls):
     problems = []
     files = changed_files(repo, base, head)
     pkg = [(s, p) for s, p in files if p.startswith("rvt/")]
+    # files the package reads at run time (settings json, example data): only refactor: may change them
+    data = [(s, p) for s, p in files if p.startswith(RUNTIME_DATA)]
     if cls == "refactor":
         return problems
+    if cls in ("docs", "msg", "meta"):
+        problems += [f"{s} {p}: {cls} commit changes data read by the package at run time" for s, p in data]
     if cls == "meta":
-        return [f"{s} {p}: meta commit changes the package" for s, p in pkg]
+        return problems + [f"{s} {p}: meta commit changes the package" for s, p in pkg]
     if cls == "test":
         for s, p in files:
             if not p.startswith("tests/"):

@@ -74,6 +74,12 @@ MUTANTS = [
      "RVT_NO_ACCEL=off no longer accepted"),
     ("m21", "blend.py", 'maximum=0.5, blend_mode="screen", opacity=25', 'maximum=0.5, blend_mode="screen", opacity=30',
      1, "e3mstp/e4mstp SLRM layer opacity"),
+    # m22-m23 target the helpers introduced by the 0.1.0 refactor commits (release audit, finding I4)
+    ("m22", "vis.py", "    box -= table[hi:hi + n_rows, lo:lo + n_cols]\n    box -= table[lo:lo + n_rows, hi:hi + n_cols]",
+     "    box -= table[lo:lo + n_rows, hi:hi + n_cols]\n    box -= table[hi:hi + n_rows, lo:lo + n_cols]", 1,
+     "_box_sum: the two subtractions in the other order"),
+    ("m23", "vis.py", "if acc.dtype == np.result_type(acc.dtype, term.dtype):", "if True:", 1,
+     "_accumulate: always in place (a float32 accumulator stays float32)"),
 ]
 
 CONTROLS = [
