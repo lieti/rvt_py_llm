@@ -115,30 +115,53 @@ def _fp_strict():
 def gray_scale_to_color_ramp(gray_scale, colormap, min_colormap_cut=None, max_colormap_cut=None, alpha=False,
                              output_8bit=True):
     """
-    Turns normalized gray scale np.array to rgba (np.array of 4 np.arrays r, g, b, a).
+    Map a normalized gray-scale image to RGB or RGBA with a matplotlib colormap.
+
+    The colormap is optionally truncated to the part between ``min_colormap_cut`` and ``max_colormap_cut``, then
+    applied to every pixel. Values below 0 or above 1 get the colors of the ends of the colormap; NaN gets the
+    colormap's "bad" color, which is (0, 0, 0, 0) for the matplotlib colormaps.
 
     Parameters
     ----------
-    gray_scale : np.array (2D)
-        Normalized gray_scale img as np.array (0-1)
-    colormap : str
-        Colormap form matplotlib (https://matplotlib.org/3.3.2/tutorials/colors/colormaps.html)
-    min_colormap_cut : float
-        What lower part of colormap to cut to select part of colormap.
-        Valid values are between 0 and 1, if 0.2 it cuts off (deletes) 20% of lower colors in colormap.
-        If None cut is not applied.
-    max_colormap_cut : float
-        What upper part of colormap to cut to select part of colormap.
-        Valid values are between 0 and 1, if 0.8 it cuts off (deletes) 20% of upper colors in colormap.
-        If None cut is not applied.
+    gray_scale : numpy.ndarray
+        2D ``(H, W)`` image with values in [0, 1]. Not modified.
+    colormap : str or matplotlib.colors.Colormap
+        Name of a matplotlib colormap (https://matplotlib.org/stable/gallery/color/colormap_reference.html), or a
+        colormap object.
+    min_colormap_cut : float or None
+        Lower end of the part of the colormap that is used, in [0, 1]; 0.2 drops the lowest 20 % of the colors.
+        None means 0 when ``max_colormap_cut`` is given, otherwise no truncation.
+    max_colormap_cut : float or None
+        Upper end of the part of the colormap that is used, in [0, 1]; 0.8 drops the highest 20 % of the colors.
+        None means 1 when ``min_colormap_cut`` is given, otherwise no truncation.
     alpha : bool
-        If True outputs 4D array RGBA, if False outputs 3D array RGB
+        True returns 4 bands (RGBA), False returns 3 bands (RGB).
     output_8bit : bool
-        If true output values will be int 0-255 instead of normalized values.
+        True returns uint8 values 0-255 (NaN pixels set to 0), False returns float64 values in [0, 1].
+
     Returns
     -------
-    rgba_out : np.array (3D: red 0-255, green 0-255, blue 0-255)
-            If alpha False: np.array (4D: red 0-255, green 0-255, blue 0-255, alpha 0-255)
+    numpy.ndarray
+        ``(3, H, W)`` (``alpha=False``) or ``(4, H, W)`` (``alpha=True``), band axis first; uint8 if
+        ``output_8bit`` else float64. The array is a transposed view of the matplotlib result.
+
+    Raises
+    ------
+    Exception
+        If a cut lies outside [0, 1], or if ``min_colormap_cut >= max_colormap_cut``.
+    TypeError
+        If a cut is a string (comparison of str with int), see Notes.
+
+    Notes
+    -----
+    The 8-bit conversion is ``np.uint8(rgba * 255)``, a truncation, not a rounding.
+
+    Known issue: BlenderCombination.read_from_json stores the cuts read from JSON as strings, which makes this
+    function raise TypeError; see docs/KNOWN_ISSUES.md.
+
+    See Also
+    --------
+    truncate_colormap
     """
     cm = colormaps.get_cmap(colormap)
 
@@ -175,6 +198,26 @@ def gray_scale_to_color_ramp(gray_scale, colormap, min_colormap_cut=None, max_co
 
 
 def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
+    """
+    Return a colormap made of the part of ``cmap`` between ``minval`` and ``maxval``.
+
+    Parameters
+    ----------
+    cmap : matplotlib.colors.Colormap
+        Source colormap (an object, not a name).
+    minval : float
+        Start of the used part, in [0, 1].
+    maxval : float
+        End of the used part, in [0, 1].
+    n : int
+        Number of colors sampled evenly from ``minval`` to ``maxval`` (default 100).
+
+    Returns
+    -------
+    matplotlib.colors.LinearSegmentedColormap
+        New colormap named ``"trunc(<name>,<minval>,<maxval>)"`` that interpolates linearly between the ``n``
+        sampled colors.
+    """
     new_cmap = LinearSegmentedColormap.from_list(
         'trunc({n},{a:.2f},{b:.2f})'.format(n=cmap.name, a=minval, b=maxval),
         cmap(np.linspace(minval, maxval, n)))
@@ -182,6 +225,43 @@ def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
 
 
 def normalize_lin(image, minimum, maximum):
+    """
+    Clip an image to [minimum, maximum] and stretch it linearly to [0, 1].
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image of any shape, usually ``(H, W)`` or ``(3, H, W)``. **Clipped to [minimum, maximum] in place**; NaN
+        stays NaN.
+    minimum : float
+        Value mapped to 0 (same unit as ``image``).
+    maximum : float
+        Value mapped to 1.
+
+    Returns
+    -------
+    numpy.ndarray
+        float32 array of the shape of ``image``, ``(image - minimum) / (maximum - minimum)`` clamped to [0, 1];
+        NaN where ``image`` is NaN. Always a new array.
+
+    Notes
+    -----
+    ``minimum == maximum`` gives 0 / 0 = NaN at every non-NaN pixel (RuntimeWarning); ``minimum > maximum`` gives
+    -0.0 everywhere. There is no check here; advanced_normalization checks the limits for "value".
+
+    The function has two code paths with the same result. The first (blocked) path runs for C-contiguous,
+    writeable float32 / float64 ndarrays with real scalar limits: it clips the whole array in place first, exactly
+    as the reference does, then computes the stretch per block of ``_BLOCK_ELEMS`` = 32768 elements and writes it
+    into a preallocated float32 output, so the float64 temporaries of the stretch are block-sized instead of
+    image-sized. The second path is the original code. It is kept for every other input (integer arrays,
+    non-contiguous views, read-only arrays, array-valued limits), where the blocked path would need extra rules.
+    Both paths evaluate the same expressions with the same operand dtypes per element, so results are bitwise
+    identical (commit 8e81581).
+
+    See Also
+    --------
+    normalize_perc, advanced_normalization
+    """
     if (_float_arrays(image) and image.flags.c_contiguous and image.flags.writeable
             and isinstance(minimum, _REAL_SCALARS) and isinstance(maximum, _REAL_SCALARS)):
         # Same steps per row block: the cut-off is still applied to the whole `image` in place first, the stretched
@@ -214,8 +294,30 @@ def normalize_lin(image, minimum, maximum):
 
 
 def lin_cutoff_calc_from_perc(image, minimum, maximum):
-    """Minimum cutoff in percent, maximum cutoff in percent (0%-100%). Returns min and max values for linear
-    stretch (cut-off)."""
+    """
+    Return the values at which a percent cut-off clips an image.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image of any shape; NaN is ignored. Not modified.
+    minimum : float
+        Percentage of the lowest values to cut off, in [0, 100].
+    maximum : float
+        Percentage of the highest values to cut off, in [0, 100]; ``minimum + maximum <= 100``.
+
+    Returns
+    -------
+    dict
+        ``{"min_lin": float, "max_lin": float}``: the ``minimum``-th and the ``(100 - maximum)``-th percentile of
+        ``image`` (``numpy.nanpercentile``, linear interpolation), as numpy float64 for float input. If the two
+        are equal, ``numpy.nanmin`` and ``numpy.nanmax`` of the image are returned instead.
+
+    Raises
+    ------
+    Exception
+        If ``minimum`` or ``maximum`` is outside [0, 100], or ``minimum + maximum > 100``.
+    """
     if minimum < 0 or maximum < 0 or minimum > 100 or maximum > 100:
         raise Exception("rvt.blend_func.lin_cutoff_calc_from_perc: minimum, maximum are percent and have to be in "
                         "range 0-100!")
@@ -232,6 +334,32 @@ def lin_cutoff_calc_from_perc(image, minimum, maximum):
 
 
 def normalize_perc(image, minimum, maximum):
+    """
+    Clip an image at two percentiles and stretch it linearly to [0, 1].
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image of any shape. **Clipped in place** (see normalize_lin); NaN stays NaN.
+    minimum : float
+        Percentage of the lowest values to cut off, in [0, 100].
+    maximum : float
+        Percentage of the highest values to cut off, in [0, 100]; ``minimum + maximum <= 100``.
+
+    Returns
+    -------
+    numpy.ndarray
+        float32 array of the shape of ``image`` with values in [0, 1].
+
+    Raises
+    ------
+    Exception
+        From lin_cutoff_calc_from_perc, if the percentages are out of range.
+
+    See Also
+    --------
+    lin_cutoff_calc_from_perc, normalize_lin
+    """
     min_max_lin_dict = lin_cutoff_calc_from_perc(image, minimum, maximum)
     min_lin = min_max_lin_dict["min_lin"]
     max_lin = min_max_lin_dict["max_lin"]
@@ -239,7 +367,40 @@ def normalize_perc(image, minimum, maximum):
 
 
 def advanced_normalization(image, minimum, maximum, normalization):
-    """Runs normalization based on the selected normalization type: value or percent."""
+    """
+    Normalize an image to [0, 1] by values ("value") or by percentiles ("perc").
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image of any shape. **Clipped in place** by normalize_lin.
+    minimum : float
+        "value": value mapped to 0. "perc": percentage of the lowest values cut off, in [0, 100].
+    maximum : float
+        "value": value mapped to 1. "perc": percentage of the highest values cut off, in [0, 100].
+    normalization : str
+        "value" or "perc", case-insensitive for the dispatch.
+
+    Returns
+    -------
+    numpy.ndarray
+        float32 array of the shape of ``image`` with values in [0, 1] (NaN kept).
+
+    Raises
+    ------
+    Exception
+        If ``normalization == "value"`` and ``minimum == maximum`` or ``minimum > maximum``; for an unknown
+        normalization name; from lin_cutoff_calc_from_perc for invalid percentages.
+    AttributeError
+        If ``normalization`` is None (see Notes).
+
+    Notes
+    -----
+    Known issue: the two limit checks compare ``normalization`` with "value" case-sensitively, so "Value" skips
+    them (``minimum == maximum`` then gives all NaN, ``minimum > maximum`` all -0.0). The branch for
+    ``normalization is None``, which would return the image unchanged, comes after ``normalization.lower()`` and
+    is never reached: None raises AttributeError. See docs/KNOWN_ISSUES.md.
+    """
 
     # Perform checks if correct values were given
     if minimum == maximum and normalization == "value":
@@ -264,6 +425,25 @@ def advanced_normalization(image, minimum, maximum, normalization):
 
 
 def lum(img):
+    """
+    Return the luminosity of an RGB image, or a gray image unchanged.
+
+    Parameters
+    ----------
+    img : numpy.ndarray
+        ``(3, H, W)`` RGB image (band axis first) or ``(H, W)`` gray image.
+
+    Returns
+    -------
+    numpy.ndarray
+        For 3D input a new float32 ``(H, W)`` array ``0.3 R + 0.59 G + 0.11 B``; for any other input ``img``
+        itself (same object).
+
+    Notes
+    -----
+    The weights are those of the "Luminosity" blend mode of the PDF / W3C compositing specification (Lum()).
+    Only bands 0-2 are read, so a 3D array with more than 3 bands is accepted.
+    """
     if len(img.shape) == 3:
         r = img[0]
         g = img[1]
@@ -276,6 +456,33 @@ def lum(img):
 
 
 def matrix_eq_min_lt_zero(r: np.ndarray, idx_min_lt_zero, lum_c, min_c):
+    """
+    Apply the lower branch of ClipColor to one channel, in place.
+
+    At the selected pixels ``r = lum + (r - lum) * lum / (lum - min)``, which moves a color with a channel below 0
+    towards its luminosity until the lowest channel is 0 (PDF / W3C compositing specification, ClipColor()).
+
+    Parameters
+    ----------
+    r : numpy.ndarray
+        One channel ``(H, W)``. **Modified in place** at the selected pixels.
+    idx_min_lt_zero : tuple of numpy.ndarray or numpy.ndarray
+        Index of the pixels to correct (``numpy.where(min_c < 0)``).
+    lum_c : numpy.ndarray
+        Luminosity ``(H, W)`` of the color (lum()).
+    min_c : numpy.ndarray
+        Lowest channel ``(H, W)`` of the color (channel_min()).
+
+    Returns
+    -------
+    numpy.ndarray
+        ``r`` itself.
+
+    Notes
+    -----
+    For a gray pixel (``lum == min``) the expression is 0 / 0 and the pixel becomes NaN (RuntimeWarning); see
+    clip_color and docs/KNOWN_ISSUES.md.
+    """
     r[idx_min_lt_zero] = lum_c[idx_min_lt_zero] + (((r[idx_min_lt_zero] - lum_c[idx_min_lt_zero]) *
                                                     lum_c[idx_min_lt_zero]) / (lum_c[idx_min_lt_zero] -
                                                                                min_c[idx_min_lt_zero]))
@@ -283,6 +490,28 @@ def matrix_eq_min_lt_zero(r: np.ndarray, idx_min_lt_zero, lum_c, min_c):
 
 
 def matrix_eq_max_gt_one(r: np.ndarray, idx_max_c_gt_one, lum_c, max_c):
+    """
+    Apply the upper branch of ClipColor to one channel, in place.
+
+    At the selected pixels ``r = lum + (r - lum) * (1 - lum) / (max - lum)``, which moves a color with a channel
+    above 1 towards its luminosity until the highest channel is 1 (PDF / W3C compositing specification).
+
+    Parameters
+    ----------
+    r : numpy.ndarray
+        One channel ``(H, W)``. **Modified in place** at the selected pixels.
+    idx_max_c_gt_one : tuple of numpy.ndarray or numpy.ndarray
+        Index of the pixels to correct (``numpy.where(max_c > 1)``).
+    lum_c : numpy.ndarray
+        Luminosity ``(H, W)`` of the color (lum()).
+    max_c : numpy.ndarray
+        Highest channel ``(H, W)`` of the color (channel_max()).
+
+    Returns
+    -------
+    numpy.ndarray
+        ``r`` itself.
+    """
     r[idx_max_c_gt_one] = lum_c[idx_max_c_gt_one] + (((r[idx_max_c_gt_one] - lum_c[idx_max_c_gt_one]) *
                                                       (1.0 - lum_c[idx_max_c_gt_one])) / (max_c[idx_max_c_gt_one]
                                                                                           - lum_c[idx_max_c_gt_one]))
@@ -290,6 +519,29 @@ def matrix_eq_max_gt_one(r: np.ndarray, idx_max_c_gt_one, lum_c, max_c):
 
 
 def channel_min(r: np.ndarray, g: np.ndarray, b: np.ndarray):
+    """
+    Return the per-pixel minimum of three channels.
+
+    Parameters
+    ----------
+    r : numpy.ndarray
+        Red channel ``(H, W)``. Not modified.
+    g : numpy.ndarray
+        Green channel, same shape.
+    b : numpy.ndarray
+        Blue channel, same shape.
+
+    Returns
+    -------
+    numpy.ndarray
+        New array (``r * 1.0``, so the dtype of ``r`` for float input) holding the minimum.
+
+    Notes
+    -----
+    Known issue: the minimum starts as ``r`` and is replaced where ``g < min`` and then where ``b < min``. A
+    comparison with NaN is False, so NaN in ``r`` is kept while NaN in ``g`` or ``b`` is ignored (``np.minimum``
+    would give NaN in both cases). See docs/KNOWN_ISSUES.md.
+    """
     min_c = r * 1.0
     idx_min = np.where(g < min_c)
     min_c[idx_min] = g[idx_min]
@@ -299,6 +551,28 @@ def channel_min(r: np.ndarray, g: np.ndarray, b: np.ndarray):
 
 
 def channel_max(r: np.ndarray, g: np.ndarray, b: np.ndarray):
+    """
+    Return the per-pixel maximum of three channels.
+
+    Parameters
+    ----------
+    r : numpy.ndarray
+        Red channel ``(H, W)``. Not modified.
+    g : numpy.ndarray
+        Green channel, same shape.
+    b : numpy.ndarray
+        Blue channel, same shape.
+
+    Returns
+    -------
+    numpy.ndarray
+        New array (``r * 1.0``) holding the maximum.
+
+    Notes
+    -----
+    Known issue: as in channel_min, NaN in ``r`` is kept and NaN in ``g`` or ``b`` is ignored; see
+    docs/KNOWN_ISSUES.md.
+    """
     max_c = r * 1.0
     idx_max = np.where(g > max_c)
     max_c[idx_max] = g[idx_max]
@@ -308,6 +582,41 @@ def channel_max(r: np.ndarray, g: np.ndarray, b: np.ndarray):
 
 
 def clip_color(c, min_c=None, max_c=None):
+    """
+    Bring an RGB image back into [0, 1] while keeping the luminosity of each pixel (ClipColor).
+
+    Pixels whose lowest channel is below 0 are moved towards their luminosity with matrix_eq_min_lt_zero, then
+    pixels whose highest channel is above 1 with matrix_eq_max_gt_one (PDF / W3C compositing specification).
+    Both corrections use the luminosity, minimum and maximum computed before any correction.
+
+    Parameters
+    ----------
+    c : numpy.ndarray
+        ``(3, H, W)`` RGB image (band axis first). Not modified.
+    min_c : numpy.ndarray or None
+        Per-pixel minimum channel ``(H, W)``. Computed from ``c`` (float32 channels) when both ``min_c`` and
+        ``max_c`` are None.
+    max_c : numpy.ndarray or None
+        Per-pixel maximum channel ``(H, W)``; see ``min_c``.
+
+    Returns
+    -------
+    numpy.ndarray
+        New float64 ``(3, H, W)`` array. The channels are computed in float32 (``np.float32(c[i])``) and widened.
+
+    Raises
+    ------
+    TypeError
+        If only one of ``min_c`` and ``max_c`` is given (the other stays None and is compared with a number).
+
+    Notes
+    -----
+    Known issues (docs/KNOWN_ISSUES.md): a gray pixel (R = G = B) below 0 has ``lum == min``; its correction is
+    0 / 0 and the pixel becomes NaN in all bands instead of 0. NaN handling follows channel_min / channel_max.
+    Giving only one of ``min_c`` / ``max_c`` raises TypeError.
+
+    The blocked equivalent used by blend_luminosity is ``_luminosity_clip_blocked``.
+    """
     lum_c = lum(c)
 
     r = np.float32(c[0])
@@ -378,14 +687,59 @@ def _luminosity_clip_blocked(active, background):
 
 
 def blend_normal(active, background):
+    """
+    Return the active layer (blend mode "normal").
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer, values in [0, 1].
+    background : numpy.ndarray
+        Lower layer; not used.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``active`` itself (same object).
+    """
     return active
 
 
 def blend_screen(active, background):
+    """
+    Blend two layers with "screen": ``1 - (1 - active) * (1 - background)``.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer, values in [0, 1]. Not modified.
+    background : numpy.ndarray
+        Lower layer, values in [0, 1], broadcastable with ``active``. Not modified.
+
+    Returns
+    -------
+    numpy.ndarray
+        New array, broadcast shape, numpy dtype promotion of the operands; NaN where either operand is NaN.
+    """
     return 1 - (1 - active) * (1 - background)
 
 
 def blend_multiply(active, background):
+    """
+    Blend two layers with "multiply": ``active * background``.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer, values in [0, 1]. Not modified.
+    background : numpy.ndarray
+        Lower layer, values in [0, 1], broadcastable with ``active``. Not modified.
+
+    Returns
+    -------
+    numpy.ndarray
+        New array, broadcast shape, numpy dtype promotion of the operands; NaN where either operand is NaN.
+    """
     return active * background
 
 
@@ -430,6 +784,36 @@ def _blend_overlay_ref(active, background):
 
 
 def blend_overlay(active, background):
+    """
+    Blend two layers with "overlay", writing the result into ``background``.
+
+    The branch is chosen by the background: where ``background > 0.5`` the result is
+    ``1 - (1 - 2 * (background - 0.5)) * (1 - active)`` (screen-like), where ``background <= 0.5`` it is
+    ``2 * background * active`` (multiply-like).
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer, values in [0, 1], same shape as ``background``. Not modified.
+    background : numpy.ndarray
+        Lower layer, values in [0, 1]. **Overwritten in place with the result.**
+
+    Returns
+    -------
+    numpy.ndarray
+        ``background`` itself, holding the result in its own dtype. NaN in ``background`` matches neither branch
+        and stays NaN; NaN in ``active`` gives NaN.
+
+    Notes
+    -----
+    Known issue: because the result replaces the background, the caller's background array changes, and in
+    BlenderCombination.render_all_images the opacity of an overlay layer has no visible effect (the opacity mix
+    is computed between two arrays with the same values). See docs/KNOWN_ISSUES.md.
+
+    Accelerated path: for plain float32 / float64 ndarrays of one shape without memory overlap, both branch
+    expressions are evaluated per row block and copied where their mask holds (``_blend_in_place_blocked``);
+    otherwise ``_blend_overlay_ref`` (the original code) runs. Results are bitwise identical.
+    """
     return _blend_in_place_blocked(active, background, _overlay_masks, _overlay_branches, _blend_overlay_ref)
 
 
@@ -443,6 +827,34 @@ def _soft_light_branches(active, background):
 
 
 def blend_soft_light(active, background):
+    """
+    Blend two layers with "soft light", writing the result into ``background``.
+
+    The branch is chosen by the active layer: where ``active < 0.5`` the result is
+    ``2 * background * active + background ** 2 * (1 - 2 * active)``, where ``active >= 0.5`` it is
+    ``2 * background * (1 - active) + sqrt(background) * (2 * active - 1)`` (the "Photoshop" soft light formula).
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer, values in [0, 1], same shape as ``background``. Not modified.
+    background : numpy.ndarray
+        Lower layer, values in [0, 1]. **Overwritten in place with the result.**
+
+    Returns
+    -------
+    numpy.ndarray
+        ``background`` itself, holding the result in its own dtype. NaN in ``background`` gives NaN; a negative
+        background value in the second branch gives NaN (square root, RuntimeWarning).
+
+    Notes
+    -----
+    Known issues (docs/KNOWN_ISSUES.md): NaN in ``active`` matches neither branch, so the background value is
+    kept instead of NaN. As with blend_overlay, the in-place write makes the opacity of a soft light layer
+    ineffective in BlenderCombination.render_all_images.
+
+    Accelerated path: as blend_overlay, with ``_blend_soft_light_ref`` as the original code.
+    """
     return _blend_in_place_blocked(active, background, _soft_light_masks, _soft_light_branches,
                                    _blend_soft_light_ref)
 
@@ -461,6 +873,40 @@ def _blend_soft_light_ref(active, background):
 
 
 def blend_luminosity(active, background, min_c=None, max_c=None):
+    """
+    Blend two layers with "luminosity": the hue and saturation of the background with the luminosity of the
+    active layer.
+
+    For an RGB background each band becomes ``background[i] + (lum(active) - lum(background))`` (SetLum of the
+    PDF / W3C compositing specification); the result is brought back into [0, 1] by clip_color. For a gray
+    background the result is ``lum(active)``.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Not modified.
+    background : numpy.ndarray
+        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Not modified.
+    min_c : numpy.ndarray or None
+        Passed to clip_color; None computes it there.
+    max_c : numpy.ndarray or None
+        Passed to clip_color; None computes it there.
+
+    Returns
+    -------
+    numpy.ndarray
+        RGB background: new float64 ``(3, H, W)`` array. Gray background: ``lum(active)``, i.e. ``active`` itself
+        for a gray active layer, or a new float32 ``(H, W)`` array for an RGB active layer.
+
+    Notes
+    -----
+    Known issue: a gray background pixel whose luminosity result goes below 0 becomes NaN (clip_color divides
+    0 by 0); see docs/KNOWN_ISSUES.md.
+
+    Accelerated path: with ``min_c`` and ``max_c`` None, a float32 / float64 ``(3, H, W)`` ndarray background and a
+    float ndarray active layer of shape ``(3, H, W)`` or ``(H, W)``, ``_luminosity_clip_blocked`` evaluates the
+    same expressions per row block. Results are bitwise identical.
+    """
     if (min_c is None and max_c is None and _float_arrays(background) and background.ndim == 3
             and background.shape[0] == 3 and type(active) is np.ndarray and active.dtype in _FLOAT_DTYPES
             and (active.shape == background.shape or active.shape == background.shape[1:])):
@@ -488,6 +934,28 @@ def blend_luminosity(active, background, min_c=None, max_c=None):
 
 
 def equation_blend(blend_mode, active, background):
+    """
+    Apply one of the elementwise blend modes screen, multiply, overlay or soft_light.
+
+    Parameters
+    ----------
+    blend_mode : str
+        "screen", "multiply", "overlay" or "soft_light", case-insensitive.
+    active : numpy.ndarray
+        Upper layer, values in [0, 1].
+    background : numpy.ndarray
+        Lower layer, values in [0, 1]. Overwritten in place by "overlay" and "soft_light".
+
+    Returns
+    -------
+    numpy.ndarray or None
+        Result of blend_screen, blend_multiply, blend_overlay or blend_soft_light; None for any other name.
+
+    Notes
+    -----
+    Known issue: "normal" and "luminosity" are handled by blend_images only; here they (and unknown names) return
+    None without an error. See docs/KNOWN_ISSUES.md.
+    """
     if blend_mode.lower() == "screen":
         return blend_screen(active, background)
     elif blend_mode.lower() == "multiply":
@@ -512,6 +980,38 @@ def _assign_elementwise(out, func, active, background):
 
 
 def blend_multi_dim_images(blend_mode, active, background):
+    """
+    Apply an elementwise blend mode to gray or RGB layers, band by band.
+
+    When either layer is RGB, band ``i`` of the result is ``equation_blend(blend_mode, a_i, b_i)``, where a gray
+    layer is used for every band. Two gray layers are blended directly.
+
+    Parameters
+    ----------
+    blend_mode : str
+        "screen", "multiply", "overlay" or "soft_light", case-insensitive.
+    active : numpy.ndarray
+        Upper layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Not modified.
+    background : numpy.ndarray
+        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Overwritten in place by "overlay" and
+        "soft_light" (for an RGB background through its band views).
+
+    Returns
+    -------
+    numpy.ndarray or None
+        At least one RGB layer: new float64 ``(3, H, W)`` array. Two gray layers: the result of equation_blend
+        (dtype of the operands; for overlay / soft_light ``background`` itself). For an unknown mode: None for two
+        gray layers, an all-NaN float64 array otherwise (None assigned into a float array).
+
+    Notes
+    -----
+    Known issue (docs/KNOWN_ISSUES.md): with "overlay" or "soft_light", an RGB active layer and a gray
+    background, each band writes its result into the same gray background, so band 1 is blended onto the result
+    of band 0 and band 2 onto that of band 1 (overlay of 0.25 on 0.25 gives 0.125, 0.0625, 0.03125 instead of
+    0.125 in every band).
+
+    Accelerated path: each band is assigned through ``_assign_elementwise`` (row blocks); bitwise identical.
+    """
     a_rgb = len(active.shape) == 3  # bool, is active rgb
     b_rgb = len(background.shape) == 3  # bool, is background rgb
     blended_image = None
@@ -538,6 +1038,34 @@ def blend_multi_dim_images(blend_mode, active, background):
 
 
 def blend_images(blend_mode, active, background, min_c=None, max_c=None):
+    """
+    Blend an active layer onto a background with the named blend mode (no opacity).
+
+    Parameters
+    ----------
+    blend_mode : str
+        "normal", "multiply", "screen", "overlay", "soft_light" or "luminosity", case-insensitive. Any other name
+        is treated as "normal".
+    active : numpy.ndarray
+        Upper layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1].
+    background : numpy.ndarray
+        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Overwritten in place by "overlay" and
+        "soft_light".
+    min_c : numpy.ndarray or None
+        Only for "luminosity", passed to blend_luminosity.
+    max_c : numpy.ndarray or None
+        Only for "luminosity", passed to blend_luminosity.
+
+    Returns
+    -------
+    numpy.ndarray
+        "normal" (and unknown names): ``active`` itself. "luminosity": see blend_luminosity. Other modes: see
+        blend_multi_dim_images.
+
+    See Also
+    --------
+    render_images : applies the opacity afterwards.
+    """
     if blend_mode.lower() == "multiply" or blend_mode.lower() == "overlay" or blend_mode.lower() == "screen" \
             or blend_mode.lower() == "soft_light":
         return blend_multi_dim_images(blend_mode, active, background)
@@ -553,6 +1081,35 @@ def _outside_0_1(image):
 
 
 def render_images(active, background, opacity):
+    """
+    Mix a blended layer with the background according to the opacity.
+
+    An operand with any non-NaN value outside [0, 1] is first rescaled with scale_0_to_1. Then
+    ``active * opacity + background * (1 - opacity)`` is computed (apply_opacity), band by band when either
+    operand is RGB.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Blended layer (result of blend_images), ``(H, W)`` or ``(3, H, W)``.
+    background : numpy.ndarray
+        Background, ``(H, W)`` or ``(3, H, W)``.
+    opacity : float
+        Opacity of ``active`` in percent, 0-100; a value <= 1 is used as a fraction (see apply_opacity).
+
+    Returns
+    -------
+    numpy.ndarray
+        At least one RGB operand: new float64 ``(3, H, W)`` array. Two gray operands: the result of
+        apply_opacity (dtype of the operands, e.g. float32 for float32 input).
+
+    Notes
+    -----
+    The rescale can modify an operand in place (scale_0_to_1 replaces NaN; see its Notes). The values are not
+    clipped, so an opacity above 100 extrapolates beyond [0, 1].
+
+    Accelerated path: RGB bands are assigned through ``_assign_elementwise`` (row blocks); bitwise identical.
+    """
     return _render_images(active, background, opacity)
 
 
@@ -600,6 +1157,37 @@ def _render_images(active, background, opacity, active_outside=None, background_
 
 
 def scale_within_0_and_1(numeric_value):
+    """
+    Rescale an array with a value range wider than 0.3 for blending (intended: into [0, 1]).
+
+    Steps as implemented:
+
+    1. If all non-NaN values lie in [0, 1], return the argument unchanged (same object).
+    2. Replace NaN by the minimum, **in the caller's array**.
+    3. If ``1 < max <= 255``, ``max - min > 30`` and ``min > 0`` (data that look like 8-bit), return
+       ``numeric_value / 255``.
+    4. Otherwise return ``(numeric_value - lo) / (hi - lo)`` with ``lo = 0`` and ``hi = 1`` (see Notes), and set
+       values in (-0.01, 0) to 0 when no value is below -0.01.
+
+    Parameters
+    ----------
+    numeric_value : numpy.ndarray
+        Array of any shape. NaN is overwritten in place (step 2).
+
+    Returns
+    -------
+    numpy.ndarray
+        ``numeric_value`` itself (step 1) or a new array of its shape and float dtype (steps 3, 4).
+
+    Notes
+    -----
+    Known issues (docs/KNOWN_ISSUES.md):
+
+    - ``np.array(0, actual_min)`` and ``np.array(1, actual_max)`` pass the minimum / maximum as the *dtype*
+      argument (a numpy scalar is accepted as its dtype), so the stretch limits are always 0 and 1 and step 4
+      returns the values unchanged instead of stretching them to [0, 1].
+    - The NaN mask is lost: NaN pixels come back as the minimum, and the argument is modified.
+    """
     if np.nanmin(numeric_value) >= 0 and np.nanmax(numeric_value) <= 1:
         return numeric_value
 
@@ -632,6 +1220,37 @@ def scale_within_0_and_1(numeric_value):
 
 
 def scale_strict_0_to_1(numeric_value):
+    """
+    Stretch an array min-max to [0, 1] (intended for arrays with a value range up to 0.3).
+
+    If the minimum is 0 and the maximum 1, the argument is returned unchanged. Otherwise NaN is replaced by 0
+    **in the caller's array**, the array is stretched with ``(x - min) / (max - min)``, and values in (-0.01, 0)
+    are meant to be set to 0.
+
+    Parameters
+    ----------
+    numeric_value : numpy.ndarray
+        Array of any shape. NaN is overwritten with 0 in place.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``numeric_value`` itself (minimum 0 and maximum 1), or, for a constant array (including any one-element
+        array), a new all-NaN array (0 / 0, RuntimeWarning).
+
+    Raises
+    ------
+    ValueError
+        For every non-constant array with more than one element, see Notes.
+
+    Notes
+    -----
+    Known issue: ``scaled[0 > scaled > -0.01] = 0`` is a chained comparison, evaluated as
+    ``(0 > scaled) and (scaled > -0.01)``; ``and`` needs the truth value of an array, which raises ValueError for
+    arrays with more than one element. After the stretch the minimum is 0, so the comparison is always reached
+    for non-constant input; NaN has already been replaced by 0 in the argument at that point. See
+    docs/KNOWN_ISSUES.md.
+    """
     if np.nanmin(numeric_value) == 0 and np.nanmax(numeric_value) == 1:
         return numeric_value
 
@@ -649,6 +1268,34 @@ def scale_strict_0_to_1(numeric_value):
 
 
 def scale_0_to_1(numeric_value):
+    """
+    Rescale an array for blending (intended: into [0, 1]); dispatch to the two scaling functions.
+
+    - Maximum in (0.9, 1] and minimum 0: return the argument unchanged.
+    - Range ``max - min > 0.3``: scale_within_0_and_1.
+    - Otherwise: scale_strict_0_to_1.
+
+    Parameters
+    ----------
+    numeric_value : numpy.ndarray
+        Array of any shape; NaN may be overwritten in place by the called function.
+
+    Returns
+    -------
+    numpy.ndarray
+        The argument itself or a new array, see the called functions.
+
+    Raises
+    ------
+    ValueError
+        From scale_strict_0_to_1, for non-constant arrays with a range up to 0.3.
+
+    Notes
+    -----
+    Known issue: through the issues of the two called functions, an array outside [0, 1] with a range above 0.3
+    is returned with unchanged values (except the 8-bit case, divided by 255), and a non-constant array with a
+    range up to 0.3 raises ValueError. See docs/KNOWN_ISSUES.md.
+    """
     if 1 >= np.nanmax(numeric_value) > 0.9 and np.nanmin(numeric_value) == 0:
         return numeric_value
     elif np.nanmax(numeric_value) - np.nanmin(numeric_value) > 0.3:
@@ -658,14 +1305,76 @@ def scale_0_to_1(numeric_value):
 
 
 def apply_opacity(active, background, opacity):
+    """
+    Mix two layers: ``active * opacity + background * (1 - opacity)``.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer. Not modified.
+    background : numpy.ndarray
+        Lower layer, broadcastable with ``active``. Not modified.
+    opacity : float
+        Opacity of ``active`` in percent, 0-100. A value above 1 is divided by 100; a value <= 1 is used as a
+        fraction as is.
+
+    Returns
+    -------
+    numpy.ndarray
+        New array, broadcast shape, numpy dtype promotion of the operands (float32 operands give float32). The
+        result is not clipped.
+
+    Notes
+    -----
+    Known issue: because of the "> 1" limit, ``opacity=1`` means 100 %, not 1 %, and there is no way to ask for
+    1 %. Values above 100 (or below 0) are not rejected and extrapolate. See docs/KNOWN_ISSUES.md.
+    """
     if opacity > 1:
         opacity = opacity / 100
     return active * opacity + background * (1 - opacity)
 
 
 def normalize_image(visualization, image, min_norm, max_norm, normalization):
-    """Main function for normalization. Runs advanced normalization on the array and performs special operations for
-    some visualization types (e.g. invert scale for slope, scale for mhs, etc.).
+    """
+    Normalize a visualization to [0, 1] for blending; invert slope and negative openness.
+
+    This is the normalization entry point of BlenderCombination.render_all_images and of
+    DefaultValues.float_to_8bit. Steps: "percent" is renamed to "perc"; advanced_normalization; a rescale with
+    scale_0_to_1 if the result has values above 1 or below 0; ``1 - x`` for slope and negative openness (high
+    slope and high negative openness become dark).
+
+    Parameters
+    ----------
+    visualization : str or None
+        Visualization name. Inverted: "slope gradient" and "openness - negative" (case-insensitive), "slp" and
+        "neg_opns" (case-sensitive). None returns None.
+    image : numpy.ndarray
+        Visualization ``(H, W)`` or ``(3, H, W)``. **Clipped in place** by normalize_lin.
+    min_norm : float
+        Lower limit: a value for "value", a percentage (0-100) cut off for "perc".
+    max_norm : float
+        Upper limit: a value for "value", a percentage (0-100) cut off for "perc".
+    normalization : str
+        "value" or "perc" (case-insensitive) or "percent" (lower case only).
+
+    Returns
+    -------
+    numpy.ndarray or None
+        float32 array of the shape of ``image`` with values in [0, 1], NaN kept; None if ``visualization`` is None.
+
+    Raises
+    ------
+    Exception
+        From advanced_normalization (limits, unknown normalization name such as "Percent").
+
+    Notes
+    -----
+    The output of normalize_lin is already clamped to [0, 1], so with the existing normalizations the two rescale
+    branches (and their warnings "unexpected values!") are not reached; they are kept as they are.
+
+    Known issue: the abbreviations "slp", "neg_opns" (and "mhs") and the rename of "percent" are compared
+    case-sensitively, unlike the long names; "SLP" is not inverted and "Percent" raises. See
+    docs/KNOWN_ISSUES.md.
     """
     if visualization is None:
         return None
@@ -697,10 +1406,45 @@ def normalize_image(visualization, image, min_norm, max_norm, normalization):
 
 def cut_off_normalize(image, mode, cutoff_min=None, cutoff_max=None, bool_norm=True):
     """
-    One band image cut-off or normalization or both. Image is 2D np.ndarray of raster, mode is perc or value
-    (min and max units), min and max are minimum value to cutoff and maximum value to cutoff.
-    (e.x. percent min=2 and max=3 -> cutoff lower 2% values and higher 3% values;
-     e.x. value min=10 and max=60 -> cutoff below 10 and above 60, image values will be 10-60)
+    Clip a one-band image by values or percentiles, and optionally stretch it to [0, 1].
+
+    Examples: mode "perc", min 2, max 3 cuts off the lowest 2 % and the highest 3 % of the values; mode "value",
+    min 10, max 60 clips the image to 10-60.
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        2D ``(H, W)`` image. **Clipped in place** in the "value" and "perc" modes.
+    mode : str
+        "value" or "perc" / "percent" (case-insensitive for the dispatch).
+    cutoff_min : float or None
+        "value": lower clip value, None = ``np.amin(image)``. "perc": percentage of the lowest values to cut off
+        (0-100), None = 0.
+    cutoff_max : float or None
+        "value": upper clip value, None = ``np.amax(image)``. "perc": percentage of the highest values to cut off
+        (0-100), None = 0.
+    bool_norm : bool
+        True: clip and stretch to [0, 1] (normalize_lin / normalize_perc). False: clip only.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``bool_norm=True``: new float32 array with values in [0, 1]. ``bool_norm=False`` or an unknown mode:
+        ``image`` itself (clipped, or unchanged for an unknown mode).
+
+    Raises
+    ------
+    Exception
+        If both limits are given, ``mode == "value"`` and ``cutoff_min == cutoff_max`` or
+        ``cutoff_min > cutoff_max``; from lin_cutoff_calc_from_perc for invalid percentages.
+
+    Notes
+    -----
+    The default limits of "value" use ``np.amin`` / ``np.amax``, so an image with NaN gets NaN limits and an
+    all-NaN result.
+
+    Known issues (docs/KNOWN_ISSUES.md): the limit checks compare ``mode`` with "value" case-sensitively, so
+    "Value" skips them (min == max gives all NaN); an unknown mode raises nothing and returns ``image`` unchanged.
     """
     if cutoff_min is not None and cutoff_max is not None:
         if cutoff_min == cutoff_max and mode == "value":
