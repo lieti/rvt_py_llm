@@ -3031,8 +3031,8 @@ class DefaultValues:
         float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
         ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
 
-        Known issue: a single NaN (or no-data) pixel turns a large part of the output into NaN, not only
-        that pixel. See docs/KNOWN_ISSUES.md.
+        Known issue: a single NaN (or no-data) pixel turns every output pixel into NaN, not only that pixel
+        (60 x 70 px DEM with one NaN: 4200 of 4200 pixels NaN). See docs/KNOWN_ISSUES.md (KI-07).
         """
         sky_illumination_arr = rvt.vis.sky_illumination(dem=dem_arr, resolution=resolution, sky_model=self.sim_sky_mod,
                                                         compute_shadow=bool(self.sim_compute_shadow),

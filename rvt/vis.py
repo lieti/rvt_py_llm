@@ -2517,8 +2517,9 @@ def shadow_horizon(dem,
 
     Notes
     -----
-    The known issues of ``sky_illumination`` apply (resolution not used for the angles, any NaN makes the
-    result NaN, ``shadow_az`` 0 and 360 differ, tile origin), see docs/KNOWN_ISSUES.md.
+    The known issues of ``sky_illumination`` apply (resolution not used for the angles; one NaN pixel makes
+    the horizon NaN everywhere and the shadow 0 everywhere; ``shadow_az`` 0 and 360 differ; tile origin), see
+    docs/KNOWN_ISSUES.md (KI-06, KI-07).
 
     See Also
     --------
