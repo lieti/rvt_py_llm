@@ -1346,6 +1346,73 @@ def _sky_illum_block_rows(n_cols):
     return max(16, (32768 // max(1, n_cols)) // 16 * 16)
 
 
+# Serial kernels of the numpy path in _sky_illum_search_blocked, row by row, with the same operations per pixel and
+# shift in the same order: difference in the dtype of hp (float32 subtraction for a float32 level), promoted to
+# float64 and divided by the float64 radius, then np.maximum. np.maximum(a, b) is evaluated as
+# "a if (a > b or a is NaN) else b": the NaN operand is returned (the first one if both are NaN), and on a tie
+# (+0 / -0) the second operand, as numpy does on this path (work/cand/K-08d/probe_max.py). Two kernels, so that
+# a process compiles only the variant it runs (the literal one serves only the shadow direction).
+@_accel.jit_kernel
+def _sky_illum_search_kernel(hp, p, s_y, s_x, radii, ms):
+    # floor_once: np.maximum(ms, 0., out=ms), then np.maximum(ms, q, out=ms) for every shift
+    n0, n1 = ms.shape
+    n_s = s_y.shape[0]
+    for r in range(n0):
+        ms_r = ms[r]
+        base_r = hp[p + r, p:p + n1]
+        for c in range(n1):
+            a = ms_r[c]
+            ms_r[c] = a if (a > 0. or a != a) else 0.
+        for i_s in range(n_s):
+            c0 = p - s_x[i_s]
+            sh_r = hp[p + r - s_y[i_s], c0:c0 + n1]
+            rad = radii[i_s]
+            for c in range(n1):
+                q = np.float64(sh_r[c] - base_r[c]) / rad
+                a = ms_r[c]
+                ms_r[c] = a if (a > q or a != a) else q
+
+
+@_accel.jit_kernel
+def _sky_illum_search_literal_kernel(hp, p, s_y, s_x, radii, ms):
+    # literal: np.maximum(q, 0., out=q), then np.maximum(ms, q, out=ms) for every shift
+    n0, n1 = ms.shape
+    n_s = s_y.shape[0]
+    for r in range(n0):
+        ms_r = ms[r]
+        base_r = hp[p + r, p:p + n1]
+        for i_s in range(n_s):
+            c0 = p - s_x[i_s]
+            sh_r = hp[p + r - s_y[i_s], c0:c0 + n1]
+            rad = radii[i_s]
+            for c in range(n1):
+                q = np.float64(sh_r[c] - base_r[c]) / rad
+                q = q if (q > 0. or q != q) else 0.
+                a = ms_r[c]
+                ms_r[c] = a if (a > q or a != a) else q
+
+
+def _sky_illum_search_accel(hp, p, shifts, max_slope, floor_once):
+    # numba kernel for _sky_illum_search_blocked; True when max_slope was updated in place, False when the numpy
+    # path has to run (accelerators off, numba missing, unsupported dtypes or layout). The guards exclude every
+    # case in which the kernel could raise after writing (division by a zero radius, indices outside hp), so a
+    # False return leaves max_slope untouched (typing and compilation fail before the kernel runs).
+    if not _accel.enabled():
+        return False
+    n0, n1 = max_slope.shape
+    if not (hp.ndim == 2 and hp.dtype in (np.float32, np.float64) and max_slope.dtype == np.float64
+            and max_slope.flags.writeable and n0 > 0 and n1 > 0
+            and hp.shape[0] >= n0 + 2 * p and hp.shape[1] >= n1 + 2 * p
+            and all(type(s[2]) is np.float64 and s[2] != 0 and abs(s[0]) <= p and abs(s[1]) <= p
+                    for s in shifts)):
+        return False
+    s_y = np.array([s[0] for s in shifts], dtype=np.int64)
+    s_x = np.array([s[1] for s in shifts], dtype=np.int64)
+    radii = np.array([s[2] for s in shifts], dtype=np.float64)
+    kernel = _sky_illum_search_kernel if floor_once else _sky_illum_search_literal_kernel
+    return _accel.call(kernel, hp, int(p), s_y, s_x, radii, max_slope)
+
+
 def _sky_illum_search_blocked(hp, p, shifts, max_slope, floor_once):
     # Horizon search of one level and direction on the window hp[p:p + n0, p:p + n1] (n0, n1 =
     # max_slope.shape) with the shifted windows hp[p - dy:, p - dx:] (|dy|, |dx| <= p), in row
@@ -1363,6 +1430,8 @@ def _sky_illum_search_blocked(hp, p, shifts, max_slope, floor_once):
     q_dtype = np.result_type(np.empty(0, dtype=d_dtype), shifts[0][2])
     if np.result_type(max_slope, np.empty(0, dtype=q_dtype)) != max_slope.dtype:
         max_slope = max_slope.astype(np.result_type(max_slope, np.empty(0, dtype=q_dtype)))
+    if q_dtype == np.float64 and _sky_illum_search_accel(hp, p, shifts, max_slope, floor_once):
+        return max_slope
     rows = _sky_illum_block_rows(n1)
     shape_b = (min(rows, n0), n1)
     diff_b = np.empty(shape_b, dtype=d_dtype)
