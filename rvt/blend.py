@@ -36,6 +36,7 @@ from rvt.blend_func import (
     render_images,
     scale_0_to_1,
 )
+from rvt.blend_func import _outside_0_1, _render_images
 
 
 def create_blender_file_example(file_path=None):
@@ -377,6 +378,7 @@ class BlenderCombination:
 
         # Rendering across all layers - form last to first layer
         rendered_image = None
+        rendered_outside = None
         for i_img in range(len(self.layers) - 1, -1, -1):
 
             # Get visualization type (string)
@@ -599,26 +601,36 @@ class BlenderCombination:
                 # if current layer has visualization applied, but there has been no rendering
                 # of images yet, than current layer will be the initial value of rendered_image
                 rendered_image = norm_image
+                rendered_outside = None  # range test of rendered_image not evaluated yet
                 continue
             else:
                 active = norm_image
                 background = rendered_image
 
                 # Scale images if needed
-                if np.nanmin(active) < 0 or np.nanmax(active) > 1:
+                active_outside = _outside_0_1(active)
+                if active_outside:
                     active = scale_0_to_1(active)
-                if np.nanmin(background) < 0 or np.nanmax(background) > 1:
+                # rendered_image is unchanged since its range test at the end of the previous layer
+                background_outside = _outside_0_1(background) if rendered_outside is None else rendered_outside
+                if background_outside:
                     background = scale_0_to_1(background)
 
                 # Blend background with active layer
                 blend_mode = self.layers[i_img].blend_mode
                 top = blend_images(blend_mode, active, background)
 
-                # Apply opacity
+                # Apply opacity. Range tests already evaluated on the same unchanged arrays are passed on: top is the
+                # (unscaled) active itself for normal blending, and only overlay / soft_light modify the background.
                 opacity = self.layers[i_img].opacity
-                rendered_image = render_images(top, background, opacity)
+                rendered_image = _render_images(
+                    top, background, opacity,
+                    active_outside=False if (top is active and not active_outside) else None,
+                    background_outside=None if (background_outside or blend_mode.lower() in ("overlay", "soft_light"))
+                    else False)
 
-                if np.nanmin(rendered_image) < 0 or np.nanmax(rendered_image) > 1:
+                rendered_outside = _outside_0_1(rendered_image)
+                if rendered_outside:
                     warnings.warn("rvt.blend.BlenderCombination.render_all_images: Rendered image scale distorted")
 
         # Save image to file if path is present

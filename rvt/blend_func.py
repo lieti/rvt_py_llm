@@ -26,6 +26,43 @@ import numpy as np
 from matplotlib import colormaps
 from matplotlib.colors import LinearSegmentedColormap
 
+# Blocked elementwise evaluation (pure data-flow change). The blend kernels below evaluate exactly the same
+# expressions on the same element values, only on row blocks of about _BLOCK_ELEMS elements instead of whole
+# images, so temporaries stay cache-resident and full-size temporaries / fancy indexing are avoided. Every element
+# goes through the same IEEE operations in the same order and with the same dtypes, so results are bitwise equal.
+_BLOCK_ELEMS = 32768
+_FLOAT_DTYPES = (np.dtype(np.float32), np.dtype(np.float64))
+_REAL_SCALARS = (int, float, np.integer, np.floating)
+
+
+def _row_slices(n_rows, row_elems):
+    """Row-block slices along axis 0 with about _BLOCK_ELEMS elements per block."""
+    step = max(1, _BLOCK_ELEMS // max(1, row_elems))
+    return [slice(r, r + step) for r in range(0, n_rows, step)]
+
+
+def _float_arrays(*arrays):
+    """True if all arguments are plain float32/float64 ndarrays of one non-empty shape with ndim >= 1."""
+    shape = arrays[0].shape if isinstance(arrays[0], np.ndarray) else None
+    if shape is None or len(shape) == 0 or arrays[0].size == 0:
+        return False
+    for arr in arrays:
+        if type(arr) is not np.ndarray or arr.dtype not in _FLOAT_DTYPES or arr.shape != shape:
+            return False
+    return True
+
+
+def _fp_strict():
+    """Current numpy error state with every non-ignored category turned into 'raise'. Branch expressions are
+    evaluated for all elements of a block under this state; if any floating point error is flagged, the block is
+    recomputed with the reference code under the caller's error state, so the same kinds of warnings are issued.
+    Returns None if the caller's state raises or calls a handler (then the reference code runs on the whole array,
+    so an exception leaves the inputs in exactly the same partially updated state)."""
+    err = np.geterr()
+    if any(val not in ("ignore", "warn", "print") for val in err.values()):
+        return None
+    return {key: ("ignore" if val == "ignore" else "raise") for key, val in err.items()}
+
 
 def gray_scale_to_color_ramp(gray_scale, colormap, min_colormap_cut=None, max_colormap_cut=None, alpha=False,
                              output_8bit=True):
@@ -97,6 +134,26 @@ def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=100):
 
 
 def normalize_lin(image, minimum, maximum):
+    if (_float_arrays(image) and image.flags.c_contiguous and image.flags.writeable
+            and isinstance(minimum, _REAL_SCALARS) and isinstance(maximum, _REAL_SCALARS)):
+        # Same steps per row block: the cut-off is still applied to the whole `image` in place first, the stretched
+        # result is cast to float32 exactly as np.float32() casts the whole array.
+        # The image is C-contiguous, so blocks are taken from its flat view.
+        flat = image.reshape(-1)
+        slices = _row_slices(flat.size, 1)
+        for sl in slices:
+            blk = flat[sl]
+            blk[blk > maximum] = maximum
+            blk[blk < minimum] = minimum
+        out = np.empty(image.shape, dtype=np.float32)
+        out_flat = out.reshape(-1)
+        for sl in slices:
+            stretched = (flat[sl] - minimum) / (maximum - minimum)
+            stretched[stretched > 1] = 1
+            stretched[stretched < 0] = 0
+            out_flat[sl] = stretched
+        return out
+
     # linear cut off
     image[image > maximum] = maximum
     image[image < minimum] = minimum
@@ -230,6 +287,48 @@ def clip_color(c, min_c=None, max_c=None):
     return c_out
 
 
+def _luminosity_clip_blocked(active, background):
+    """blend_luminosity(active, background) followed by clip_color(c) for a 3-band float background, evaluated per
+    row block with the same expressions: c = background + luminosity (stored as float64), lum_c = lum(c),
+    r, g, b = float32(c), channel min / max, then the min < 0 and max > 1 corrections on the same subsets."""
+    c_out = np.zeros(background.shape)
+    rows = background.shape[1]
+    for sl in _row_slices(rows, background[0].size // rows):
+        luminosity = lum(active[:, sl] if active.ndim == 3 else active[sl]) - lum(background[:, sl])
+        c = np.empty((3,) + luminosity.shape)
+        c[0] = background[0, sl] + luminosity
+        c[1] = background[1, sl] + luminosity
+        c[2] = background[2, sl] + luminosity
+        lum_c = lum(c)
+        chans = [np.float32(c[0]), np.float32(c[1]), np.float32(c[2])]
+        r, g, b = chans
+        min_c = r * 1.0
+        np.copyto(min_c, g, where=g < min_c)
+        np.copyto(min_c, b, where=b < min_c)
+        max_c = r * 1.0
+        np.copyto(max_c, g, where=g > max_c)
+        np.copyto(max_c, b, where=b > max_c)
+        lum_flat = lum_c.reshape(-1)
+        idx = np.flatnonzero(min_c < 0)
+        if idx.size:
+            lum_i = lum_flat[idx]
+            min_i = min_c.reshape(-1)[idx]
+            for ch in chans:
+                ch_flat = ch.reshape(-1)
+                ch_flat[idx] = lum_i + (((ch_flat[idx] - lum_i) * lum_i) / (lum_i - min_i))
+        idx = np.flatnonzero(max_c > 1)
+        if idx.size:
+            lum_i = lum_flat[idx]
+            max_i = max_c.reshape(-1)[idx]
+            for ch in chans:
+                ch_flat = ch.reshape(-1)
+                ch_flat[idx] = lum_i + (((ch_flat[idx] - lum_i) * (1.0 - lum_i)) / (max_i - lum_i))
+        c_out[0, sl] = r
+        c_out[1, sl] = g
+        c_out[2, sl] = b
+    return c_out
+
+
 def blend_normal(active, background):
     return active
 
@@ -242,7 +341,39 @@ def blend_multiply(active, background):
     return active * background
 
 
-def blend_overlay(active, background):
+def _blend_in_place_blocked(active, background, masks, branches, reference):
+    """Shared driver of blend_overlay / blend_soft_light: per row block, evaluate both branch expressions for all
+    elements and copy each into `background` where its mask holds (masks are taken before any write, as with
+    np.where in the reference). Elements outside both masks (NaN) keep their value. A block whose branch evaluation
+    flags a floating point error is recomputed by `reference` under the caller's error state instead."""
+    strict = _fp_strict()
+    if not (strict is not None and _float_arrays(active, background) and background.flags.writeable
+            and not np.may_share_memory(active, background)):
+        return reference(active, background)
+    for sl in _row_slices(background.shape[0], background.size // background.shape[0]):
+        a = active[sl]
+        b = background[sl]
+        m1, m2 = masks(a, b)
+        try:
+            with np.errstate(**strict):
+                e1, e2 = branches(a, b)
+        except FloatingPointError:
+            reference(a, b)
+            continue
+        np.copyto(b, e1, where=m1, casting="unsafe")
+        np.copyto(b, e2, where=m2, casting="unsafe")
+    return background
+
+
+def _overlay_masks(active, background):
+    return background > 0.5, background <= 0.5
+
+
+def _overlay_branches(active, background):
+    return (1 - (1 - 2 * (background - 0.5)) * (1 - active)), ((2 * background) * active)
+
+
+def _blend_overlay_ref(active, background):
     idx1 = np.where(background > 0.5)
     idx2 = np.where(background <= 0.5)
     background[idx1] = (1 - (1 - 2 * (background[idx1] - 0.5)) * (1 - active[idx1]))
@@ -250,7 +381,25 @@ def blend_overlay(active, background):
     return background
 
 
+def blend_overlay(active, background):
+    return _blend_in_place_blocked(active, background, _overlay_masks, _overlay_branches, _blend_overlay_ref)
+
+
+def _soft_light_masks(active, background):
+    return active < 0.5, active >= 0.5
+
+
+def _soft_light_branches(active, background):
+    return (2 * background * active + background ** 2 * (1.0 - 2 * active),
+            2 * background * (1.0 - active) + np.sqrt(background) * (2 * active - 1.0))
+
+
 def blend_soft_light(active, background):
+    return _blend_in_place_blocked(active, background, _soft_light_masks, _soft_light_branches,
+                                   _blend_soft_light_ref)
+
+
+def _blend_soft_light_ref(active, background):
     # idx1 = np.where(active > 0.5)
     # idx2 = np.where(active <= 0.5)
     # background[idx1] = 1 - (1-background[idx1]) * (1-(active[idx1]-0.5))
@@ -264,6 +413,11 @@ def blend_soft_light(active, background):
 
 
 def blend_luminosity(active, background, min_c=None, max_c=None):
+    if (min_c is None and max_c is None and _float_arrays(background) and background.ndim == 3
+            and background.shape[0] == 3 and type(active) is np.ndarray and active.dtype in _FLOAT_DTYPES
+            and (active.shape == background.shape or active.shape == background.shape[1:])):
+        return _luminosity_clip_blocked(active, background)
+
     lum_active = lum(active)
     lum_background = lum(background)
     luminosity = lum_active - lum_background
@@ -296,22 +450,39 @@ def equation_blend(blend_mode, active, background):
         return blend_soft_light(active, background)
 
 
+def _assign_elementwise(out, func, active, background):
+    """out[...] = func(active, background) for an elementwise func, evaluated per row block when both operands are
+    plain, non-overlapping ndarrays of out's shape (no broadcasting); in-place effects of func on background are
+    the same (also when an error is raised: with a raising numpy error state the whole array is processed at once)."""
+    if (type(active) is np.ndarray and type(background) is np.ndarray and active.ndim >= 1 and out.size > 0
+            and active.shape == out.shape and background.shape == out.shape and _fp_strict() is not None
+            and not np.may_share_memory(active, background)):
+        for sl in _row_slices(out.shape[0], out.size // out.shape[0]):
+            out[sl] = func(active[sl], background[sl])
+    else:
+        out[...] = func(active, background)
+
+
 def blend_multi_dim_images(blend_mode, active, background):
     a_rgb = len(active.shape) == 3  # bool, is active rgb
     b_rgb = len(background.shape) == 3  # bool, is background rgb
     blended_image = None
+
+    def func(act, back):
+        return equation_blend(blend_mode, act, back)
+
     if a_rgb and b_rgb:
         blended_image = np.zeros(background.shape)
         for i in range(3):
-            blended_image[i, :, :] = equation_blend(blend_mode, active[i, :, :], background[i, :, :])
+            _assign_elementwise(blended_image[i, :, :], func, active[i, :, :], background[i, :, :])
     if a_rgb and not b_rgb:
         blended_image = np.zeros(active.shape)
         for i in range(3):
-            blended_image[i, :, :] = equation_blend(blend_mode, active[i, :, :], background)
+            _assign_elementwise(blended_image[i, :, :], func, active[i, :, :], background)
     if not a_rgb and b_rgb:
         blended_image = np.zeros(background.shape)
         for i in range(3):
-            blended_image[i, :, :] = equation_blend(blend_mode, active, background[i, :, :])
+            _assign_elementwise(blended_image[i, :, :], func, active, background[i, :, :])
     if not a_rgb and not b_rgb:
         blended_image = equation_blend(blend_mode, active, background)
 
@@ -328,34 +499,52 @@ def blend_images(blend_mode, active, background, min_c=None, max_c=None):
         return blend_normal(active, background)
 
 
+def _outside_0_1(image):
+    """The range test used before blending: any non-NaN value below 0 or above 1."""
+    return bool(np.nanmin(image) < 0 or np.nanmax(image) > 1)
+
+
 def render_images(active, background, opacity):
+    return _render_images(active, background, opacity)
+
+
+def _render_images(active, background, opacity, active_outside=None, background_outside=None):
+    """render_images; a caller that has just evaluated _outside_0_1() on the very same unchanged array may pass
+    the result as active_outside / background_outside instead of having it recomputed (None = compute)."""
 
     # Both active and background image have to be between 0 and 1, scale if not
-    if np.nanmin(active) < 0 or np.nanmax(active) > 1:
+    if active_outside is None:
+        active_outside = _outside_0_1(active)
+    if active_outside:
         active = scale_0_to_1(active)
-    if np.nanmin(background) < 0 or np.nanmax(background) > 1:
+    if background_outside is None:
+        background_outside = _outside_0_1(background)
+    if background_outside:
         background = scale_0_to_1(background)
 
     # True if image has 3 bands (RGB), false if single band
     a_rgb = len(active.shape) == 3
     b_rgb = len(background.shape) == 3
 
+    def func(act, back):
+        return apply_opacity(act, back, opacity)
+
     # Apply opacity
     if a_rgb and b_rgb:
         # Both images 3 bands
         render_image = np.zeros(background.shape)
         for i in range(3):
-            render_image[i, :, :] = apply_opacity(active[i, :, :], background[i, :, :], opacity)
+            _assign_elementwise(render_image[i, :, :], func, active[i, :, :], background[i, :, :])
     elif a_rgb and not b_rgb:
         # Active image 3 bands
         render_image = np.zeros(active.shape)
         for i in range(3):
-            render_image[i, :, :] = apply_opacity(active[i, :, :], background, opacity)
+            _assign_elementwise(render_image[i, :, :], func, active[i, :, :], background)
     elif not a_rgb and b_rgb:
         # Background image 3 bands
         render_image = np.zeros(background.shape)
         for i in range(3):
-            render_image[i, :, :] = apply_opacity(active, background[i, :, :], opacity)
+            _assign_elementwise(render_image[i, :, :], func, active, background[i, :, :])
     else:
         render_image = apply_opacity(active, background, opacity)
 
