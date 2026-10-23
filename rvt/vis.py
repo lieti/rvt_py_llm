@@ -825,14 +825,18 @@ def _svf_window_ok(height, radius_max, move):
     return True
 
 
-def _svf_accumulate(acc, term):
+def _accumulate(acc, term):
     """
     Return ``acc + term``, written into ``acc`` when that gives the same result.
 
     In place only when ``acc`` already has the promoted dtype of ``acc + term``; then ``np.add(acc, term,
     out=acc)`` runs the same loop as ``acc + term`` and the values are identical. Otherwise (the first
-    float32 + float64 step) a new array is returned, as in the reference expression. ``acc`` must be a
-    private buffer of the caller, never a user array.
+    float32 + float64 step of an accumulator that starts as ``dem * 0``) a new array is returned, as in the
+    reference expression ``acc = acc + term``. ``acc`` must be a private buffer of the caller, never a user
+    array. Used by the SVF horizon scan (``_svf_compute_window``) and by ``sky_illumination``; both pass
+    2D ndarrays for ``acc`` and ``term``, for which the dtype test below gives the same answer as
+    ``np.result_type(acc, term)`` under every numpy version (value-based promotion only ever applied to
+    0-d arrays and scalars).
     """
     if acc.dtype == np.result_type(acc.dtype, term.dtype):
         return np.add(acc, term, out=acc)
@@ -997,11 +1001,11 @@ def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, c
                 # 1 - sin(fmax(angle, 0)), computed once and used for svf and asvf
                 term = 1 - np.sin(np.fmax(max_slope, 0))
                 if compute_svf:
-                    svf_blk = _svf_accumulate(svf_blk, term)
+                    svf_blk = _accumulate(svf_blk, term)
                 if compute_asvf:
-                    asvf_blk = _svf_accumulate(asvf_blk, term * weight[i_dir])
+                    asvf_blk = _accumulate(asvf_blk, term * weight[i_dir])
             if compute_opns:
-                opns_blk = _svf_accumulate(opns_blk, max_slope)
+                opns_blk = _accumulate(opns_blk, max_slope)
 
         if compute_svf:
             if svf_win is None:
@@ -1769,20 +1773,6 @@ def horizon_generate_pyramids(dem,
     return pyramid
 
 
-def _sky_illum_iadd(acc, term):
-    """
-    Return ``acc + term``, written into ``acc`` when that gives the same result.
-
-    In place only when the promoted dtype of ``acc + term`` is ``acc.dtype``; then ``np.add(..., out=acc)``
-    runs the same loop and gives the same values. Otherwise (the first float32 + float64 step of a
-    sky illumination accumulator) a new promoted array is returned, as in the reference ``acc = acc + term``.
-    ``acc`` must be a private buffer of the caller.
-    """
-    if np.result_type(acc, term) == acc.dtype:
-        return np.add(acc, term, out=acc)
-    return acc + term
-
-
 def _sky_illum_level_search(height, move, direction, max_slope, inner):
     """
     Horizon search of one pyramid level and direction on whole arrays (path used when not blocked).
@@ -2410,7 +2400,7 @@ def sky_illumination(dem,
             # same operations and operand order as the expressions below, in reused buffers
             cos_ = np.cos(_)
             buf = np.square(cos_)  # == cos_ ** 2
-            uniform_a = _sky_illum_iadd(uniform_a, buf)
+            uniform_a = _accumulate(uniform_a, buf)
             # reference expression reproduced in place: np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.
             np.multiply(2., _, out=buf)
             np.sin(buf, out=buf)
@@ -2420,18 +2410,18 @@ def sky_illumination(dem,
             np.subtract(_, buf, out=_)
             np.multiply(_d_aspect, _, out=_)
             np.maximum(_, 0, out=_)
-            uniform_b = _sky_illum_iadd(uniform_b, _)
+            uniform_b = _accumulate(uniform_b, _)
             if compute_overcast:
                 _cos3 = np.power(cos_, 3, out=buf)  # == cos_ ** 3
                 np.maximum(_cos3, 0, out=_)
-                overcast_c = _sky_illum_iadd(overcast_c, _)
+                overcast_c = _accumulate(overcast_c, _)
                 # reference expression reproduced in place: 2. / 3. - np.cos(_) + _cos3 / 3.
                 np.subtract(2. / 3., cos_, out=cos_)
                 np.divide(_cos3, 3., out=_cos3)
                 np.add(cos_, _cos3, out=cos_)
                 np.multiply(_d_aspect, cos_, out=cos_)
                 np.maximum(cos_, 0, out=cos_)
-                overcast_d = _sky_illum_iadd(overcast_d, cos_)
+                overcast_d = _accumulate(overcast_d, cos_)
         else:
             # Reference expressions of the original code (used for other dtypes; the two branches above
             # reproduce them bitwise for float64)
