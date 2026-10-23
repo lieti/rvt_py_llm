@@ -4,7 +4,7 @@
 
 # Relief Visualization Toolbox Python library
 
-![](./docs/figures/RVT_head.png)
+![](./figures/RVT_head.png)
 
 Relief Visualization Toolbox (RVT) was produced to help scientists visualize raster elevation model datasets. We have narrowed down the selection to include techniques that have proven to be effective for identification of small scale features. The default settings therefore assume working with high resolution digital elevation models derived from airborne laser scanning missions (lidar), however RVT methods can also be used for other purposes.
 
