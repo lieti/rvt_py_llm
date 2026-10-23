@@ -203,12 +203,9 @@ class DefaultValues:
     [Local dominance, prefix ld_]
     ld_compute : int
         Default 0 (0/1). Compute in ``save_visualizations``.
-    ld_min_rad : int
-        Default 10 (px). Smallest radial distance of the observed ring.
-    ld_max_rad : int
-        Default 20 (px). Largest radial distance of the observed ring.
-    ld_rad_inc : int
-        Default 1 (px). Step of the radial distance.
+    ld_min_rad, ld_max_rad, ld_rad_inc : int
+        Defaults 10, 20 and 1 (px). Smallest and largest radial distance of the observed ring and the step
+        between them.
     ld_anglr_res : int
         Default 15 (deg). Angular step between directions.
     ld_observer_h : float
@@ -218,9 +215,11 @@ class DefaultValues:
     msrm_compute : int
         Default 0 (0/1). Compute in ``save_visualizations``.
     msrm_feature_min : float
-        Default 0 (m). Smallest feature size to detect.
+        Default 0 (m; int in a new instance, float after ``read_default_from_file``). Smallest feature size to
+        detect.
     msrm_feature_max : float
-        Default 20 (m). Largest feature size to detect.
+        Default 20 (m; int in a new instance, float after ``read_default_from_file``). Largest feature size to
+        detect.
     msrm_scaling_factor : int
         Default 2. Exponent of the filter-radius sequence of ``rvt.vis.msrm``.
 
