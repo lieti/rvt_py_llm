@@ -73,9 +73,41 @@ Rules:
 | Dtype | inputs converted to float32; some outputs are float64 (stated per function) |
 | NaN | NaN in the input stays NaN in the output at the same pixels unless a function fills it (stated per function) |
 | Edges | each function pads with its own mode (reflect, edge, symmetric); the mode is stated in its docstring |
-| `ve_factor` | vertical exaggeration, checked to lie in [-10000, 10000] |
+| `ve_factor` | vertical exaggeration, checked to lie in [-10000, 10000]; `mstp` accepts only [-1000, 10000] (KNOWN_ISSUES KI-05) |
 | Accelerators | optional numba kernels registered through `rvt/_accel.py`, with a numpy fallback; `RVT_NO_ACCEL=1` switches them off; results are bitwise identical either way |
 | Threads | `RVT_NUM_THREADS`, then `NUMBA_NUM_THREADS`; results do not depend on the thread count |
+
+### 3.1 Which public `rvt.vis` functions modify the caller's array when `no_data` is given
+
+Derived from the `no_data` entries of the docstrings and checked by calling each function on a 48 x 48 px float32
+array with one pixel equal to `no_data` (and on the same array as int16) at commit `234b156`. "Modified" means that
+the pixels equal to `no_data` are NaN in the caller's array after the call. The in-place replacement happens before
+the float32 conversion, so float64 arrays are modified too, and an integer array raises ValueError ("cannot convert
+float NaN to integer"; KNOWN_ISSUES KI-17).
+
+| function | caller's float array modified | integer array with `no_data` |
+|---|---|---|
+| `byte_scale`, 2D input | no (copied first) | ValueError |
+| `byte_scale`, 3D input | yes (the bands are views of the input; KI-15) | ValueError |
+| `slope_aspect` | no (converted to float32 first) | works, input unchanged |
+| `hillshade` | yes | ValueError |
+| `multi_hillshade` | yes | ValueError |
+| `slrm` | yes | ValueError |
+| `sky_view_factor` | no (converted to float32 first) | works, input unchanged |
+| `local_dominance` | yes | ValueError |
+| `sky_illumination` | yes | ValueError |
+| `shadow_horizon` | yes | ValueError |
+| `msrm` | yes | ValueError |
+| `mstp` | yes | ValueError |
+
+Functions without a `no_data` parameter (`mean_filter`, `sky_view_factor_compute`, `max_elevation_deviation`,
+`integral_image`, `topographic_dev`, `fill_where_nan`) have no such replacement; `mean_filter`,
+`max_elevation_deviation` and `fill_where_nan` were checked to leave a float32 input with NaN unchanged.
+`DefaultValues.get_*` pass the caller's array and `no_data` on, so they inherit the row of the function they call
+(checked: `get_hillshade`, `get_slrm` modify, `get_sky_view_factor` does not); `get_neg_opns` ignores `no_data`
+(KI-65) and does not modify. Other in-place effects (not caused by `no_data`): `DefaultValues.float_to_8bit` clips its
+argument (KI-60); `blend_func.scale_within_0_and_1` overwrites NaN (KI-20); overlay and soft light write into the
+background (KI-33).
 
 ## 4. Documents
 
