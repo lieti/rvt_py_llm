@@ -1,0 +1,96 @@
+# AGENTS.md — rules for LLM sessions (and other contributors) working on rvt_py_llm
+
+## What this repository is
+
+rvt_py_llm is the upstream Relief Visualization Toolbox Python library (rvt_py, EarthObservation/RVT_py, by Žiga
+Kokalj et al.) with one MSTP precision fix, eleven performance commits that keep every output bitwise identical, and
+a documentation and test pass (0.1.0). The import name is `rvt`. Read [README.md](README.md) first, then
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where things are.
+
+Tags: `baseline` (upstream `bab109c`), `baseline-fixed` (`03702f4`, + precision fix), `start` (`8413d3e`, optimized
+code + equivalence tests), `tests-frozen` (annotated, on `c341ec8`, the frozen test set).
+
+## Hard rules
+
+1. **Bitwise identity.** Every public function, method and class returns bitwise identical results to tag `start`,
+   with and without numba, for any thread count; in-place effects on arguments, files written, exception types and
+   warnings stay the same. "Close" is not enough: a change that moves one bit inside a test tolerance is wrong.
+2. **Frozen tests.** Files that exist under `tests/` at tag `tests-frozen` are never modified, renamed or deleted, and
+   no configuration may skip, deselect or xfail them. New tests go into new files. A failing frozen test means the
+   code change is wrong.
+3. **No API change.** Names, signatures, defaults, return shapes and dtypes, `DefaultValues` attributes, settings
+   files and output file names stay as they are. `tests/test_api_snapshot.py` checks this.
+4. **Document latent bugs, do not fix them.** Behaviour that looks wrong is described in the docstring Notes and in
+   [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) (file:line at a tag, impact, repro), and pinned by a test with the
+   comment `# pins current behaviour`. Fixing is the upstream authors' decision.
+5. **numba fallback contract.** numba stays optional and is imported lazily (never at `import rvt`). Every kernel is
+   declared with `@_accel.jit_kernel`, run through `_accel.call`, and has a numpy path that gives the same bits.
+   `RVT_NO_ACCEL=1` must switch every kernel off. No fastmath, no on-disk cache, no `parallel=True`.
+6. **Determinism.** Results must not depend on the thread count, the block size, the machine load or the order of
+   calls. No process pools (rvt also runs inside QGIS), no caching of results between calls, no work after a
+   function returns.
+7. **No new dependencies.** Runtime: numpy, scipy, matplotlib, GDAL; optional numba. Portable code only (pathlib, no
+   OS-specific calls).
+8. **Hot code.** Bodies of numba kernels and inner block loops change only in a `refactor:` commit that is proven by
+   the full test suite and `equiv.py`.
+
+## Commit classes
+
+The subject line starts with the class; one logical change per commit; subject <= 72 characters; the body says what
+and why.
+
+| class | allowed content | machine check |
+|---|---|---|
+| `docs:` | docstrings, comments, blank lines | AST without docstrings identical |
+| `msg:` | text of exception or warning messages only | AST differs only in string constants inside `raise` / `warn` |
+| `refactor:` | behaviour-neutral code edits | full test suite (accel and `RVT_NO_ACCEL=1`) + `equiv.py` PASS |
+| `test:` | new test files only | frozen check PASS |
+| `meta:` | packaging, repository documents (`*.md`, `setup.py`, requirements) | no change under `rvt/` |
+
+## How to verify a change
+
+From the repository root:
+
+```
+python -m pytest tests -q                                   # 1089 passed
+RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash
+$env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
+```
+
+In the development workspace (parent directory with `pixi.toml`; Python only through `pixi run`):
+
+```
+pixi run python work/llm/astcheck.py --repo <checkout> --range main..HEAD   # every commit against its class
+pixi run python work/llm/equiv.py --b-dir <checkout>                        # bitwise records vs tag start, 3 variants
+pixi run python work/llm/frozen_check.py --ref <branch>                     # frozen tests untouched and PASSED
+```
+
+`equiv.py` is required for every `refactor:` commit. A test must derive its expected values independently of the
+code under test (analytic results, properties, a plain reference implementation in the test file); no golden files.
+Details: [docs/TESTING.md](docs/TESTING.md). Never run plain `pytest` at the repository root (upstream scripts
+`test_tile.py`, `test_rvt_tile.py` are there).
+
+## Where things are
+
+| need | file |
+|---|---|
+| algorithms | `rvt/vis.py` |
+| default parameters, `get_*` / `save_*`, GeoTIFF I/O | `rvt/default.py` |
+| blending, e3MSTP, e4MSTP | `rvt/blend.py`, `rvt/blend_func.py` |
+| tiling | `rvt/tile.py` |
+| numba switch, kernels registry | `rvt/_accel.py` |
+| block size of blocked loops | `rvt/_blocking.py` |
+| settings files | `settings/` |
+| module map, call graphs, "change X look at Y" | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| units, dtypes, NaN, edges, docstring standard | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) |
+| latent bugs | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |
+| what changed against upstream and why it is equivalent | [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md) |
+
+## Writing standard
+
+[docs/CONVENTIONS.md](docs/CONVENTIONS.md): numpy-style docstrings with units, dtypes, shapes, NaN and edge handling;
+comments say why, not what; no commented-out code; no references to files outside this repository in code comments.
+Documents: English, plain declarative sentences, numbers with units and the data set they were measured on, radii as
+px and m ("r = 10 px = 2.5 m at 0.25 m/px"), every claim about code with `file:line` at a named tag or commit, no
+superlatives or marketing words. Do not explain SVF, MSTP and the other methods beyond one sentence with a literature
+pointer.
