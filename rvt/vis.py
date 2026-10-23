@@ -554,6 +554,25 @@ def multi_hillshade(dem,
     return multi_hillshade_out
 
 
+def _box_sum(table, lo, hi, n_rows, n_cols):
+    """
+    Return the box sums of an integral image ``table`` on an output window, (n_rows, n_cols), in its dtype.
+
+    ``lo`` and ``hi`` are the offsets of the top-left and bottom-right corner terms of the window in the
+    table: for a box of radius r in a DEM padded by (p + 1, p), ``lo = p - r`` and ``hi = p + r + 1``. The
+    result is ``((I[lo, lo] + I[hi, hi]) - I[hi, lo]) - I[lo, hi]``, the terms of the reference
+    ``roll(r, r) + roll(-r-1, -r-1) - roll(-r-1, r) - roll(r, -r-1)`` in the same order and dtype, taken as
+    slices: on the output window no roll wraps, so the values are bitwise identical.
+
+    Used by ``mean_filter`` (p = r, so ``lo = 0``, ``hi = 2r + 1``) and by ``max_elevation_deviation``
+    (p = ``maximum_radius``, one call per radius and table).
+    """
+    box = np.add(table[lo:lo + n_rows, lo:lo + n_cols], table[hi:hi + n_rows, hi:hi + n_cols])
+    box -= table[hi:hi + n_rows, lo:lo + n_cols]
+    box -= table[lo:lo + n_rows, hi:hi + n_cols]
+    return box
+
+
 def mean_filter(dem, kernel_radius):
     """
     Apply a square mean (low-pass) filter, ignoring NaN.
@@ -619,26 +638,17 @@ def mean_filter(dem, kernel_radius):
     nr_rows, nr_cols = dem_pad.shape[0] - 2 * radius_cell - 1, dem_pad.shape[1] - 2 * radius_cell - 1
     off = 2 * radius_cell + 1
 
-    def _box_sum(integral):
-        """Return the (2r + 1)^2 box sums of ``integral`` on the output window, (H, W), in its dtype:
-        ``(I[:h, :w] + I[2r+1:, 2r+1:]) - I[2r+1:, :w] - I[:h, 2r+1:]``, the same terms and order as the
-        reference ``roll + roll - roll - roll``."""
-        out = np.add(integral[:nr_rows, :nr_cols], integral[off:, off:])
-        np.subtract(out, integral[off:, :nr_cols], out=out)
-        np.subtract(out, integral[:nr_rows, off:], out=out)
-        return out
-
     # integral image (same values as integral_image(dem_pad), cumsum done in place)
     dem_i1 = dem_pad.astype(np.float64, copy=dem_pad.dtype != np.float64)
     np.cumsum(dem_i1, axis=0, out=dem_i1)
     np.cumsum(dem_i1, axis=1, out=dem_i1)
-    mean_out = _box_sum(dem_i1)
+    mean_out = _box_sum(dem_i1, 0, off, nr_rows, nr_cols)
     del dem_i1
 
     if has_nan:
         # kernel nr pixel integral image
         dem_i_nr_pixels = integral_image(~idx_nan_dem_pad, np.int64)
-        kernel_nr_pix_arr = _box_sum(dem_i_nr_pixels)
+        kernel_nr_pix_arr = _box_sum(dem_i_nr_pixels, 0, off, nr_rows, nr_cols)
         del dem_i_nr_pixels
     else:
         # no nan: every window holds exactly (2r + 1)^2 pixels (exact int64, as the integral sums)
@@ -2704,7 +2714,7 @@ def topographic_dev(dem, dem_i_nr_pixels, dem_i1, dem_i2, kernel_radius):
     warnings are suppressed).
 
     Not called inside rvt: ``max_elevation_deviation`` evaluates the same expressions on the output window
-    only (``_mstp_box_sum``, ``_mstp_dev_max_kernel``). Kept as public API.
+    only (``_box_sum``, ``_mstp_dev_max_kernel``). Kept as public API.
 
     See Also
     --------
@@ -2756,7 +2766,7 @@ def _mstp_dev_max_kernel(dem_i1, dem_i2, dem_i_nr_pixels, has_nr_pixels, dem_cen
     ``maximum_radius`` the padding offset. Output: ``out`` (H, W) float32, written in place; ``buf`` is a
     float64 scratch row of length W. Serial, so independent of the thread count.
 
-    Equivalence with the sliced numpy path (``_mstp_box_sum``), bitwise, per pixel and radius:
+    Equivalence with the sliced numpy path (``_box_sum``), bitwise, per pixel and radius:
 
     - box sums ``((a + b) - c) - d`` of the tables in the same term order;
     - the int64 pixel-count box sum, exact in int64, converted to float64 (numpy promotes it in the
@@ -2841,7 +2851,7 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
 
     Implementation: the original code called ``topographic_dev`` on the padded extent (12 ``np.roll``
     copies of the tables per radius) and cropped. Here the same float64 expressions, in the same order, are evaluated on
-    the output window from slices (``_mstp_box_sum``), or per pixel by the numba kernel
+    the output window from slices (``_box_sum``), or per pixel by the numba kernel
     ``_mstp_dev_max_kernel`` when every radius is positive (``RVT_NO_ACCEL=1`` switches it off); both are
     bitwise identical to the original. The float64 running maximum is rounded to float32 once at the end.
 
@@ -2907,7 +2917,7 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
             return dev_max_out
         del dev_max_out  # fallback: numpy path below
 
-    # Numpy path: topographic_dev (the reference) evaluated on the output window with _mstp_box_sum, the same
+    # Numpy path: topographic_dev (the reference) evaluated on the output window with _box_sum, the same
     # float64 expressions in the same order; also the fallback of the kernel and the path for radii <= 0.
     for kernel_radius in range(minimum_radius, maximum_radius + 1, step):
         if kernel_radius <= 0:
@@ -2919,11 +2929,11 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
             if dem_i_nr_pixels is None:
                 kernel_nr_pix = float((2 * kernel_radius + 1) ** 2)
             else:
-                kernel_nr_pix = _mstp_box_sum(dem_i_nr_pixels, lo, hi, n_rows, n_cols)
+                kernel_nr_pix = _box_sum(dem_i_nr_pixels, lo, hi, n_rows, n_cols)
             with np.errstate(divide='ignore', invalid='ignore'):  # Suppress warning for dividing by zero
-                dem_mean = _mstp_box_sum(dem_i1, lo, hi, n_rows, n_cols)
+                dem_mean = _box_sum(dem_i1, lo, hi, n_rows, n_cols)
                 dem_mean /= kernel_nr_pix
-                dem_std = _mstp_box_sum(dem_i2, lo, hi, n_rows, n_cols)
+                dem_std = _box_sum(dem_i2, lo, hi, n_rows, n_cols)
                 dem_std /= kernel_nr_pix
                 dem_std -= dem_mean ** 2
                 np.abs(dem_std, out=dem_std)
@@ -2951,22 +2961,6 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
     dev_max_out[idx_nan_dem] = np.nan
 
     return dev_max_out.astype(np.float32)
-
-
-def _mstp_box_sum(table, lo, hi, n_rows, n_cols):
-    """
-    Return the box sums of ``topographic_dev`` on the output window, (n_rows, n_cols), in the table dtype.
-
-    ``lo = maximum_radius - r`` and ``hi = maximum_radius + r + 1`` are the offsets of the four corners in
-    the table of the DEM padded by (maximum_radius + 1, maximum_radius). The result is
-    ``((I[lo, lo] + I[hi, hi]) - I[hi, lo]) - I[lo, hi]``, the terms of the reference
-    ``roll(r, r) + roll(-r-1, -r-1) - roll(-r-1, r) - roll(r, -r-1)`` in the same order, taken as slices:
-    on the output window no roll wraps, so the values are bitwise identical.
-    """
-    box = np.add(table[lo:lo + n_rows, lo:lo + n_cols], table[hi:hi + n_rows, hi:hi + n_cols])
-    box -= table[hi:hi + n_rows, lo:lo + n_cols]
-    box -= table[lo:lo + n_rows, hi:hi + n_cols]
-    return box
 
 
 def mstp(dem,
