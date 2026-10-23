@@ -20,6 +20,7 @@ Copyright:
 
 # python libraries
 import numpy as np
+from rvt import _accel
 from scipy.interpolate import griddata, RectBivariateSpline
 from scipy.ndimage import distance_transform_edt
 from scipy.spatial import cKDTree
@@ -941,6 +942,30 @@ def sky_view_factor(dem,
     return dict_svf_asvf_opns
 
 
+@_accel.jit_kernel
+def _local_dominance_kernel(dem, dem_obs, out, pad_width, s_y, s_x, distances, dist_factor):
+    # Serial kernel of the sliced numpy path in local_dominance, same operations per shift and pixel: compare in the
+    # input dtypes, subtract rounded to float32 (the float32 difference buffer), float64 division by distances[i] and
+    # multiplication by dist_factor[i], float64 add into the accumulator rounded to its dtype, shifts in the same
+    # order. NaN compares False and is skipped, as with where=mask.
+    n_rows, n_cols = out.shape
+    for r in range(n_rows):
+        obs_r = dem_obs[r]
+        out_r = out[r]
+        for i_s in range(s_y.shape[0]):
+            row = pad_width - s_y[i_s] + r
+            c0 = pad_width - s_x[i_s]
+            moved_r = dem[row, c0:c0 + n_cols]
+            dist = distances[i_s]
+            fac = dist_factor[i_s]
+            for c in range(n_cols):
+                x = obs_r[c]
+                m = moved_r[c]
+                o = out_r[c]
+                v = np.float64(np.float32(x - m)) / dist * fac
+                out_r[c] = o + v if x > m else o
+
+
 def local_dominance(dem,
                     min_rad=10,
                     max_rad=20,
@@ -1019,6 +1044,14 @@ def local_dominance(dem,
         dem_in = dem[pad_width:pad_width + n_rows, pad_width:pad_width + n_cols]
         dem_obs = dem_in + observer_height  # float32, as (dem + observer_height)
         local_dom_out = dem_in * 0
+        if (dem.dtype in (np.float32, np.float64) and dem_obs.dtype in (np.float32, np.float64)
+                and distances.dtype == np.float64 and dist_factor.dtype == np.float64):
+            s_y_arr = np.array([s[0] for s in shifts], dtype=np.int64)
+            s_x_arr = np.array([s[1] for s in shifts], dtype=np.int64)
+            if _accel.call(_local_dominance_kernel, dem, dem_obs, local_dom_out, pad_width, s_y_arr, s_x_arr,
+                           distances, dist_factor):
+                return local_dom_out / norma
+            local_dom_out = dem_in * 0  # fallback: start again from the numpy path
         blk_rows = max(1, 32768 // max(1, n_cols))
         buf_mask = np.empty((blk_rows, n_cols), dtype=bool)
         buf_diff = np.empty((blk_rows, n_cols), dtype=np.float32)
