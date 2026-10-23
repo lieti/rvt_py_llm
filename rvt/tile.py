@@ -162,6 +162,9 @@ def save_visualization_tile_by_tile(
     Known issue: ``function_parameters=None`` raises TypeError although the signature allows None. See
     docs/KNOWN_ISSUES.md.
 
+    Known issue: the None entries of ``function_parameters`` are replaced in the caller's dict, so reusing the
+    dict for another DEM keeps the first DEM's pixel size and no-data value. See docs/KNOWN_ISSUES.md.
+
     Known issue: the y pixel size is ``-gt[5]`` without ``abs`` (``rvt.default.get_raster_arr`` uses ``abs``), so
     for a raster with a positive ``gt[5]`` (south-up) the resolution passed on is negative and most
     ``rvt.vis`` functions raise. See docs/KNOWN_ISSUES.md.

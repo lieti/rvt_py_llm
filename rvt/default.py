@@ -3553,8 +3553,8 @@ class DefaultValues:
         output requested and present and ``overwrite`` 0 the DEM is still read and computed, nothing is
         written and 1 is returned. See docs/KNOWN_ISSUES.md.
 
-        Known issue: the 8-bit raster is written with ``no_data=np.nan``, which a byte band cannot hold;
-        the file records no no-data value. See docs/KNOWN_ISSUES.md.
+        Known issue: the 8-bit raster is written with ``no_data=np.nan``, which matches no byte value; GDAL
+        reports the no-data value as NaN, rasterio as None. See docs/KNOWN_ISSUES.md.
 
         Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
         which replaces existing files and has its own known issues (see there).
@@ -4207,7 +4207,7 @@ def save_raster(src_raster_path, out_raster_path, out_raster_arr: np.ndarray, no
         source raster.
     no_data : float or None
         No-data value stored in the file (set on band 1; a GeoTIFF holds one value for all bands). None stores
-        none. NaN cannot be stored for a byte raster.
+        none. NaN on a byte raster matches no pixel value (GDAL reports NaN, rasterio None).
     e_type : int
         GDAL data type code: 6 = ``GDT_Float32`` (default), 1 = ``GDT_Byte``; see
         https://gdal.org/api/raster_c_api.html#_CPPv412GDALDataType. Values are converted by GDAL.
