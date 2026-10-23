@@ -4,8 +4,9 @@ rvt_py_llm is a drop-in replacement for rvt_py, the Relief Visualization Toolbox
 co-authors (ZRC SAZU and University of Ljubljana, https://github.com/EarthObservation/RVT_py). It computes relief
 visualizations of digital elevation models (slope, hillshade, sky-view factor, openness, local dominance, sky
 illumination, SLRM, MSRM, MSTP) and blends them into composites (VAT, e3MSTP, e4MSTP). The import name is still
-`rvt`, the API is unchanged, and the outputs are bitwise identical to the upstream code with one precision fix. The
-code is faster, every function is documented, and 1089 tests guard the behaviour. The upstream README is kept in
+`rvt`, the API is unchanged, and the outputs are bitwise identical to the upstream code with one precision fix
+(tag `baseline-fixed`); against raw upstream only MSTP, e3MSTP and e4MSTP differ. The code is faster, every function
+is documented, and 1089 tests guard the behaviour. The upstream README is kept in
 [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 
 ## TL;DR (English)
@@ -15,9 +16,13 @@ code is faster, every function is documented, and 1089 tests guard the behaviour
 - Drop-in: same functions, signatures, defaults, settings files and output dtypes; existing scripts keep working.
 - Speed: the 11 visualizations of a tiling pipeline together run x11.44 [95 % interval 11.35-11.46] faster than the
   fixed baseline on `bench_final` (three 2048 x 2048 px windows at 0.25 m/px), 1 thread per process.
-- Outputs: bitwise identical to that baseline, with and without numba, for any thread count.
+- Outputs: bitwise identical to the fixed baseline (tag `baseline-fixed` = upstream + the precision fix) on all
+  evaluation sets, with and without numba, for any thread count. Compared with raw upstream (tag `baseline`), every
+  output is identical except MSTP, e3MSTP and e4MSTP, which change because of the precision fix (see "One precision
+  fix" below).
 - numba is optional: if it is missing or fails, the numpy code runs with the same results; `RVT_NO_ACCEL=1` turns it off.
-- Proof: frozen tests, AST check per commit, bitwise comparison of every public call against tag `start`, mutants.
+- Proof: frozen tests, AST check per commit, bitwise comparison of every public call against tag `start`, mutants;
+  the tools are in `tools/proof/`.
 - Read next: docs/CHANGES_VS_UPSTREAM.md, docs/ARCHITECTURE.md, docs/KNOWN_ISSUES.md, docs/TESTING.md.
 
 ## TL;DR (slovensky)
@@ -27,7 +32,8 @@ code is faster, every function is documented, and 1089 tests guard the behaviour
 - Náhrada 1:1: rovnaké funkcie, parametre, predvolené hodnoty a výstupy; existujúce skripty fungujú bez zmeny.
 - Rýchlosť: 11 vizualizácií spolu ×11,44 [11,35–11,46] oproti opravenej baseline na `bench_final`
   (2048 × 2048 px, 0,25 m/px), 1 vlákno.
-- Výstupy: bitovo zhodné s baseline, s numbou aj bez nej, pri ľubovoľnom počte vlákien.
+- Výstupy: bitovo zhodné s opravenou baseline (tag `baseline-fixed`), s numbou aj bez nej, pri ľubovoľnom počte
+  vlákien. Oproti pôvodnému upstreamu (tag `baseline`) sa líšia len MSTP, e3MSTP a e4MSTP (oprava presnosti).
 - Numba je voliteľná: bez nej beží numpy s rovnakým výsledkom; `RVT_NO_ACCEL=1` ju vypne.
 - Dôkaz: zmrazené testy, AST kontrola commitov, bitové porovnanie každého volania voči tagu `start`, mutačné testy.
 - Ďalej čítaj: `docs/CHANGES_VS_UPSTREAM.md`, `docs/ARCHITECTURE.md`, `docs/KNOWN_ISSUES.md`.
@@ -38,18 +44,19 @@ code is faster, every function is documented, and 1089 tests guard the behaviour
   run 4 to 79 times faster (local dominance 33.97 s -> 0.43 s on a 2048 x 2048 px window). Slope and hillshade are
   unchanged. Memory use per call is lower or equal.
 - **How.** The code computes only the pixels it returns instead of shifting whole padded arrays, works in blocks that
-  fit the CPU cache, and runs four inner loops through numba when it is installed. It performs the same arithmetic
-  in the same order, which is why the results are identical bit for bit.
+  fit the CPU cache, and runs four inner loops (five numba kernels) through numba when it is installed. It performs
+  the same arithmetic in the same order, which is why the results are identical bit for bit.
 - **One precision fix.** MSTP (and e3MSTP, e4MSTP, which use it) squared elevations in 32-bit floats, so the result
-  depended on the absolute elevation: the same terrain 17.3 m higher changed the 8-bit e3MSTP/e4MSTP by up to 210 DN.
-  The fix squares in 64-bit floats. These three outputs therefore differ from raw upstream; everything else is
-  identical to raw upstream.
+  depended on the absolute elevation: the same terrain 17.3 m higher changed the 8-bit e3MSTP/e4MSTP by up to
+  207-210 DN (99.9th percentile 150 DN; 512 x 512 px synthetic DEM at 300 m, measurement in the message of commit
+  `03702f4`). The fix squares in 64-bit floats; the difference is then at most 1 DN. These three outputs therefore
+  differ from raw upstream; everything else is identical to raw upstream.
 - **numba optional.** No new required dependency. numba costs about 0.2 s to import and 0.24-0.40 s to compile per
   kernel, once per process.
 - **Documentation.** Every public module, class and function has a numpy-style docstring (units, dtypes, edges,
   NaN, in-place effects); new documents describe the architecture, the tests, the known issues and the changes.
-- **Tests.** 223 equivalence tests of the optimized code and 866 characterization tests that pin the current
-  behaviour of every public function, including the API itself.
+- **Tests.** 223 equivalence tests of the optimized code and 866 tests that pin the current behaviour of every
+  public function (859 characterization tests and 7 API-snapshot tests); 1089 in total.
 - **Messages.** 40 exception texts were corrected (they named the old module `rvt.visualization`, a wrong function or
   a wrong bound). Exception types are unchanged.
 - **Not changed.** API, defaults, settings files, file names and outputs (except the precision fix). Behaviour that
@@ -113,11 +120,16 @@ at the root are not part of the suite):
 
 ```
 python -m pytest tests -q                                   # 1089 passed
-RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path
+RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1089 passed
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-The proof tools (AST check, bitwise record comparison, frozen check, mutants) are described in
+With `RVT_NO_ACCEL=1` all 1089 tests also pass and none is skipped: the tests that compare the numba path with the
+numpy path switch the accelerators on themselves. They are skipped only when numba is not installed.
+
+The proof tools (AST check, bitwise record comparison, frozen check, mutants, docstring lint) are in
+[tools/proof/](tools/proof/README.md) and run from the repository root, e.g.
+`python tools/proof/equiv.py` (last line `EQUIV PASS`); the method and the results are in
 [docs/TESTING.md](docs/TESTING.md).
 
 ## Documents
@@ -127,7 +139,8 @@ The proof tools (AST check, bitwise record comparison, frozen check, mutants) ar
 | [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md) | every change against upstream: precision fix, each performance commit with its equivalence argument and measured gain, the 0.1.0 pass, all changed exception texts |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | module map, call graphs, data flow, accelerated paths, where to change what |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 76 documented, unchanged issues with repros; tile buffers |
-| [docs/TESTING.md](docs/TESTING.md) | test suites, frozen-test rule, proof chain, commands |
+| [docs/TESTING.md](docs/TESTING.md) | test suites, frozen-test rule, proof chain, commands, release evidence |
+| [tools/proof/README.md](tools/proof/README.md) | the proof tools: what each proves, commands, expected last lines |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | units, dtypes, NaN, edges; docstring and writing standard |
 | [AGENTS.md](AGENTS.md) | rules for LLM sessions and other contributors |
 | [CHANGELOG.md](CHANGELOG.md) | release history |

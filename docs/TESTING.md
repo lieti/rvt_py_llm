@@ -74,9 +74,13 @@ A failing frozen test means the code change is wrong, not the test.
 
 ## 3. The proof chain
 
-The proof tools are not part of this repository: they live in the parent workspace of the 0.1.0 work
-(`work/llm/*.py`, run from the workspace root with `pixi run python ...`), together with their logs. They use the
-standard library and the packages of the pinned environment only.
+The proof tools are in [tools/proof/](../tools/proof/README.md) of this repository and run from the repository
+root (`python tools/proof/<tool>.py`, in the development workspace `pixi run python tools/proof/<tool>.py`). They
+find the repository from their own location, read the git refs `start`, `main` and `tests-frozen` of this
+repository, and build their scratch trees in `.proof_scratch/` (ignored by git). They use the standard library,
+numpy and pytest only. The 0.1.0 work ran the same scripts from the parent workspace (`work/llm/` there) before
+they were copied into the repository; the copies differ only in paths (repository root, scratch directory) and
+in pinning the pytest root directory of a scratch tree, so that node ids do not depend on its location.
 
 ### 3.1 astcheck: what a commit may change, proven without running code
 
@@ -177,7 +181,7 @@ The optimization run was judged by a frozen harness (`eval/` of the workspace): 
 on real DEM windows (`dev`, `holdout`, `bench_final`), also with numba made unimportable; determinism with default,
 1 and 2 threads; benchmarks with a fresh process per call. On `start` it reported `GATE FINAL PASS` with every output
 bitwise identical to `baseline-fixed` (`out/gate_final/` of the workspace). The 0.1.0 release reruns these checks on
-the final `main`; their result is recorded in [../CHANGELOG.md](../CHANGELOG.md).
+the final `main`; their results are recorded in section 6.
 
 ## 4. Commands
 
@@ -190,28 +194,49 @@ Run from the repository root unless stated. Do not run plain `pytest` at the roo
 | tests, numpy fallback | `$env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL` | `RVT_NO_ACCEL=1 python -m pytest tests -q` |
 | tests, one thread | `$env:RVT_NUM_THREADS="1"; python -m pytest tests -q; Remove-Item Env:RVT_NUM_THREADS` | `RVT_NUM_THREADS=1 python -m pytest tests -q` |
 
-Expected last line: `1089 passed` (3 warnings). In the development workspace, prefix with `pixi run` and pass the
-path of the checkout, e.g. `pixi run pytest rvt_py_llm/tests -q`.
+Expected last line: `1089 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
+the numba path with the numpy path run too (they switch the accelerators on themselves), so nothing is skipped.
+Without numba installed, the tests that need it are skipped. In the development workspace, prefix with `pixi run`
+and pass the path of the checkout, e.g. `pixi run pytest rvt_py_llm/tests -q`.
 
-Proof tools, from the workspace root (PowerShell and bash are the same command):
+Proof tools, from the repository root (PowerShell and bash are the same command; in the development workspace
+prefix `pixi run`). Expected last lines and runtimes: [tools/proof/README.md](../tools/proof/README.md).
 
 ```
-pixi run python work/llm/astcheck.py --repo rvt_py_llm --range start..main      # ASTCHECK PASS
-pixi run python work/llm/frozen_check.py --ref main                               # FROZEN PASS
-pixi run python work/llm/equiv.py                                                 # start vs main, frozen tests; EQUIV PASS (~2 min)
-pixi run python work/llm/equiv.py --b-dir <worktree>                              # start vs a worktree as it is on disk
-pixi run python work/llm/mutants.py --ref main --tests-ref tests-frozen          # MUTANTS PASS
-pixi run python work/llm/linecov.py --ref main --out <file.md>                   # coverage table
-pixi run python work/llm/doclint.py --dir rvt_py_llm                              # DOCLINT PASS
+python tools/proof/astcheck.py --repo . --range start..main      # ASTCHECK PASS
+python tools/proof/frozen_check.py --ref main                    # FROZEN PASS
+python tools/proof/equiv.py                                      # start vs main, frozen tests; EQUIV PASS
+python tools/proof/equiv.py --b-dir <checkout>                   # start vs a checkout as it is on disk
+python tools/proof/mutants.py --ref main --tests-ref tests-frozen   # MUTANTS PASS
+python tools/proof/linecov.py --ref main --out <file.md>         # coverage table
+python tools/proof/doclint.py                                    # DOCLINT PASS
 ```
 
 ## 5. Lesson: a helper script that shadowed a package
 
-The first line-coverage helper was saved as `work/llm/coverage.py`. The proof tools put `work/llm` on
-`PYTHONPATH` so that pytest can load `equiv_plugin.py`; numba imports the `coverage` package when it is present, and
-found the helper script instead, so numba failed to import in those runs. The test suite then skipped the 20 tests
+The first line-coverage helper was saved as `work/llm/coverage.py` in the workspace. The proof tools put their own
+directory (then `work/llm`, now `tools/proof`) on `PYTHONPATH` so that pytest can load `equiv_plugin.py`; numba
+imports the `coverage` package when it is present, and found the helper script instead, so numba failed to import
+in those runs. The test suite then skipped the 20 tests
 that need numba, the accelerated paths fell back to numpy, and two mutants in numba kernels (m06, m07) survived
 because no kernel ran. Nothing was wrong with the code under test; the measuring setup had changed it. The helper was
 renamed to `linecov.py`, and `equiv.py` and `mutants.py` now fail on any skipped test, so that a silent loss of the
 accelerated path cannot pass again. The general point: a proof run has to check that it exercised what it claims to
 exercise (no skips, kernels actually ran), not only that nothing failed.
+
+## 6. Release evidence
+
+The evaluation harness of the optimization run (`eval/` of the parent workspace, frozen, see section 3.6) is
+rerun on the release commit of 0.1.0. The release step fills this table; until then the cells say "pending".
+
+Release commit: pending.
+
+| check | what it compares | result | report |
+|---|---|---|---|
+| eval check `dev` | 11 visualizations on the `dev` DEM windows, bitwise against `baseline-fixed` | pending | pending |
+| eval check `dev --no-accel` | as `dev`, with numba made unimportable | pending | pending |
+| eval determinism | default, 1 and 2 threads, repeated calls | pending | pending |
+| eval check `bench_quick` | outputs on the `bench_quick` window | pending | pending |
+| `holdout` (via the final gate) | 11 visualizations on the `holdout` windows | pending | pending |
+| bench quick against `opt/perf` | speed of the release commit against tag `start` (`opt/perf`), 1 thread | pending | pending |
+| final gate | all of the above, `GATE FINAL PASS` / `FAIL` | pending | pending |

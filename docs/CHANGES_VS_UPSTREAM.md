@@ -29,7 +29,8 @@ return shapes and dtypes, exception types) is unchanged.
   the precision, so MSTP depended on the absolute elevation: the same terrain shifted by +17.3 m changed the 8-bit
   e3MSTP/e4MSTP output by up to 207-210 DN (99.9th percentile 150 DN) on a 512 x 512 px synthetic DEM at 300 m. With
   float64 squares the difference is at most 1 DN. All other visualizations are bitwise identical to raw upstream.
-- **numba is optional.** With numba installed, four inner loops run compiled; without it, or with
+- **numba is optional.** With numba installed, four inner loops run compiled (five kernels: sky illumination has
+  two); without it, or with
   `RVT_NO_ACCEL=1`, the numpy code runs and gives the same bits. numba costs about 0.2 s to import and 0.24-0.40 s to
   compile per kernel, once per process.
 - **Documentation and tests.** Every public function has a numpy-style docstring with units, dtypes, edges and NaN

@@ -57,12 +57,14 @@ RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-In the development workspace (parent directory with `pixi.toml`; Python only through `pixi run`):
+Proof tools, also from the repository root (they are in [tools/proof/](tools/proof/README.md); in the development
+workspace, the parent directory with `pixi.toml`, prefix every command with `pixi run`):
 
 ```
-pixi run python work/llm/astcheck.py --repo <checkout> --range main..HEAD   # every commit against its class
-pixi run python work/llm/equiv.py --b-dir <checkout>                        # bitwise records vs tag start, 3 variants
-pixi run python work/llm/frozen_check.py --ref <branch>                     # frozen tests untouched and PASSED
+python tools/proof/astcheck.py --repo . --range main..HEAD      # every commit against its class
+python tools/proof/equiv.py --b-dir .                           # bitwise records vs tag start, 3 variants
+python tools/proof/frozen_check.py --ref <branch>               # frozen tests untouched and PASSED
+python tools/proof/doclint.py                                   # docstrings complete
 ```
 
 `equiv.py` is required for every `refactor:` commit. A test must derive its expected values independently of the
@@ -72,15 +74,18 @@ Details: [docs/TESTING.md](docs/TESTING.md). Never run plain `pytest` at the rep
 
 ## Where things are
 
-| need | file |
+Line numbers refer to commit `234b156`; the function names are the stable references.
+
+| need | file, entry points |
 |---|---|
-| algorithms | `rvt/vis.py` |
-| default parameters, `get_*` / `save_*`, GeoTIFF I/O | `rvt/default.py` |
-| blending, e3MSTP, e4MSTP | `rvt/blend.py`, `rvt/blend_func.py` |
-| tiling | `rvt/tile.py` |
-| numba switch, kernels registry | `rvt/_accel.py` |
-| block size of blocked loops | `rvt/_blocking.py` |
+| algorithms | `rvt/vis.py`; kernels `vis._svf_max_slope_kernel` (`rvt/vis.py:857`), `vis._local_dominance_kernel` (`:1355`), `vis._sky_illum_search_kernel` (`:1864`), `vis._sky_illum_search_literal_kernel` (`:1893`), `vis._mstp_dev_max_kernel` (`:2758`) |
+| default parameters, `get_*` / `save_*`, GeoTIFF I/O | `rvt/default.py`; `DefaultValues.__init__` (`rvt/default.py:317`), `get_raster_arr` (`:4125`), `save_raster` (`:4194`) |
+| blending, e3MSTP, e4MSTP | `rvt/blend.py`, `rvt/blend_func.py`; `BlenderCombination.render_all_images` (`rvt/blend.py:616`), `blend.e3mstp` (`:1968`), `blend.e4mstp` (`:2040`), `blend_func.blend_images` (`rvt/blend_func.py:1171`) |
+| tiling | `rvt/tile.py`; `tile._get_rvt_visualization_overlap` (`rvt/tile.py:372`) |
+| numba switch, kernels registry | `rvt/_accel.py`; `_accel.enabled` (`rvt/_accel.py:49`), `_accel.call` (`:174`), `_accel.jit_kernel` (`:116`); per call site: docs/ARCHITECTURE.md section 4 |
+| block size of blocked loops | `rvt/_blocking.py`; `BLOCK_ELEMS` (`rvt/_blocking.py:19`) |
 | settings files | `settings/` |
+| proof tools | [tools/proof/](tools/proof/README.md) |
 | module map, call graphs, "change X look at Y" | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | units, dtypes, NaN, edges, docstring standard | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) |
 | latent bugs | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) |

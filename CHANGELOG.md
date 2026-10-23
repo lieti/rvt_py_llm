@@ -10,8 +10,9 @@ which is bitwise identical to the upstream code with the precision fix (`baselin
 
 ### Fixed
 - MSTP computes the local variance from float64 squares (`03702f4`). MSTP, e3MSTP and e4MSTP outputs therefore
-  differ from upstream: upstream changed the 8-bit e3MSTP/e4MSTP by up to 210 DN when the same terrain was shifted by
-  +17.3 m (512 x 512 px synthetic DEM at 300 m); after the fix by at most 1 DN.
+  differ from upstream: upstream changed the 8-bit e3MSTP/e4MSTP by up to 207-210 DN (99.9th percentile 150 DN)
+  when the same terrain was shifted by +17.3 m (512 x 512 px synthetic DEM at 300 m); after the fix by at most 1 DN
+  (measurement in the message of `03702f4`).
 - 40 exception messages in `rvt.vis` and `rvt.blend_func` name the right module (`rvt.vis` instead of
   `rvt.visualization`), function and bound; exception types are unchanged (`51a882a`, `66a4709`).
 
@@ -30,8 +31,10 @@ which is bitwise identical to the upstream code with the precision fix (`baselin
   package directory).
 
 ### Added
-- Optional numba acceleration of four inner loops, with automatic fallback to numpy and `RVT_NO_ACCEL=1`
-  (`rvt/_accel.py`, `0ddd8e0` .. `bd173ea`).
+- Optional numba acceleration of four inner loops (five kernels), with automatic fallback to numpy and
+  `RVT_NO_ACCEL=1` (`rvt/_accel.py`, `0ddd8e0` .. `bd173ea`).
+- Proof tools in `tools/proof/` (`astcheck.py`, `frozen_check.py`, `equiv.py` with `equiv_plugin.py`,
+  `mutants.py`, `linecov.py`, `doclint.py`, `frozen_manifest.json`), run from the repository root.
 - Tests: 223 equivalence tests (`8413d3e`) and 866 characterization and API-snapshot tests (frozen at tag
   `tests-frozen`).
 - Docstrings for every public module, class, function and method; equivalence contracts for private helpers and
@@ -41,11 +44,11 @@ which is bitwise identical to the upstream code with the precision fix (`baselin
   `docs/UPSTREAM_README.md`.
 
 ### Verification
-- Tests: 1089 passed, with accelerators and with `RVT_NO_ACCEL=1`.
+- Tests: 1089 passed, with accelerators and with `RVT_NO_ACCEL=1` (no test skipped).
 - At the freeze: `equiv.py` (accel, t1, noaccel; 153/153 public functions executed) and `mutants.py` (21/21 mutants
   killed by the tests and by equiv) PASS. For each refactor commit: tests (accel and `RVT_NO_ACCEL=1`) and
   `equiv.py` PASS. Every commit of `start..main` passes `astcheck.py` for its class (see docs/TESTING.md).
-- Evaluation harness on the release commit: to be recorded by the release step.
+- Evaluation harness on the release commit: see docs/TESTING.md, section Release evidence.
 
 ## Earlier history
 
