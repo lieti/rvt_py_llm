@@ -1,9 +1,31 @@
 """
-Relief Visualization Toolbox – Visualization Functions
+Relief Visualization Toolbox – DefaultValues: default parameters, computing and saving visualizations
 
-Contains all default values for visualisation functions, which can be changed.
-Allows computing from rvt.visualization with using defined default values and saving
-output rasters with default names (dependent on default values).
+``DefaultValues`` holds one parameter set for every visualization of ``rvt.vis`` (slope, hillshade, shadow,
+multi-direction hillshade, SLRM, SVF, anisotropic SVF, positive and negative openness, sky illumination, local
+dominance, MSRM, MSTP) together with the output options (float and/or 8-bit GeoTIFF, 8-bit stretch) and the
+tile settings. Its methods:
+
+- ``get_<vis>``: compute a visualization from a numpy array with ``rvt.vis`` and the stored parameters;
+- ``save_<vis>``: read a DEM GeoTIFF, compute, and write GeoTIFFs whose file names encode the parameters
+  (``get_<vis>_file_name``, ``get_<vis>_path``); DEMs above ``tile_size_limit`` px are processed tile by tile
+  with ``rvt.tile``; ``save_visualizations`` runs every visualization whose ``<vis>_compute`` flag is set and
+  writes a log file (``create_log_file``);
+- ``save_default_to_file`` / ``read_default_from_file``: settings file (json; a legacy ``.txt`` format is read);
+- ``float_to_8bit``: stretch a float result to 0-255 with the ``<vis>_bytscl`` setting of that visualization;
+- ``calculate_visualization``: compute float and 8-bit result for one ``RVTVisualization`` (used by
+  ``rvt.tile``).
+
+Module-level raster I/O helpers (GDAL): ``get_raster_arr``, ``get_raster_size``, ``save_raster``.
+
+Relation to the other modules: ``rvt.vis`` holds the numerics and is called with the parameters stored here;
+``rvt.blend_func.normalize_image`` and ``rvt.vis.byte_scale`` give the 8-bit stretch; ``rvt.tile`` uses
+``DefaultValues.calculate_visualization`` and the file-name methods; ``rvt.blend`` (``BlenderCombination``)
+uses a ``DefaultValues`` instance to compute (``get_<vis>``) or save and reload (``save_<vis>``,
+``get_<vis>_path``) the layers of a blend that are not given as image files.
+
+Units: elevation in m, pixel size (resolution) in m/px, radii and distances in px unless the attribute says m
+(``msrm_feature_min``, ``msrm_feature_max``, ``ld_observer_h``), angles in degrees.
 
 Credits:
     Žiga Kokalj (ziga.kokalj@zrc-sazu.si)
@@ -37,6 +59,33 @@ import time
 
 
 class RVTVisualization(Enum):
+    """
+    Identify one visualization; the value is the short name used as attribute prefix in ``DefaultValues``.
+
+    ==================================  ============  ==========================================================
+    Member                              Value         Visualization (``rvt.vis`` function)
+    ==================================  ============  ==========================================================
+    SLOPE                               "slp"         slope gradient (``slope_aspect``, key "slope")
+    HILLSHADE                           "hs"          hillshade (``hillshade``)
+    SHADOW                              "shd"         binary cast shadow (``shadow_horizon``, key "shadow");
+                                                      uses the ``hs_`` sun position
+    MULTI_HILLSHADE                     "mhs"         hillshade from ``mhs_nr_dir`` directions
+                                                      (``multi_hillshade``)
+    SIMPLE_LOCAL_RELIEF_MODEL           "slrm"        simple local relief model (``slrm``)
+    SKY_VIEW_FACTOR                     "svf"         sky-view factor (``sky_view_factor``, key "svf")
+    ANISOTROPIC_SKY_VIEW_FACTOR         "asvf"        anisotropic SVF (``sky_view_factor``, key "asvf")
+    POSITIVE_OPENNESS                   "pos_opns"    positive openness (``sky_view_factor``, key "opns")
+    NEGATIVE_OPENNESS                   "neg_opns"    negative openness (positive openness of the negated DEM)
+    SKY_ILLUMINATION                    "sim"         sky illumination (``sky_illumination``)
+    LOCAL_DOMINANCE                     "ld"          local dominance (``local_dominance``)
+    MULTI_SCALE_RELIEF_MODEL            "msrm"        multi-scale relief model (``msrm``)
+    MULTI_SCALE_TOPOGRAPHIC_POSITION    "mstp"        multi-scale topographic position, RGB (``mstp``)
+    ==================================  ============  ==========================================================
+
+    Used by ``DefaultValues.calculate_visualization``, ``DefaultValues.float_to_8bit``,
+    ``DefaultValues.get_visualization_file_name`` / ``get_visualization_path`` and ``rvt.tile``. The value of
+    SHADOW ("shd") is not an attribute prefix; the shadow parameters are ``hs_sun_azi`` and ``hs_sun_el``.
+    """
     SLOPE = "slp"
     HILLSHADE = "hs"
     SHADOW = "shd"
@@ -54,178 +103,216 @@ class RVTVisualization(Enum):
 
 class DefaultValues:
     """
-    Class which define layer for blending. BlenderLayer is basic element in BlenderCombination.layers list.
+    Hold the default parameters of every RVT visualization and compute or save visualizations with them.
+
+    One instance is one parameter set. Change attributes directly, or read them from a settings file
+    (``read_default_from_file``) and write them with ``save_default_to_file``. Method families (``<vis>`` is
+    slope, hillshade, shadow, multi_hillshade, slrm, sky_view_factor, neg_opns, sky_illumination,
+    local_dominance, msrm or mstp):
+
+    - ``get_<vis>(dem_arr, ...)``: compute from a 2D numpy array with ``rvt.vis`` and return the result;
+    - ``save_<vis>(dem_path, custom_dir, save_float, save_8bit)``: read a DEM GeoTIFF, compute and write the
+      float32 and/or 8-bit GeoTIFF; above ``tile_size_limit`` px the DEM is processed tile by tile (``rvt.tile``);
+    - ``get_<vis>_file_name(dem_path, bit8)`` / ``get_<vis>_path(dem_path, bit8)``: output name encoding the
+      parameters / that name in the DEM directory;
+    - ``float_to_8bit``, ``calculate_visualization``, ``save_visualizations``, ``create_log_file``.
+
+    Flags are int 0/1 (bool works too). Radii and distances are in px unless marked m. The attributes below are
+    grouped by visualization; each entry gives the default and the unit or the allowed values.
 
     Attributes
     ----------
-    overwrite : bool
-        When saving visualisation functions and file already exists, if 0 it doesn't compute it, if 1 it overwrites it.
+    [General]
+    overwrite : int
+        Default 0 (0/1). 1 recomputes and replaces existing output files; 0 keeps existing files (a
+        ``save_<vis>`` call returns 0 without computing when all requested outputs exist).
     ve_factor : float
-        For all visualization functions. Vertical exaggeration.
-    slp_compute : bool
-        If compute Slope. Parameter for GUIs.
+        Default 1. Vertical exaggeration factor passed to every visualization (``rvt.vis`` accepts
+        -10000..10000); not passed by ``get_mstp`` (known issue, see ``get_mstp``).
+
+    [Slope gradient, prefix slp_]
+    slp_compute : int
+        Default 0 (0/1). Compute the slope in ``save_visualizations``.
     slp_output_units : str
-        Slope. Output units [radian, degree, percent].
-    hs_compute : bool
-        If compute Hillshade. Parameter for GUIs.
+        Default "degree"; "degree", "radian" or "percent". Unit of the slope.
+
+    [Hillshade, prefix hs_, and shadow]
+    hs_compute : int
+        Default 1 (0/1). Compute the hillshade in ``save_visualizations``.
     hs_sun_azi : int
-        Hillshade. Solar azimuth angle (clockwise from North) in degrees.
+        Default 315 (deg). Sun azimuth, clockwise from north; also the shadow azimuth.
     hs_sun_el : int
-        Hillshade. Solar vertical angle (above the horizon) in degrees.
-    hs_shadow : bool
-        Hillshade. If 1 (True) computes binary shadow raster, if 0 (False) it doesn't.
-    mhs_compute : bool
-        If compute Multi directional hillshade. Parameter for GUIs.
+        Default 35 (deg). Sun elevation above the horizon; also the shadow elevation.
+    hs_shadow : int
+        Default 0 (0/1). ``save_hillshade`` also writes the binary shadow raster.
+
+    [Multi-direction hillshade, prefix mhs_]
+    mhs_compute : int
+        Default 0 (0/1). Compute in ``save_visualizations``.
     mhs_nr_dir : int
-        Multi directional hillshade. Number of solar azimuth angles (clockwise from North).
+        Default 16 (count). Number of sun azimuths, 360 / mhs_nr_dir deg apart starting at 0 deg; bands of the
+        float output.
     mhs_sun_el : int
-        Multi directional hillshade. Solar vertical angle (above the horizon) in degrees.
-    slrm_compute : bool
-        If compute Simple local relief model. Parameter for GUIs.
+        Default 35 (deg). Sun elevation.
+
+    [Simple local relief model, prefix slrm_]
+    slrm_compute : int
+        Default 0 (0/1). Compute in ``save_visualizations``.
     slrm_rad_cell : int
-        Simple local relief model. Radius for trend assessment in pixels.
-    svf_compute : bool
-        If compute Sky-View Factor. Parameter for GUIs.
+        Default 20 (px). Radius of the trend (mean) filter; ``rvt.vis.slrm`` accepts 10..50 px. Example:
+        r = 20 px = 10 m at 0.5 m/px.
+
+    [Sky-view factor (svf_), anisotropic SVF (asvf_), positive (pos_opns_) and negative (neg_opns_) openness;
+    the svf_ search parameters apply to all four]
+    svf_compute : int
+        Default 0 (0/1). Compute the SVF in ``save_visualizations``.
     svf_n_dir : int
-        Sky-View Factor (Anisotropic Sky-View Factor, Openness). Number of directions.
+        Default 16 (count). Number of search directions.
     svf_r_max : int
-        Sky-View Factor (Anisotropic Sky-View Factor, Openness). Maximal search radius in pixels.
+        Default 10 (px). Search radius. Example: r = 10 px = 2.5 m at 0.25 m/px.
     svf_noise : int
-        Sky-View Factor (Anisotropic Sky-View Factor, Openness). The level of noise remove [0-don't remove, 1-low, 2-med
-        , 3-high].
-    asvf_compute : bool
-        If compute Anisotropic Sky-View Factor. Parameter for GUIs.
+        Default 0 (0..3). Noise removal: 0 none, 1 low, 2 medium, 3 high.
+    asvf_compute : int
+        Default 0 (0/1). Compute the anisotropic SVF in ``save_visualizations``.
     asvf_dir : int
-        Anisotropic Sky-View Factor. Direction of anisotropy in degrees.
+        Default 315 (deg). Main direction of anisotropy, clockwise from north.
     asvf_level : int
-        Anisotropic Sky-View Factor. Level of anisotropy [1-low, 2-high].
-    pos_opns_compute : bool
-        If compute Positive Openness. Parameter for GUIs.
-    neg_opns_compute : bool
-        If compute Negative Openness. Parameter for GUIs.
-    sim_compute : bool
-        If compute Sky illumination. Parameter for GUIs.
+        Default 1 (1 or 2). Level of anisotropy: 1 low, 2 high.
+    pos_opns_compute : int
+        Default 0 (0/1). Compute the positive openness in ``save_visualizations``.
+    neg_opns_compute : int
+        Default 0 (0/1). Compute the negative openness in ``save_visualizations``.
+
+    [Sky illumination, prefix sim_]
+    sim_compute : int
+        Default 0 (0/1). Compute in ``save_visualizations``.
     sim_sky_mod : str
-        Sky illumination. Sky model [overcast, uniform].
-    sim_compute_shadow : bool
-        Sky illumination. If 1 it computes shadows, if 0 it doesn't.
+        Default "overcast"; "overcast" or "uniform". Sky model.
+    sim_compute_shadow : int
+        Default 0 (0/1). Add the cast shadow of the sun at ``sim_shadow_az`` / ``sim_shadow_el``.
     sim_nr_dir : int
-        Sky illumination. Number of directions.
+        Default 32 (count). Number of horizon search directions.
     sim_shadow_dist : int
-        Sky illumination. Max shadow modeling distance in pixels.
+        Default 100 (px). Horizon search distance on the full-resolution DEM (``max_fine_radius`` of
+        ``rvt.vis.sky_illumination``).
     sim_shadow_az : int
-        Sky illumination. Shadow azimuth in degrees.
+        Default 315 (deg). Sun azimuth for the shadow, clockwise from north.
     sim_shadow_el : int
-        Sky illumination. Shadow elevation in degrees.
-    ld_compute : bool
-        If compute Local dominance. Parameter for GUIs.
+        Default 35 (deg). Sun elevation for the shadow.
+
+    [Local dominance, prefix ld_]
+    ld_compute : int
+        Default 0 (0/1). Compute in ``save_visualizations``.
     ld_min_rad : int
-        Local dominance. Minimum radial distance (in pixels) at which the algorithm starts with visualization
-        computation.
+        Default 10 (px). Smallest radial distance of the observed ring.
     ld_max_rad : int
-        Local dominance. Maximum radial distance (in pixels) at which the algorithm ends with visualization computation.
+        Default 20 (px). Largest radial distance of the observed ring.
     ld_rad_inc : int
-        Local dominance. Radial distance steps in pixels.
+        Default 1 (px). Step of the radial distance.
     ld_anglr_res : int
-        Local dominance. Angular step for determination of number of angular directions.
+        Default 15 (deg). Angular step between directions.
     ld_observer_h : float
-        Local dominance. Height at which we observe the terrain.
-    msrm_compute : bool
-        If compute Multi-scale relief model. Parameter for GUIs.
+        Default 1.7 (m). Observer height above the surface.
+
+    [Multi-scale relief model, prefix msrm_]
+    msrm_compute : int
+        Default 0 (0/1). Compute in ``save_visualizations``.
     msrm_feature_min : float
-        Minimum size of the feature you want to detect in meters.
+        Default 0 (m). Smallest feature size to detect.
     msrm_feature_max : float
-        Maximum size of the feature you want to detect in meters.
+        Default 20 (m). Largest feature size to detect.
     msrm_scaling_factor : int
-        Scaling factor.
-    mstp_compute : bool
-        If compute Multi-scale topographic position (MSTP).
-    mstp_local_scale : tuple(min_radius, max_radius, step)
-        Local scale minimum radius, maximum radius and step in pixels to calculate maximum mean deviation from
-        elevation.
-        All have to be integers!
-    mstp_meso_scale : tuple(min_radius, max_radius, step)
-        Meso scale minimum radius, maximum radius and step in pixels to calculate maximum mean deviation from elevation.
-        All have to be integers!
-    mstp_broad_scale : tuple(min_radius, max_radius, step)
-        Broad scale minimum radius, maximum radius and step in pixels to calculate maximum mean deviation from
-        elevation.
-        All have to be integers!
+        Default 2. Exponent of the filter-radius sequence of ``rvt.vis.msrm``.
+
+    [Multi-scale topographic position, prefix mstp_]
+    mstp_compute : int
+        Default 0 (0/1). Compute in ``save_visualizations``.
+    mstp_local_scale : tuple of int
+        Default (1, 5, 1) (px). (minimum radius, maximum radius, step) of the local scale (one RGB band).
+    mstp_meso_scale : tuple of int
+        Default (5, 50, 5) (px). Same for the meso scale.
+    mstp_broad_scale : tuple of int
+        Default (50, 500, 50) (px). Same for the broad scale.
     mstp_lightness : float
-        Lightness of image.
-    slp_save_float : bool
-        Slope. If 1 (True) it saves float, if 0 (False) it doesn't.
-    hs_save_float : bool
-        Hillshade. If 1 (True) it saves float, if 0 (False) it doesn't.
-    mhs_save_float : bool
-        Multi hillshade. If 1 (True) it saves float, if 0 (False) it doesn't.
-    slrm_save_float : bool
-        Simplified local relief model. If 1 (True) it saves float, if 0 (False) it doesn't.
-    svf_save_float : bool
-        Sky-view factor (asvf, pos_opns). If 1 (True) it saves float, if 0 (False) it doesn't.
-    neg_opns_save_float : bool
-        Negative openness. If 1 (True) it saves float, if 0 (False) it doesn't.
-    sim_save_float : bool
-        Sky illumination. If 1 (True) it saves float, if 0 (False) it doesn't.
-    ld_save_float : bool
-        Local dominance. If 1 (True) it saves float, if 0 (False) it doesn't.
-    msrm_save_float : bool
-        Multi-scale relief model. If 1 (True) it saves float, if 0 (False) it doesn't.
-    slp_save_8bit : bool
-        Slope. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    hs_save_8bit : bool
-        Hillshade. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    mhs_save_8bit : bool
-        Multi hillshade. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    slrm_save_8bit : bool
-        Simplified local relief model. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    svf_save_8bit : bool
-        Sky-view factor (asvf, pos_opns). If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    neg_opns_save_8bit : bool
-        Negative openness. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    sim_save_8bit : bool
-        Sky illumination. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    ld_save_8bit : bool
-        local dominance. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    msrm_save_8bit : bool
-        Multi-scale relief model. If 1 (True) it saves 8bit, if 0 (False) it doesn't.
-    slp_bytscl : tuple(mode, min, max)
-        Slope, bytescale (0-255) for 8bit raster. Mode can be 'value' (linear stretch) or 'percent'
-        (histogram equalization, cut-off). Values min and max define stretch/cut-off borders.
-    hs_bytscl : tuple(mode, min, max)
-        Hillshade, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    mhs_bytscl : tuple(mode, min, max)
-        Multi directional hillshade, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    slrm_bytscl : tuple(mode, min, max)
-        Simplified local relief model, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or
-        'percent' (cut-off units). Values min and max define stretch borders (in mode units).
-    svf_bytscl : tuple(mode, min, max)
-        Sky-view factor, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    asvf_bytscl : tuple(mode, min, max)
-        Anisotropic Sky-view factor, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    pos_opns_bytscl : tuple(mode, min, max)
-        Positive Openness, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    neg_opns_bytscl : tuple(mode, min, max)
-        Negative Openness, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    sim_bytscl : tuple(mode, min, max)
-        Sky illumination, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    ld_bytscl : tuple(mode, min, max)
-        Local dominance, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
-    msrm_bytscl : tuple(mode, min, max)
-        Multi-scale relief model, linear stretch, bytescale (0-255) for 8bit raster. Mode can be 'value' or 'percent'
-        (cut-off units). Values min and max define stretch borders (in mode units).
+        Default 0.9. Lightness of the RGB result.
+
+    [Outputs: float32 GeoTIFF (no-data NaN) and 8-bit GeoTIFF; the svf_ flags also apply to asvf and positive
+    openness, which have no flags of their own]
+    slp_save_float : int
+        Default 1 (0/1). Write the float slope.
+    hs_save_float : int
+        Default 1 (0/1). Write the float hillshade.
+    mhs_save_float : int
+        Default 1 (0/1). Write the float multi-direction hillshade.
+    slrm_save_float : int
+        Default 1 (0/1). Write the float SLRM.
+    svf_save_float : int
+        Default 1 (0/1). Write the float SVF, anisotropic SVF and positive openness.
+    neg_opns_save_float : int
+        Default 1 (0/1). Write the float negative openness.
+    sim_save_float : int
+        Default 1 (0/1). Write the float sky illumination.
+    ld_save_float : int
+        Default 1 (0/1). Write the float local dominance.
+    msrm_save_float : int
+        Default 1 (0/1). Write the float MSRM.
+    mstp_save_float : int
+        Default 1 (0/1). Write the float MSTP.
+    slp_save_8bit : int
+        Default 0 (0/1). Write the 8-bit slope.
+    hs_save_8bit : int
+        Default 0 (0/1). Write the 8-bit hillshade.
+    mhs_save_8bit : int
+        Default 0 (0/1). Write the 8-bit multi-direction hillshade (3-band RGB, see ``float_to_8bit``).
+    slrm_save_8bit : int
+        Default 0 (0/1). Write the 8-bit SLRM.
+    svf_save_8bit : int
+        Default 0 (0/1). Write the 8-bit SVF, anisotropic SVF and positive openness.
+    neg_opns_save_8bit : int
+        Default 0 (0/1). Write the 8-bit negative openness.
+    sim_save_8bit : int
+        Default 0 (0/1). Write the 8-bit sky illumination.
+    ld_save_8bit : int
+        Default 0 (0/1). Write the 8-bit local dominance.
+    msrm_save_8bit : int
+        Default 0 (0/1). Write the 8-bit MSRM.
+    mstp_save_8bit : int
+        Default 0 (0/1). Write the 8-bit MSTP (3 bands).
+
+    [8-bit stretch (mode, min, max). Mode "value": linear stretch from min to max in the unit of the
+    visualization. Mode "percent": cut off the lowest min % and the highest max % of the values, then linear.
+    Values outside the range are clipped; slope and negative openness are inverted (high values dark)]
+    slp_bytscl : tuple(str, float, float)
+        Default ("value", 0, 51), unit of ``slp_output_units``.
+    hs_bytscl : tuple(str, float, float)
+        Default ("value", 0, 1).
+    mhs_bytscl : tuple(str, float, float)
+        Default ("value", 0, 1).
+    slrm_bytscl : tuple(str, float, float)
+        Default ("value", -2, 2) (m).
+    svf_bytscl : tuple(str, float, float)
+        Default ("value", 0.6375, 1).
+    asvf_bytscl : tuple(str, float, float)
+        Default ("value", 0.7, 0.9).
+    pos_opns_bytscl : tuple(str, float, float)
+        Default ("value", 60, 95) (deg).
+    neg_opns_bytscl : tuple(str, float, float)
+        Default ("value", 60, 95) (deg).
+    sim_bytscl : tuple(str, float, float)
+        Default ("percent", 0.25, 0) (%).
+    ld_bytscl : tuple(str, float, float)
+        Default ("value", 0.5, 1.8).
+    msrm_bytscl : tuple(str, float, float)
+        Default ("value", -2.5, 2.5) (m).
+    mstp_bytscl : tuple(str, float, float)
+        Default ("value", 0, 1).
+
+    [Tiling; not written to or read from settings files (known issue, see ``save_default_to_file``)]
     tile_size_limit : int
-        If array size bigger than tile_size_limit it uses saving tile by tile (rvt.tile module).
-    tile_size : tuple(x_size, y_size)
-        Size of single tile when saving tile by tile.
+        Default 10000 * 10000 (px). A ``save_<vis>`` call processes the DEM tile by tile (``rvt.tile``) when its
+        number of pixels exceeds this value.
+    tile_size : tuple(int, int)
+        Default (4000, 4000) (px). (x_size, y_size) of one tile.
     """
 
     def __init__(self):
