@@ -98,7 +98,24 @@ from rvt.blend_func import _outside_0_1, _render_images
 
 
 def create_blender_file_example(file_path=None):
-    """Create blender .json file example (can be changed and read). Example is VAT - Archaeological combination"""
+    """
+    Write an example combination file (the "VAT - Archaeological" combination) in JSON.
+
+    The file has the format read by BlenderCombination.read_from_file: four layers (sky-view factor multiply 25 %,
+    positive openness overlay 50 %, slope luminosity 50 %, hillshade normal 100 %) and an empty fifth layer.
+
+    Parameters
+    ----------
+    file_path : str or None
+        Output path; an existing file is overwritten. None writes ``settings\\blender_file_example.json`` relative
+        to the current working directory and creates the directory ``settings`` if it is missing.
+
+    Notes
+    -----
+    Known issue: the default path is written with a backslash. On POSIX ``os.path.dirname`` of it is "" and
+    ``os.makedirs("")`` raises FileNotFoundError, so ``file_path=None`` works on Windows only. See
+    docs/KNOWN_ISSUES.md.
+    """
     data = {"combination": {"name": "VAT - Archaeological",
                             "layers":
                                 [
@@ -132,34 +149,65 @@ def create_blender_file_example(file_path=None):
 
 class BlenderLayer:
     """
-    Class which define layer for blending. BlenderLayer is basic element in BlenderCombination.layers list.
+    One layer of a blending combination: a visualization with its normalization, blend mode and opacity.
+
+    BlenderLayer is the element of ``BlenderCombination.layers``. The constructor stores its arguments without
+    checks; BlenderCombination.render_all_images calls check_data before rendering.
+
+    Parameters
+    ----------
+    vis_method : str or None
+        Visualization name, stored as ``vis``. To be computed from the DEM it must be one of the names listed in
+        check_data (case-insensitive); with ``image`` or ``image_path`` any name is accepted (the names
+        "slope gradient" and "openness - negative" still invert the layer, see
+        rvt.blend_func.normalize_image). None makes an empty layer, which BlenderCombination skips.
+    normalization : str
+        "value" (``minimum`` / ``maximum`` are values) or "perc" (they are percentages cut off at the low / high
+        end); case-insensitive. "percent" (lower case only) is accepted and renamed to "perc" by check_data.
+    minimum : float or None
+        Lower normalization limit (value, or percent 0-100).
+    maximum : float or None
+        Upper normalization limit (value, or percent 0-100).
+    blend_mode : str
+        "normal", "multiply", "screen", "overlay", "soft_light" or "luminosity", case-insensitive.
+    opacity : int or float
+        Opacity of the layer in percent, 0-100 (see rvt.blend_func.apply_opacity for values <= 1).
+    colormap : str or None
+        matplotlib colormap name applied to a gray layer after normalization; None keeps it gray.
+    min_colormap_cut : float or None
+        Lower end of the used part of the colormap, in [0, 1].
+    max_colormap_cut : float or None
+        Upper end of the used part of the colormap, in [0, 1].
+    image : numpy.ndarray or None
+        Precomputed visualization ``(H, W)`` or ``(3, H, W)``. Takes precedence over ``image_path``. Clipped in
+        place by the normalization during rendering.
+    image_path : str or None
+        Path of a visualization raster (GeoTIFF) read when ``image`` is None.
 
     Attributes
     ----------
-    vis : str
-        Visualization method.
-    normalization : str
-        Normalization type, could be "Value" or "Percent".
-    min : float
+    vis : str or None
+        Visualization name (``vis_method``).
+    normalization : str or None
+        Normalization type.
+    min : float or None
         Normalization minimum.
-    max : float
+    max : float or None
         Normalization maximum.
-    opacity : integer
-        Image (visualization) opacity.
-    colormap : str
-        Colormap form matplotlib (https://matplotlib.org/3.3.2/tutorials/colors/colormaps.html).
-    min_colormap_cut : float
-        What lower part of colormap to cut to select part of colormap.
-        Valid values are between 0 and 1, if 0.2 it cuts off (deletes) 20% of lower colors in colormap.
-        If None cut is not applied.
-    max_colormap_cut : float
-        What upper part of colormap to cut to select part of colormap.
-        Valid values are between 0 and 1, if 0.8 it cuts off (deletes) 20% of upper colors in colormap.
-        If None cut is not applied.
-    image_path : str
-        Path to DEM. Doesn't matter if image is not None. Leave None if you would like for blender to compute it.
-    image : numpy.array (2D)
-        Visualization raster. Leave None if you would like for blender to compute it.
+    blend_mode : str or None
+        Blend mode.
+    opacity : int or float or None
+        Opacity in percent.
+    colormap : str or None
+        Colormap name.
+    min_colormap_cut : float or None
+        Lower colormap cut.
+    max_colormap_cut : float or None
+        Upper colormap cut.
+    image : numpy.ndarray or None
+        Visualization array.
+    image_path : str or None
+        Visualization raster path.
     """
 
     def __init__(self, vis_method=None, normalization="value", minimum=None, maximum=None,
@@ -178,7 +226,32 @@ class BlenderLayer:
         self.image = image
 
     def check_data(self):
-        """ Check Attributes """
+        """
+        Validate the layer attributes; normalize some of them in place.
+
+        A layer with ``vis`` None is emptied (every other attribute set to None). Otherwise "percent" is renamed
+        to "perc" and the attributes are checked.
+
+        Raises
+        ------
+        Exception
+            If the normalization is not "value" / "perc" (case-insensitive); for "perc" if ``min + max >= 100``;
+            for "value" if ``min > max``; if the blend mode is unknown; if a colormap cut is set without a
+            colormap; if neither ``image`` nor ``image_path`` is set and ``vis`` is not one of: slope gradient,
+            hillshade, shadow, multiple directions hillshade, simple local relief model, sky-view factor,
+            anisotropic sky-view factor, openness - positive, openness - negative, sky illumination, local
+            dominance, multi-scale relief model, multi-scale topographic position (case-insensitive).
+        AttributeError
+            If ``normalization`` or ``blend_mode`` is None while ``vis`` is set.
+        TypeError
+            If ``min`` or ``max`` is None while ``vis`` is set.
+
+        Notes
+        -----
+        Known issues (docs/KNOWN_ISSUES.md): the opacity check ``0 > self.opacity > 100`` can never be true, so
+        any opacity is accepted (values above 100 extrapolate in rendering); ``min == max`` is accepted for
+        "value" (advanced_normalization then raises for "value", or gives all NaN for "Value").
+        """
         if self.normalization == "percent":
             self.normalization = "perc"
         if self.vis is None:  # if visualization is None everything is None
@@ -224,18 +297,33 @@ class BlenderLayer:
 
 class BlenderCombination:
     """
-    Class for storing layers (rasters, parameters  for blending) and rendering(blending) into blended raster.
+    An ordered stack of layers and the DEM they are computed from; renders the blended image.
+
+    ``layers[0]`` is the top layer and ``layers[-1]`` the bottom layer. render_all_images starts from the bottom
+    layer and blends each layer above onto the result with its blend mode and opacity.
+
+    Parameters
+    ----------
+    dem_arr : numpy.ndarray or None
+        2D DEM ``(H, W)`` in m, used to compute layers in memory.
+    dem_resolution : float or None
+        Pixel size of ``dem_arr`` in m/px (the same in x and y).
+    dem_path : str or None
+        Path of the DEM raster, used when visualizations are computed and saved as files, and as the georeference
+        of saved renders.
 
     Attributes
     ----------
-    dem_arr : np.array (2D)
-        Array with DEM data, needed for calculating visualization functions in memory.
-    dem_path : str
-        Path to DEM, needed for calculating visualization functions and saving them.
+    dem_arr : numpy.ndarray or None
+        DEM array.
+    dem_resolution : float or None
+        DEM pixel size in m/px.
+    dem_path : str or None
+        DEM raster path.
     name : str
-        Name of BlenderCombination combination.
-    layers : [BlenderLayer]
-        List of BlenderLayer instances which will be blended together.
+        Name of the combination ("" after construction).
+    layers : list of BlenderLayer
+        Layers, top first.
     """
 
     def __init__(self, dem_arr=None, dem_resolution=None, dem_path=None):
@@ -246,18 +334,64 @@ class BlenderCombination:
         self.layers = []
 
     def add_dem_arr(self, dem_arr, dem_resolution):
-        """Add or change dem_arr attribute and its resolution dem_resolution attribute."""
+        """
+        Set the DEM array and its pixel size.
+
+        Parameters
+        ----------
+        dem_arr : numpy.ndarray
+            2D DEM ``(H, W)`` in m.
+        dem_resolution : float
+            Pixel size in m/px.
+        """
         self.dem_arr = dem_arr
         self.dem_resolution = dem_resolution
 
     def add_dem_path(self, dem_path):
-        """Add or change dem_path attribute."""
+        """
+        Set the path of the DEM raster.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM GeoTIFF.
+        """
         self.dem_path = dem_path
 
     def create_layer(self, vis_method=None, normalization="value", minimum=None, maximum=None,
                      blend_mode="normal", opacity=100, colormap=None, min_colormap_cut=None, max_colormap_cut=None,
                      image=None, image_path=None):
-        """Create BlenderLayer and adds it to layers attribute."""
+        """
+        Create a BlenderLayer and append it below the existing layers.
+
+        Nothing is added when ``vis_method`` is None. The arguments are those of BlenderLayer and are not checked
+        here.
+
+        Parameters
+        ----------
+        vis_method : str or None
+            Visualization name, see BlenderLayer.
+        normalization : str
+            "value" or "perc".
+        minimum : float or None
+            Lower normalization limit.
+        maximum : float or None
+            Upper normalization limit.
+        blend_mode : str
+            Blend mode name.
+        opacity : int or float
+            Opacity in percent, 0-100.
+        colormap : str or None
+            matplotlib colormap name.
+        min_colormap_cut : float or None
+            Lower colormap cut in [0, 1].
+        max_colormap_cut : float or None
+            Upper colormap cut in [0, 1].
+        image : numpy.ndarray or None
+            Precomputed visualization (stored by reference, clipped in place during rendering).
+        image_path : str or None
+            Path of a visualization raster.
+        """
         if vis_method is not None:
             layer = BlenderLayer(vis_method=vis_method, normalization=normalization, minimum=minimum, maximum=maximum,
                                  blend_mode=blend_mode, opacity=opacity, colormap=colormap,
@@ -266,15 +400,36 @@ class BlenderCombination:
             self.layers.append(layer)
 
     def add_layer(self, layer: BlenderLayer):
-        """Add BlenderLayer instance to layers attribute."""
+        """
+        Append a layer below the existing layers, unless its ``vis`` is None.
+
+        Parameters
+        ----------
+        layer : BlenderLayer
+            Layer to append (stored by reference, not copied).
+        """
         if layer.vis is not None:
             self.layers.append(layer)
 
     def remove_all_layers(self):
-        """Empties layers attribute."""
+        """Remove all layers (``layers`` becomes a new empty list)."""
         self.layers = []
 
     def layers_info(self):
+        """
+        Return a one-line text description of every layer.
+
+        Returns
+        -------
+        list of str
+            One string per layer, top first: "layer <n>, visualization = ..., normalization = ..., min = ...,
+            max = ..., blend_mode = ..., opacity = ..., colormap = ..., min_colormap_cut = ..., max_colormap_cut".
+
+        Notes
+        -----
+        Known issue: the format string ends with "max_colormap_cut" without "= {}", so the value of
+        max_colormap_cut is never printed (the extra format argument is ignored). See docs/KNOWN_ISSUES.md.
+        """
         layer_nr = 1
         layers_info = []
         for layer in self.layers:
@@ -292,15 +447,51 @@ class BlenderCombination:
         return layers_info
 
     def read_from_file(self, file_path):
-        """Reads class attributes from .json file."""
-        # Example file (for file_path) in dir settings: blender_file_example.txt
+        """
+        Replace the name and the layers with those of a combination JSON file.
+
+        Parameters
+        ----------
+        file_path : str
+            Path of a file in the one-combination format (module docstring), e.g.
+            ``settings/blender_file_example.json``.
+
+        Raises
+        ------
+        KeyError
+            If a required key is missing (see read_from_json).
+        """
         dat = open(file_path, "r")
         json_data = json.load(dat)
         self.read_from_json(json_data)
         dat.close()
 
     def read_from_json(self, json_data):
-        """Fill class attributes with json data."""
+        """
+        Replace the name and the layers with those of a parsed combination JSON document.
+
+        Layers whose "visualization_method" is null, "None" or "null" (case-insensitive) are skipped. For the other
+        layers "norm" and "blend_mode" are read as str, "min" and "max" as float, "opacity" as int; "colormap" is
+        optional ("None" / "null" mean no colormap), and the cuts are read only when a colormap is set. The values
+        are not checked here (render_all_images calls check_data).
+
+        Parameters
+        ----------
+        json_data : dict
+            ``{"combination": {"name": str, "layers": [...]}}`` as described in the module docstring.
+
+        Raises
+        ------
+        KeyError
+            If "combination", "name", "layers" or a required layer key ("visualization_method", "norm", "min",
+            "max", "blend_mode", "opacity") is missing.
+
+        Notes
+        -----
+        Known issue: the colormap cuts are converted with ``str()``, so numbers from the JSON become strings such
+        as "0.2"; rendering such a layer raises TypeError in gray_scale_to_color_ramp. A save_to_file /
+        read_from_file round trip therefore turns numeric cuts into strings. See docs/KNOWN_ISSUES.md.
+        """
         self.layers = []
         self.name = json_data["combination"]["name"]
         layers_data = json_data["combination"]["layers"]
@@ -344,15 +535,34 @@ class BlenderCombination:
                                         min_colormap_cut=min_colormap_cut, max_colormap_cut=max_colormap_cut))
 
     def save_to_file(self, file_path):
-        """Save layers (manually) to .json file. Parameters image and image_path in each layer have to be None,
-         visualization has to be correct!"""
+        """
+        Write the combination as a JSON file (format of to_json, indent 4).
+
+        ``image`` and ``image_path`` of the layers are not written, so the file describes how to compute the
+        layers, not their data.
+
+        Parameters
+        ----------
+        file_path : str
+            Output path; an existing file is overwritten.
+        """
         json_data = self.to_json()
         dat = open(file_path, "w")
         dat.write(json.dumps(json_data, indent=4))
         dat.close()
 
     def to_json(self):
-        """Outputs class attributes as json."""
+        """
+        Return the combination as a JSON-serializable dict.
+
+        Returns
+        -------
+        dict
+            ``{"combination": {"name": name, "layers": [{"layer": "1", "visualization_method", "norm", "min",
+            "max", "blend_mode", "opacity"}, ...]}}``, layers top first, numbered from "1". "colormap",
+            "min_colormap_cut" and "max_colormap_cut" are added only when they are not None. Values are written as
+            stored in the layers.
+        """
         json_data = {"combination": {"name": self.name,
                                      "layers": []
                                      }}
@@ -392,19 +602,109 @@ class BlenderCombination:
         return json_data
 
     def check_data(self):
+        """
+        Run BlenderLayer.check_data on every layer (may rename "percent" to "perc" in place).
+
+        Raises
+        ------
+        Exception
+            From BlenderLayer.check_data for the first invalid layer.
+        """
         for layer in self.layers:
             layer.check_data()
 
     def render_all_images(self, default=None, save_visualizations=False, save_render_path=None, save_float=True,
                           save_8bit=False, no_data=None):
-        """Render all layers and returns blended image. If specific layer (BlenderLayer) in layers has image
-        (is not None), method uses this image, if image is None and layer has image_path method reads image from
-        path. If both image and image_path are None method calculates visualization. If save_visualization is True
-        method needs dem_path and saves each visualization (if it doesn't exists) in directory of dem_path,
-        else (save_visualization=False) method needs dem_arr, dem_resolution and calculates each visualization
-        simultaneously (in memory). Be careful save_visualisation applies only if specific BlenderLayer
-        image and image_path are None. Parameter no_data changes all pixels with this values to np.nan,
-        if save_visualizations is True it is not needed."""
+        """
+        Render all layers into one blended image, optionally saving it as GeoTIFF.
+
+        The image of each layer is taken from ``layer.image``; if that is None, read from ``layer.image_path``;
+        if both are None, computed from the DEM with the parameters of ``default``: in memory from ``dem_arr`` /
+        ``dem_resolution`` (``save_visualizations=False``), or saved as a GeoTIFF from ``dem_path`` and read back
+        (``save_visualizations=True``). Each image is normalized with rvt.blend_func.normalize_image and, if the
+        layer has a colormap and the image is gray, colored. The bottom layer is the start image; every layer
+        above is blended onto the result (rvt.blend_func.blend_images) and mixed with it according to its
+        opacity (rvt.blend_func.render_images).
+
+        Parameters
+        ----------
+        default : rvt.default.DefaultValues or None
+            Visualization parameters for layers computed from the DEM; None uses a new DefaultValues().
+        save_visualizations : bool
+            True: compute missing layers from ``dem_path`` and save them as files (float GeoTIFF; the multiple
+            directions hillshade as 8-bit). False: compute them in memory from ``dem_arr``.
+        save_render_path : str or None
+            Path of the float GeoTIFF of the render (requires ``dem_path`` for the georeference); None does not
+            save. The 8-bit render is written next to it as ``<name>_8bit.tif``.
+        save_float : bool
+            Save the render as float32 GeoTIFF at ``save_render_path``.
+        save_8bit : bool
+            Save the render as 8-bit GeoTIFF (``rvt.vis.byte_scale`` of [0, 1]).
+        no_data : float or None
+            No-data value of ``dem_arr``, passed to the visualization functions for layers computed in memory
+            (they replace it by NaN). Not used for files.
+
+        Returns
+        -------
+        numpy.ndarray
+            Blended image, ``(H, W)`` if every layer is gray, ``(3, H, W)`` if any layer is RGB (colormap,
+            multiple directions hillshade, 3-band image). float32 for gray float32 layers, float64 as soon as an RGB
+            layer is involved. Values in [0, 1] for inputs in range (a warning is issued otherwise); NaN where the
+            layers are NaN.
+
+        Raises
+        ------
+        Exception
+            From check_data; if ``save_render_path`` is set without ``dem_path``; if ``save_render_path`` is set
+            with ``save_float`` and ``save_8bit`` both False; if a layer has to be computed and the DEM it needs is
+            missing (``dem_path``, or both ``dem_arr`` and ``dem_resolution``).
+        AttributeError
+            For a gray layer with a colormap read from ``image_path`` or computed with
+            ``save_visualizations=True`` (see Notes).
+
+        Warns
+        -----
+        UserWarning
+            "Rendered image scale distorted" when an intermediate result has values outside [0, 1].
+
+        Notes
+        -----
+        Side effects: check_data may modify layer attributes; each ``layer.image`` is clipped in place to its
+        normalization limits (rvt.blend_func.normalize_lin).
+
+        Computed layers: "slope gradient" uses DefaultValues.get_slope (unit ``default.slp_output_units``);
+        "multiple directions hillshade" in memory is an RGB stack of three hillshades at azimuths 315°, 22.5° and
+        90° with ``default.mhs_sun_el``, independent of ``default.mhs_nr_dir``; from file it is the 8-bit raster,
+        normalized 0-255 first.
+
+        Optimized path: the range test of the rendered image at the end of a layer is reused as the background
+        test of the next layer, and _render_images gets range tests already evaluated on the same unchanged
+        arrays; see the module docstring.
+
+        Known issues (docs/KNOWN_ISSUES.md):
+
+        - the blend mode and the opacity of the bottom layer are never used (it is the start image as it is);
+        - overlay and soft_light write into the background, so the opacity of such a layer has no visible effect
+          (``top`` and ``background`` hold the same values when the opacity is applied);
+        - a colormap is applied only ``if len(image.shape) < 3`` with ``image`` the layer array, which is None
+          for layers read from ``image_path`` or saved with ``save_visualizations=True``: AttributeError;
+        - with ``save_visualizations=True`` the visualizations are saved into the directory of
+          ``save_render_path`` but read back from the directory of ``dem_path``; if the two differ, reading fails;
+        - the in-memory check ``self.dem_arr is None and self.dem_resolution is None`` uses ``and``, so a missing
+          ``dem_arr`` with a given resolution is not reported and fails later in rvt.vis.
+        """
+
+        # Structure of this function:
+        #   1. check the layers and the save arguments; derive the 8-bit render path; default DefaultValues;
+        #   2. loop over the layers from the bottom (last) to the top (first):
+        #      a. skip empty layers; check that the DEM needed to compute the layer is available;
+        #      b. get the normalized image: from layer.image, from layer.image_path, or computed from the DEM
+        #         (in memory with default.get_*, or saved with default.save_* and read back);
+        #      c. apply the colormap to a gray image;
+        #      d. bottom layer: becomes the rendered image (no blending, no opacity);
+        #         other layers: rescale operands outside [0, 1], blend_images, _render_images with the opacity,
+        #         range test of the result (warning if outside [0, 1]);
+        #   3. save the float and / or 8-bit render; return the rendered image.
 
         # Perform checks
         self.check_data()
@@ -705,7 +1005,42 @@ class BlenderCombination:
 
     def create_log_file(self, dem_path, combination_name, render_path, default: rvt.default.DefaultValues,
                         terrain_sett_name=None, custom_dir=None, computation_time=None):
-        """Creates log file in custom_dir, if custom_dir=None it creates it in dem directory (dem_path)."""
+        """
+        Write a text log of a blending run: DEM metadata, parameters and layers.
+
+        The file is named ``<dem name>_blend_log_<YYYY-MM-DD_HH-MM-SS>.txt`` (local time of the call) and is
+        written into ``custom_dir``, or into the directory of ``dem_path`` if ``custom_dir`` is None.
+
+        Parameters
+        ----------
+        dem_path : str
+            Path of the DEM raster; it is read completely to get its shape and resolution.
+        combination_name : str
+            Name of the combination written to the log.
+        render_path : str
+            Path of the render file written to the log.
+        default : rvt.default.DefaultValues
+            Parameters written to the log (overwrite, ve_factor, and the parameters of each layer's
+            visualization).
+        terrain_sett_name : str or None
+            Name of the terrain settings written to the log; None omits the line.
+        custom_dir : str or None
+            Output directory; None uses the directory of ``dem_path``.
+        computation_time : float or str or None
+            Computation time written at the end; None omits the line.
+
+        Notes
+        -----
+        A second call within the same second overwrites the log. Every layer must have a ``vis`` (not None).
+        """
+        # Structure of this function:
+        #   1. read the DEM to get the number of bands, rows, columns and the resolution;
+        #   2. build the log path from custom_dir (or the DEM directory), the DEM name and the current time;
+        #   3. write the header, the DEM metadata, overwrite and ve_factor, the combination name, the terrain
+        #      settings name and the render path;
+        #   4. per layer: name, the DefaultValues parameters of its visualization, normalization, limits, opacity,
+        #      colormap and cuts;
+        #   5. write the computation time and close the file.
         dict_arr_res = rvt.default.get_raster_arr(raster_path=dem_path)
         resolution = dict_arr_res["resolution"]
         arr_shape = np.array(dict_arr_res["array"]).shape
@@ -841,6 +1176,31 @@ class BlenderCombination:
 
 
 def compare_2_combinations(combination1: BlenderCombination, combination2: BlenderCombination):
+    """
+    Return True if two combinations have the same layers in the same order.
+
+    Layers are compared by visualization name and blend mode (both case-insensitive) and by opacity.
+
+    Parameters
+    ----------
+    combination1 : BlenderCombination
+        First combination.
+    combination2 : BlenderCombination
+        Second combination.
+
+    Returns
+    -------
+    bool
+        True if the number of layers and, per layer, the three compared attributes are equal. Two empty
+        combinations are equal.
+
+    Notes
+    -----
+    Known issue (possibly intended): normalization, min and max (and colormap and cuts) are not compared, so
+    combinations that differ only in their limits are reported equal. The comparisons of normalization, min and
+    max were commented out in the upstream code; one reason may be that TerrainSettings.apply_terrain changes the
+    limits of preset combinations, which then still match their preset. See docs/KNOWN_ISSUES.md.
+    """
     if len(combination1.layers) != len(combination2.layers):
         return False
     for i_layer in range(len(combination1.layers)):
