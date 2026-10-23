@@ -220,6 +220,8 @@ def save_visualization_tile_by_tile(
                 cols = x_size - x
 
             # get offset for each tile, check edges
+            # (overlap only towards a neighbouring tile, clipped at the raster edge; no padding is added,
+            # so pixels at the raster edge see the same neighbourhood as in an untiled run)
             left_offset = 0
             right_offset = 0
             top_offset = 0
@@ -261,6 +263,7 @@ def save_visualization_tile_by_tile(
                 visualization_array = visualization_array[out_visualization_dict_key]
 
             # remove offset from visualization block
+            # (four cases because a slice end of -0 would give an empty block)
             if out_raster_nr_of_bands == 1:
                 if right_offset == 0 and bottom_offset == 0:
                     visualization_array = visualization_array[top_offset:, left_offset:]
@@ -562,6 +565,8 @@ def save_rvt_visualization_tile_by_tile(
                 cols = x_size - x
 
             # get offset for each tile, check edges
+            # (overlap only towards a neighbouring tile, clipped at the raster edge; no padding is added,
+            # so pixels at the raster edge see the same neighbourhood as in an untiled run)
             left_offset = 0
             right_offset = 0
             top_offset = 0
@@ -606,6 +611,7 @@ def save_rvt_visualization_tile_by_tile(
             )
 
             # remove offset from visualization block
+            # (four cases because a slice end of -0 would give an empty block)
             if save_float:
                 if visualization_float_arr.ndim == 2:
                     if right_offset == 0 and bottom_offset == 0:

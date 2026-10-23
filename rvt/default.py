@@ -2688,6 +2688,13 @@ class DefaultValues:
         Above ``tile_size_limit`` pixels the work is done by ``rvt.tile.save_rvt_visualization_tile_by_tile``,
         which replaces existing files and has its own known issues (see there).
         """
+        # Structure of this method:
+        #   1. take save_float / save_8bit from svf_save_* if None; check the flags and the DEM path
+        #   2. float and 8-bit paths of the requested results ("" for results not requested)
+        #   3. return 0 if all paths exist and overwrite is 0
+        #   4. large DEM: one tile-by-tile run per requested result (rvt.tile)
+        #   5. otherwise: read the DEM, one get_sky_view_factor call for all requested results, then write
+        #      the float rasters and the 8-bit rasters, skipping existing files when overwrite is 0
 
         # if save_float is None it takes boolean from default (self)
         if save_float is None:
