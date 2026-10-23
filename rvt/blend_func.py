@@ -78,19 +78,56 @@ from matplotlib.colors import LinearSegmentedColormap
 # expressions on the same element values, only on row blocks of about _BLOCK_ELEMS elements instead of whole
 # images, so temporaries stay cache-resident and full-size temporaries / fancy indexing are avoided. Every element
 # goes through the same IEEE operations in the same order and with the same dtypes, so results are bitwise equal.
+# Why 32768: one float64 temporary of a block is 256 KiB (float32: 128 KiB), so the few temporaries of one blend
+# expression stay in the CPU cache (L2 / L3) instead of streaming image-sized temporaries through main memory. The
+# value is not tuned per machine; the same block size is used by the block loops in vis.py. The results do not
+# depend on it, because every operation is elementwise.
 _BLOCK_ELEMS = 32768
 _FLOAT_DTYPES = (np.dtype(np.float32), np.dtype(np.float64))
 _REAL_SCALARS = (int, float, np.integer, np.floating)
 
 
 def _row_slices(n_rows, row_elems):
-    """Row-block slices along axis 0 with about _BLOCK_ELEMS elements per block."""
+    """
+    Return slices that split axis 0 into blocks of about ``_BLOCK_ELEMS`` elements.
+
+    Parameters
+    ----------
+    n_rows : int
+        Length of axis 0.
+    row_elems : int
+        Number of elements per index of axis 0 (row length; 1 for a flat view).
+
+    Returns
+    -------
+    list of slice
+        ``slice(r, r + step)`` for ``r = 0, step, 2 * step, ...`` with ``step = max(1, _BLOCK_ELEMS // row_elems)``
+        (a row longer than ``_BLOCK_ELEMS`` makes one-row blocks). The last slice may extend past ``n_rows``,
+        which numpy slicing clips.
+    """
     step = max(1, _BLOCK_ELEMS // max(1, row_elems))
     return [slice(r, r + step) for r in range(0, n_rows, step)]
 
 
 def _float_arrays(*arrays):
-    """True if all arguments are plain float32/float64 ndarrays of one non-empty shape with ndim >= 1."""
+    """
+    Return True if all arguments are plain float32 / float64 ndarrays of one non-empty shape with ndim >= 1.
+
+    This is the entry condition of the blocked paths. ``type(arr) is np.ndarray`` excludes subclasses (masked
+    arrays, matrices), whose operators can behave differently per block; integer and other dtypes are excluded
+    because the reference code casts them in ways the blocked code does not repeat; equal shapes exclude
+    broadcasting. Any other input runs the reference code.
+
+    Parameters
+    ----------
+    *arrays : object
+        Candidate operands (any objects).
+
+    Returns
+    -------
+    bool
+        True if the blocked path may be used for these operands.
+    """
     shape = arrays[0].shape if isinstance(arrays[0], np.ndarray) else None
     if shape is None or len(shape) == 0 or arrays[0].size == 0:
         return False
@@ -101,11 +138,25 @@ def _float_arrays(*arrays):
 
 
 def _fp_strict():
-    """Current numpy error state with every non-ignored category turned into 'raise'. Branch expressions are
-    evaluated for all elements of a block under this state; if any floating point error is flagged, the block is
-    recomputed with the reference code under the caller's error state, so the same kinds of warnings are issued.
-    Returns None if the caller's state raises or calls a handler (then the reference code runs on the whole array,
-    so an exception leaves the inputs in exactly the same partially updated state)."""
+    """
+    Return the caller's numpy error state with every category that is not "ignore" turned into "raise".
+
+    Why it exists: the blocked overlay / soft light evaluate *both* branch expressions for every element of a
+    block, while the reference evaluates each branch only on the elements of its mask. Elements of the other
+    branch can flag floating point errors that the reference never computes (e.g. ``sqrt`` of a negative
+    background where ``active < 0.5``), which would add warnings. Under the returned state such a flag raises
+    FloatingPointError; the caller then recomputes the block with the reference code under the caller's own state,
+    so the same kinds of warnings are issued as by the reference. A block without any flag cannot produce a
+    warning in the reference either (it computes a subset of the same operations). Categories set to "ignore"
+    stay ignored, since they give no warning in either code.
+
+    Returns
+    -------
+    dict or None
+        Keyword arguments for ``numpy.errstate``, or None if any category of the caller's state is "raise",
+        "call" or "log". Then the blocked code is not used and the reference runs on the whole array, so an
+        exception leaves the inputs in the same partially updated state as the reference does.
+    """
     err = np.geterr()
     if any(val not in ("ignore", "warn", "print") for val in err.values()):
         return None
@@ -645,9 +696,30 @@ def clip_color(c, min_c=None, max_c=None):
 
 
 def _luminosity_clip_blocked(active, background):
-    """blend_luminosity(active, background) followed by clip_color(c) for a 3-band float background, evaluated per
-    row block with the same expressions: c = background + luminosity (stored as float64), lum_c = lum(c),
-    r, g, b = float32(c), channel min / max, then the min < 0 and max > 1 corrections on the same subsets."""
+    """
+    Compute ``blend_luminosity(active, background)`` for an RGB float background, per row block.
+
+    Equivalence contract with the reference (blend_luminosity followed by clip_color): per block the same
+    expressions in the same order and dtypes: ``luminosity = lum(active) - lum(background)``;
+    ``c[i] = background[i] + luminosity`` computed in the operand dtype and stored in a float64 array (as the
+    reference's ``np.zeros`` array); ``lum_c = lum(c)`` (float32); float32 channels; channel minimum / maximum
+    with ``np.copyto(where=...)``, which selects the same elements as the ``np.where`` updates of channel_min /
+    channel_max (NaN comparisons are False in both); then the ``min < 0`` and the ``max > 1`` corrections on the
+    same element subsets, channel by channel (r, g, b), with ``lum_c``, ``min_c`` and ``max_c`` from before the
+    corrections. Every element is computed independently, so splitting into blocks does not change any value.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        float32 / float64, ``(3, H, W)`` or ``(H, W)``.
+    background : numpy.ndarray
+        float32 / float64, ``(3, H, W)``.
+
+    Returns
+    -------
+    numpy.ndarray
+        New float64 ``(3, H, W)`` array, bitwise equal to the reference result.
+    """
     c_out = np.zeros(background.shape)
     rows = background.shape[1]
     for sl in _row_slices(rows, background[0].size // rows):
@@ -744,10 +816,39 @@ def blend_multiply(active, background):
 
 
 def _blend_in_place_blocked(active, background, masks, branches, reference):
-    """Shared driver of blend_overlay / blend_soft_light: per row block, evaluate both branch expressions for all
-    elements and copy each into `background` where its mask holds (masks are taken before any write, as with
-    np.where in the reference). Elements outside both masks (NaN) keep their value. A block whose branch evaluation
-    flags a floating point error is recomputed by `reference` under the caller's error state instead."""
+    """
+    Run an in-place two-branch blend (overlay, soft light) per row block; shared driver of both.
+
+    Per block: compute both masks before any write (as the reference computes both ``np.where`` index sets before
+    its first assignment), evaluate both branch expressions for all elements under ``_fp_strict()``, and copy each
+    into ``background`` where its mask holds (``casting="unsafe"``, the same cast as a fancy-index assignment).
+    Elements outside both masks (NaN in the mask operand) keep their value, as in the reference. A block whose
+    branch evaluation flags a floating point error is recomputed by ``reference`` on the block views under the
+    caller's error state.
+
+    The blocked path is used only if ``_fp_strict()`` is not None, both operands pass ``_float_arrays``,
+    ``background`` is writeable and the operands do not share memory (with overlap, writes to one block of
+    ``background`` would change ``active`` values read by a later block). Otherwise ``reference`` runs on the
+    whole arrays.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Upper layer.
+    background : numpy.ndarray
+        Lower layer, overwritten in place.
+    masks : callable
+        ``masks(a, b) -> (m1, m2)``: boolean masks of the two branches.
+    branches : callable
+        ``branches(a, b) -> (e1, e2)``: values of the two branch expressions for all elements.
+    reference : callable
+        ``reference(a, b)``: the original whole-array code, writing into ``b`` and returning it.
+
+    Returns
+    -------
+    numpy.ndarray
+        ``background`` (the return value of ``reference`` on the fallback path, which is also ``background``).
+    """
     strict = _fp_strict()
     if not (strict is not None and _float_arrays(active, background) and background.flags.writeable
             and not np.may_share_memory(active, background)):
@@ -768,14 +869,22 @@ def _blend_in_place_blocked(active, background, masks, branches, reference):
 
 
 def _overlay_masks(active, background):
+    """Return the overlay branch masks ``(background > 0.5, background <= 0.5)`` (as in _blend_overlay_ref)."""
     return background > 0.5, background <= 0.5
 
 
 def _overlay_branches(active, background):
+    """Return both overlay branch expressions for all elements, written exactly as in _blend_overlay_ref."""
     return (1 - (1 - 2 * (background - 0.5)) * (1 - active)), ((2 * background) * active)
 
 
 def _blend_overlay_ref(active, background):
+    """
+    Overlay blend, original whole-array code: reference and fallback of blend_overlay.
+
+    Writes the result into ``background`` at the ``np.where`` index sets of ``background > 0.5`` and
+    ``background <= 0.5`` (both taken before the first write) and returns ``background``.
+    """
     idx1 = np.where(background > 0.5)
     idx2 = np.where(background <= 0.5)
     background[idx1] = (1 - (1 - 2 * (background[idx1] - 0.5)) * (1 - active[idx1]))
@@ -818,10 +927,12 @@ def blend_overlay(active, background):
 
 
 def _soft_light_masks(active, background):
+    """Return the soft light branch masks ``(active < 0.5, active >= 0.5)`` (as in _blend_soft_light_ref)."""
     return active < 0.5, active >= 0.5
 
 
 def _soft_light_branches(active, background):
+    """Return both soft light branch expressions for all elements, written exactly as in _blend_soft_light_ref."""
     return (2 * background * active + background ** 2 * (1.0 - 2 * active),
             2 * background * (1.0 - active) + np.sqrt(background) * (2 * active - 1.0))
 
@@ -860,6 +971,12 @@ def blend_soft_light(active, background):
 
 
 def _blend_soft_light_ref(active, background):
+    """
+    Soft light blend, original whole-array code: reference and fallback of blend_soft_light.
+
+    Writes the result into ``background`` at the ``np.where`` index sets of ``active < 0.5`` and
+    ``active >= 0.5`` (both taken before the first write) and returns ``background``.
+    """
     # idx1 = np.where(active > 0.5)
     # idx2 = np.where(active <= 0.5)
     # background[idx1] = 1 - (1-background[idx1]) * (1-(active[idx1]-0.5))
@@ -967,9 +1084,27 @@ def equation_blend(blend_mode, active, background):
 
 
 def _assign_elementwise(out, func, active, background):
-    """out[...] = func(active, background) for an elementwise func, evaluated per row block when both operands are
-    plain, non-overlapping ndarrays of out's shape (no broadcasting); in-place effects of func on background are
-    the same (also when an error is raised: with a raising numpy error state the whole array is processed at once)."""
+    """
+    Assign ``out[...] = func(active, background)`` for an elementwise ``func``, per row block when possible.
+
+    The blocked path runs when both operands are plain ndarrays of ``out``'s shape (no broadcasting), ``out`` is
+    not empty, the operands do not share memory and the caller's error state is not raising (``_fp_strict()``
+    is not None). Because ``func`` is elementwise, ``func`` on a block gives the same values as the block of
+    ``func`` on the whole arrays, and its in-place effects on ``background`` (overlay, soft light) are the same.
+    With a raising error state the whole array is processed at once, so an exception leaves ``out`` and
+    ``background`` in the same state as the original code.
+
+    Parameters
+    ----------
+    out : numpy.ndarray
+        Target array (a band view of the result); written in place.
+    func : callable
+        Elementwise function ``func(active, background)``.
+    active : numpy.ndarray or object
+        First operand.
+    background : numpy.ndarray or object
+        Second operand; may be modified in place by ``func``.
+    """
     if (type(active) is np.ndarray and type(background) is np.ndarray and active.ndim >= 1 and out.size > 0
             and active.shape == out.shape and background.shape == out.shape and _fp_strict() is not None
             and not np.may_share_memory(active, background)):
@@ -1076,7 +1211,22 @@ def blend_images(blend_mode, active, background, min_c=None, max_c=None):
 
 
 def _outside_0_1(image):
-    """The range test used before blending: any non-NaN value below 0 or above 1."""
+    """
+    Return True if any non-NaN value of ``image`` is below 0 or above 1 (the range test before blending).
+
+    The test is a pure function of the array values; render_all_images reuses its result for an array that has
+    not been modified since. An all-NaN array gives False (``np.nanmin`` returns NaN with a RuntimeWarning).
+
+    Parameters
+    ----------
+    image : numpy.ndarray
+        Image of any shape.
+
+    Returns
+    -------
+    bool
+        ``nanmin(image) < 0 or nanmax(image) > 1``.
+    """
     return bool(np.nanmin(image) < 0 or np.nanmax(image) > 1)
 
 
@@ -1114,8 +1264,32 @@ def render_images(active, background, opacity):
 
 
 def _render_images(active, background, opacity, active_outside=None, background_outside=None):
-    """render_images; a caller that has just evaluated _outside_0_1() on the very same unchanged array may pass
-    the result as active_outside / background_outside instead of having it recomputed (None = compute)."""
+    """
+    Implement render_images, optionally with range tests already evaluated by the caller.
+
+    Contract: a caller that has evaluated ``_outside_0_1()`` on the very same array object, and has not modified
+    the array since, may pass the result as ``active_outside`` / ``background_outside``; the result is then
+    identical to recomputing the test. None means "compute here". render_all_images uses this to avoid
+    repeating the full-image ``nanmin`` / ``nanmax`` passes.
+
+    Parameters
+    ----------
+    active : numpy.ndarray
+        Blended layer, ``(H, W)`` or ``(3, H, W)``.
+    background : numpy.ndarray
+        Background, ``(H, W)`` or ``(3, H, W)``.
+    opacity : float
+        Opacity in percent (see apply_opacity).
+    active_outside : bool or None
+        ``_outside_0_1(active)`` if known, else None.
+    background_outside : bool or None
+        ``_outside_0_1(background)`` if known, else None.
+
+    Returns
+    -------
+    numpy.ndarray
+        As render_images.
+    """
 
     # Both active and background image have to be between 0 and 1, scale if not
     if active_outside is None:
