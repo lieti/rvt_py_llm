@@ -620,6 +620,9 @@ def mean_filter(dem, kernel_radius):
     off = 2 * radius_cell + 1
 
     def _box_sum(integral):
+        """Return the (2r + 1)^2 box sums of ``integral`` on the output window, (H, W), in its dtype:
+        ``(I[:h, :w] + I[2r+1:, 2r+1:]) - I[2r+1:, :w] - I[:h, 2r+1:]``, the same terms and order as the
+        reference ``roll + roll - roll - roll``."""
         out = np.add(integral[:nr_rows, :nr_cols], integral[off:, off:])
         np.subtract(out, integral[off:, :nr_cols], out=out)
         np.subtract(out, integral[:nr_rows, off:], out=out)
@@ -794,12 +797,25 @@ def horizon_shift_vector(num_directions=16,
     return shift
 
 
-# Number of output-window elements processed at once by the horizon scan (keeps the per-direction buffers in cache).
+# Number of output-window elements processed at once by the horizon scan. 32768 float64 elements are 256 KiB per
+# buffer, so the few per-block buffers (difference, quotient, running maximum, accumulators) stay in the L2 cache of
+# current CPUs while all radii of a direction are scanned. The value only affects speed: pixels are independent, so
+# any block size gives the same results.
 _SVF_BLOCK_ELEMS = 32768
 
 
 def _svf_window_ok(height, radius_max, move):
-    """True if np.roll of the padded `height` by every shift in `move` never wraps on the output window."""
+    """
+    Return True if the output-window path of ``sky_view_factor_compute`` is exact for these arguments.
+
+    ``height`` is the DEM padded by ``radius_max`` px. The path replaces ``np.roll(height, (dy, dx))`` by
+    slices of ``height``; on the output window (the padded array without its ``radius_max`` border) this is
+    the same array only if no roll wraps there, i.e. ``|dy|, |dx| <= radius_max`` for every shift. Also
+    required: a 2D array larger than twice the padding, ``radius_max >= 1``, at least one direction, and
+    for every direction a non-empty float64 ``distance`` array with one shift per distance (so that the
+    division by the radius promotes exactly as in the reference loop). False sends the caller to the
+    full-extent reference loop.
+    """
     if height.ndim != 2 or radius_max < 1 or len(move) == 0:
         return False
     if height.shape[0] <= 2 * radius_max or height.shape[1] <= 2 * radius_max:
@@ -817,7 +833,14 @@ def _svf_window_ok(height, radius_max, move):
 
 
 def _svf_accumulate(acc, term):
-    """acc + term; in place when acc (a private array) already has the promoted dtype."""
+    """
+    Return ``acc + term``, written into ``acc`` when that gives the same result.
+
+    In place only when ``acc`` already has the promoted dtype of ``acc + term``; then ``np.add(acc, term,
+    out=acc)`` runs the same loop as ``acc + term`` and the values are identical. Otherwise (the first
+    float32 + float64 step) a new array is returned, as in the reference expression. ``acc`` must be a
+    private buffer of the caller, never a user array.
+    """
     if acc.dtype == np.result_type(acc.dtype, term.dtype):
         return np.add(acc, term, out=acc)
     return acc + term
@@ -825,12 +848,26 @@ def _svf_accumulate(acc, term):
 
 @_accel.jit_kernel
 def _svf_max_slope_kernel(height, row0, col0, dys, dxs, radii, out):
-    # Serial kernel of one direction of the horizon scan in _svf_compute_window, for the block
-    # out[i, j] <- pixel height[row0 + i, col0 + j]. Same operations per pixel and radius as the numpy path: the
-    # difference in the height dtype (the d_buf buffer), widened exactly to float64 and divided by the np.float64
-    # radius (the q_buf buffer), then fmax into the float64 maximum that starts at float64(float32(-1000)), radii in
-    # the same order. The maximum starts non-NaN and only takes q when q > max, so a NaN q is skipped and the maximum
-    # never becomes NaN, as np.fmax(max, NaN) == max.
+    """
+    Numba kernel: running maximum slope of one direction of the SVF horizon scan, for one row block.
+
+    Inputs: ``height`` the padded DEM (float32 or float64, C-contiguous); ``row0``, ``col0`` the padded
+    coordinates of the block's first output pixel; ``dys``, ``dxs`` (int64) and ``radii`` (float64) the
+    shifts and distances of the direction, in scan order. Output: ``out[i, j]`` (float64) is the maximum
+    over k of ``(height[row0 + i - dys[k], col0 + j - dxs[k]] - height[row0 + i, col0 + j]) / radii[k]``,
+    starting from ``float64(float32(-1000))``. Serial, so the result does not depend on the thread count.
+
+    Equivalence with the numpy scan of ``_svf_compute_window`` (bitwise):
+
+    - the difference is taken in the height dtype (numba keeps float32 - float32 in float32, like the
+      ``d_buf`` buffer), widened exactly to float64 and divided by the same float64 radius (``q_buf``);
+    - the start value is the float32 -1000 of the reference promoted to float64;
+    - ``q if q > m else m`` equals ``np.fmax(m, q)``: for a NaN q the comparison is False and m is kept, as
+      fmax ignores NaN; m starts finite and so never becomes NaN. The only case where the two could pick
+      different operands is a +0 / -0 tie; the sign of a zero maximum cannot reach the outputs, because
+      ``1 - sin(fmax(angle, 0))`` and ``pi / 2 - opns / n`` give the same value for +0 and -0;
+    - radii are visited in the same order, so the maximum sees the same sequence of operands.
+    """
     n_rows, n_cols = out.shape
     start = np.float64(np.float32(-1000.0))
     for i in range(n_rows):
@@ -850,9 +887,15 @@ def _svf_max_slope_kernel(height, row0, col0, dys, dxs, radii, out):
 
 
 def _svf_kernel_ok(height, scan):
-    """True if the numba horizon kernel performs the same operations as the numpy scan: native float32/float64
-    height, (shifted - height) in the height dtype, / np.float64 radius and the fmax with the float32 start
-    promoted to float64."""
+    """
+    Return True if ``_svf_max_slope_kernel`` performs the same operations as the numpy scan for this input.
+
+    Checks by probing numpy's own type promotion on a 1 x 1 slice: ``height`` is float32 or float64 and
+    C-contiguous (the kernel's assumed layout); ``shifted - height`` stays in the height dtype; every radius
+    is an ``np.float64``, so the quotient is float64; and ``np.fmax`` of the float32 -1000 start with that
+    quotient is float64. If numpy promoted differently (another dtype, another numpy version), the kernel's
+    fixed float64 arithmetic would not match and the numpy scan is used instead.
+    """
     if height.dtype not in (np.float32, np.float64) or not height.flags.c_contiguous:
         return False
     probe = height[:1, :1]
@@ -874,10 +917,22 @@ def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, c
     """
     Horizon scan of sky_view_factor_compute evaluated only on the output window, in blocks of rows.
 
+    Arguments are those of ``sky_view_factor_compute`` after padding: ``height`` is the DEM padded by
+    ``radius_max`` px, ``move`` the result of ``horizon_shift_vector``; the caller has checked
+    ``_svf_window_ok``. Returns the same dict as ``sky_view_factor_compute`` (float64 (H, W) arrays).
+
     Per pixel the arithmetic is that of the full-extent loop: (shifted - height) / radius with the np.float64
     radius, np.fmax with the float32 -1000 start, np.arctan, then per direction svf + (1 - sin(fmax(angle, 0))),
     asvf + (1 - sin(fmax(angle, 0))) * weight[i_dir], opns + angle, starting from height * 0. Pixels are
-    independent, so the window is processed in row blocks.
+    independent, so the window is processed in row blocks of ``_SVF_BLOCK_ELEMS`` elements, and every
+    shifted array is the slice ``height[r + r0 - dy : r + r1 - dy, r - dx : r - dx + W]``, which equals the
+    rolled array there because no shift exceeds the padding.
+
+    Per block and direction the running maximum comes from ``_svf_max_slope_kernel`` when numba is usable
+    (``_svf_kernel_ok``); if a kernel call fails, the numpy scan takes over from that direction on, with a
+    fresh maximum, so a partially written kernel buffer is never used. The numpy scan reuses two buffers
+    (difference and quotient) after the first radius, whose dtypes numpy chose by promotion, so later
+    radii run the same ufunc loops in place.
     """
     r = radius_max
     n_rows = height.shape[0] - 2 * r
@@ -1078,6 +1133,8 @@ def sky_view_factor_compute(height_arr,
         return _svf_compute_window(height, radius_max, move, num_directions, compute_svf, compute_opns,
                                    compute_asvf, a_main_direction, a_poly_level, a_min_weight)
 
+    # Reference path: the original full-extent np.roll loop. It runs when _svf_window_ok is False and defines the
+    # values the fast path above reproduces bitwise; it is not dead code.
     # Initiate the output for SVF
     if compute_svf:
         svf_out = height * 0  # Multiply with 0 instead of using np.zeros to preserve nodata
@@ -1289,10 +1346,26 @@ def sky_view_factor(dem,
 
 @_accel.jit_kernel
 def _local_dominance_kernel(dem, dem_obs, out, pad_width, s_y, s_x, distances, dist_factor):
-    # Serial kernel of the sliced numpy path in local_dominance, same operations per shift and pixel: compare in the
-    # input dtypes, subtract rounded to float32 (the float32 difference buffer), float64 division by distances[i] and
-    # multiplication by dist_factor[i], float64 add into the accumulator rounded to its dtype, shifts in the same
-    # order. NaN compares False and is skipped, as with where=mask.
+    """
+    Numba kernel: local dominance sum over all shifts for the output window.
+
+    Inputs: ``dem`` the DEM padded by ``pad_width`` px (float32 or float64); ``dem_obs`` the observer
+    heights ``dem + observer_height`` on the output window (H, W); ``s_y``, ``s_x`` (int64) the shifts and
+    ``distances``, ``dist_factor`` (float64) the per-shift distance d and factor 2d + rad_inc, all in the
+    angle-major order of ``local_dominance``. Output: ``out`` (H, W), the float32 accumulator starting at
+    ``dem_in * 0``, updated in place. Serial, so independent of the thread count.
+
+    Equivalence with the sliced numpy path of ``local_dominance`` (bitwise), per shift and pixel:
+
+    - the comparison ``obs > moved`` in the input dtypes (``np.greater`` into the bool mask);
+    - the difference ``obs - moved`` rounded to float32 (the float32 ``buf_diff``), then widened to float64;
+    - float64 division by ``distances[i]`` and multiplication by ``dist_factor[i]`` (``buf_val``);
+    - float64 addition to the accumulator value, rounded to the accumulator dtype on store
+      (``np.add(..., where=mask, casting="same_kind")``);
+    - shifts in the same order. A NaN operand compares False and adds nothing, as with ``where=mask``.
+
+    The guards in ``local_dominance`` (float dtypes, shifts within the padding) exclude out-of-range reads.
+    """
     n_rows, n_cols = out.shape
     for r in range(n_rows):
         obs_r = dem_obs[r]
@@ -1457,6 +1530,8 @@ def local_dominance(dem,
                 np.add(out_b, v_b, out=out_b, where=m_b, casting="same_kind")
         return local_dom_out / norma
 
+    # Reference path: the original full-extent np.roll loop. It runs when the guard above fails (max_rad <= 0,
+    # no shifts, or a shift beyond the padding) and defines the values the sliced and numba paths above reproduce bitwise; not dead code.
     local_dom_out = dem * 0
     for i_s in range(n_shifts):
         dem_moved = np.roll(dem, int(round(y_t[i_s])), axis=0)
@@ -1702,19 +1777,35 @@ def horizon_generate_pyramids(dem,
 
 
 def _sky_illum_iadd(acc, term):
-    # acc + term, in place when the promoted dtype equals acc.dtype (same values as acc + term)
+    """
+    Return ``acc + term``, written into ``acc`` when that gives the same result.
+
+    In place only when the promoted dtype of ``acc + term`` is ``acc.dtype``; then ``np.add(..., out=acc)``
+    runs the same loop and gives the same values. Otherwise (the first float32 + float64 step of a
+    sky illumination accumulator) a new promoted array is returned, as in the reference ``acc = acc + term``.
+    ``acc`` must be a private buffer of the caller.
+    """
     if np.result_type(acc, term) == acc.dtype:
         return np.add(acc, term, out=acc)
     return acc + term
 
 
 def _sky_illum_level_search(height, move, direction, max_slope, inner):
-    # Horizon search of one pyramid level and direction; same arithmetic as
-    #     max_slope = np.maximum(max_slope,
-    #                            np.maximum((np.roll(height, s, axis=(0, 1)) - height) / radius, 0.))
-    # inner=None: full array, np.roll semantics (wrapped values included).
-    # inner=p: only height[p:-p, p:-p] (max_slope has that shape); requires |shift| <= p,
-    # so the shifted window stays inside height and no wrapped value is used.
+    """
+    Horizon search of one pyramid level and direction on whole arrays (path used when not blocked).
+
+    For every shift (dy, dx) and distance of ``move[direction]``, in order, computes the reference
+    expression of the original code::
+
+        max_slope = np.maximum(max_slope, np.maximum((np.roll(height, (dy, dx), axis=(0, 1)) - height) / radius, 0.))
+
+    with reused buffers. ``inner=None``: on the full array with ``np.roll`` semantics (wrapped values
+    included), the roll being written as four slice subtractions. ``inner=p``: only on
+    ``height[p:-p, p:-p]`` (``max_slope`` has that shape); requires ``|dy|, |dx| <= p``, so the shifted
+    window stays inside ``height`` and no wrapped value is used. ``max_slope`` is promoted (copied) when
+    the quotient has a wider dtype, otherwise updated in place; the returned array is the new maximum.
+    The values are bitwise those of the reference expression: same ufuncs, operand order and dtypes.
+    """
     n0, n1 = height.shape
     if inner is None:
         out_shape = (n0, n1)
@@ -1725,7 +1816,8 @@ def _sky_illum_level_search(height, move, direction, max_slope, inner):
     for i_rad, radius in enumerate(move[direction]["distance"]):
         dy, dx = move[direction]["shift"][i_rad]
         if inner is None:
-            # diff = np.roll(height, (dy, dx), axis=(0, 1)) - height, by blocks
+            # reference: diff = np.roll(height, (dy, dx), axis=(0, 1)) - height, written as the four
+            # wrapped quadrants of the roll so that no rolled copy is allocated
             dy = int(dy) % n0
             dx = int(dx) % n1
             for o0, s0 in ((slice(dy, None), slice(0, n0 - dy)), (slice(0, dy), slice(n0 - dy, None))):
@@ -1748,20 +1840,44 @@ def _sky_illum_level_search(height, move, direction, max_slope, inner):
 
 
 def _sky_illum_block_rows(n_cols):
-    # ~32k pixels per block; a multiple of 16 rows keeps every block but the last a multiple of the
-    # SIMD width, so element positions in vector bodies and tails match the whole-array operation
+    """
+    Return the number of rows per block of the blocked sky illumination path (at least 16).
+
+    About 32768 pixels per block (256 KiB per float64 buffer, so the block buffers stay in the L2 cache),
+    rounded down to a multiple of 16 rows. With a multiple of 16 rows every block except the last holds a
+    multiple of 16 elements, so each element sits at the same position relative to the SIMD vector width
+    (at most 16 lanes) as in the whole-array operation. numpy's vectorized transcendental functions (sin,
+    cos, arctan, power) may round differently in the vector body and in the scalar tail of a loop; keeping
+    the positions keeps every element on the same code path and the results bitwise identical.
+    """
     return max(16, (32768 // max(1, n_cols)) // 16 * 16)
 
 
-# Serial kernels of the numpy path in _sky_illum_search_blocked, row by row, with the same operations per pixel and
-# shift in the same order: difference in the dtype of hp (float32 subtraction for a float32 level), promoted to
-# float64 and divided by the float64 radius, then np.maximum. np.maximum(a, b) is evaluated as
-# "a if (a > b or a is NaN) else b": the NaN operand is returned (the first one if both are NaN), and on a tie
-# (+0 / -0) the second operand, as numpy does on this path (work/cand/K-08d/probe_max.py). Two kernels, so that
-# a process compiles only the variant it runs (the literal one serves only the shadow direction).
+# Two serial numba kernels reproduce the numpy path of _sky_illum_search_blocked row by row, with the same operations
+# per pixel and shift in the same order: the difference in the dtype of hp (float32 subtraction for the float32
+# level 0, float64 for the coarse levels), widened to float64 and divided by the float64 radius, then np.maximum.
+#
+# np.maximum(a, b) is written as "a if (a > b or a != a) else b". This reproduces numpy's float64 np.maximum
+# bitwise, including the two cases where IEEE leaves a choice:
+# - NaN: numpy returns a NaN operand, the first one if both are NaN (so the NaN payload is that of a). Here a NaN a
+#   is returned by "a != a"; for a NaN b only, "a > b" is False and b is returned;
+# - a tie of +0 and -0 (a > b is False): numpy returns the second operand b. This was checked on numpy 2.x / x86-64
+#   for arrays of 1 to 33 elements (SIMD bodies and scalar tails), with an array or a scalar as b, and is what the
+#   expression returns.
+# The zero sign matters because max_slope at level 0 becomes the horizon angle of the shadow direction, whose sign
+# of zero is part of the bitwise result. Two kernels instead of one with a flag, so that a process compiles only the
+# variant it runs (the literal one serves only the shadow direction).
 @_accel.jit_kernel
 def _sky_illum_search_kernel(hp, p, s_y, s_x, radii, ms):
-    # floor_once: np.maximum(ms, 0., out=ms), then np.maximum(ms, q, out=ms) for every shift
+    """
+    Numba kernel of ``_sky_illum_search_blocked`` with ``floor_once=True``.
+
+    Computes ``ms = np.maximum(ms, 0.)`` once, then ``ms = np.maximum(ms, q)`` for every shift k in order,
+    with ``q = float64(hp[p + r - s_y[k], p + c - s_x[k]] - hp[p + r, p + c]) / radii[k]``, for every pixel
+    (r, c) of ``ms`` (float64, updated in place). ``hp`` is the padded level (float32 or float64), ``p`` the
+    padding, ``s_y``, ``s_x`` int64 shifts, ``radii`` float64 distances. Same operations, operand order and
+    tie/NaN rule as the numpy loop (see the comment above), so the result is bitwise identical to it.
+    """
     n0, n1 = ms.shape
     n_s = s_y.shape[0]
     for r in range(n0):
@@ -1782,7 +1898,14 @@ def _sky_illum_search_kernel(hp, p, s_y, s_x, radii, ms):
 
 @_accel.jit_kernel
 def _sky_illum_search_literal_kernel(hp, p, s_y, s_x, radii, ms):
-    # literal: np.maximum(q, 0., out=q), then np.maximum(ms, q, out=ms) for every shift
+    """
+    Numba kernel of ``_sky_illum_search_blocked`` with ``floor_once=False`` (literal order).
+
+    For every shift k in order: ``q = np.maximum(q, 0.)``, then ``ms = np.maximum(ms, q)``, with q as in
+    ``_sky_illum_search_kernel``; ``ms`` (float64) is updated in place. This is the reference expression
+    ``np.maximum(ms, np.maximum(q, 0.))`` operation by operation, so even the sign of a zero maximum is that
+    of the reference; used for the shadow direction at level 0.
+    """
     n0, n1 = ms.shape
     n_s = s_y.shape[0]
     for r in range(n0):
@@ -1800,10 +1923,20 @@ def _sky_illum_search_literal_kernel(hp, p, s_y, s_x, radii, ms):
 
 
 def _sky_illum_search_accel(hp, p, shifts, max_slope, floor_once):
-    # numba kernel for _sky_illum_search_blocked; True when max_slope was updated in place, False when the numpy
-    # path has to run (accelerators off, numba missing, unsupported dtypes or layout). The guards exclude every
-    # case in which the kernel could raise after writing (division by a zero radius, indices outside hp), so a
-    # False return leaves max_slope untouched (typing and compilation fail before the kernel runs).
+    """
+    Run the numba level-search kernel for ``_sky_illum_search_blocked``, if possible.
+
+    Arguments as in ``_sky_illum_search_blocked``; ``shifts`` is a list of ``(dy, dx, radius)``. Returns True
+    when ``max_slope`` (float64) was updated in place by ``_sky_illum_search_kernel`` (``floor_once``) or
+    ``_sky_illum_search_literal_kernel``; False when the numpy path has to run (accelerators off, numba
+    missing, unsupported dtype or layout, compile failure).
+
+    The guards exclude every case in which the kernel could raise after writing: a zero radius
+    (ZeroDivisionError in numba's default error model), shifts larger than ``p`` or a too small ``hp``
+    (indices outside ``hp``), a read-only or empty ``max_slope``. What remains can fail only at typing or
+    compilation, before the kernel writes, so a False return leaves ``max_slope`` untouched and the numpy
+    path starts from the same values.
+    """
     if not _accel.enabled():
         return False
     n0, n1 = max_slope.shape
@@ -1821,15 +1954,30 @@ def _sky_illum_search_accel(hp, p, shifts, max_slope, floor_once):
 
 
 def _sky_illum_search_blocked(hp, p, shifts, max_slope, floor_once):
-    # Horizon search of one level and direction on the window hp[p:p + n0, p:p + n1] (n0, n1 =
-    # max_slope.shape) with the shifted windows hp[p - dy:, p - dx:] (|dy|, |dx| <= p), in row
-    # blocks that stay in cache. Per pixel the same ufuncs, operand order and dtypes as
-    #     max_slope = np.maximum(max_slope, np.maximum((shifted - base) / radius, 0.))
-    # (see _sky_illum_level_search; max_slope is promoted before the first radius instead of at
-    # it, exact for float32 -> float64). floor_once computes max(ms, max(q1, 0), ..., max(qn, 0))
-    # as max(max(ms, 0), q1, ..., qn): the same numbers (np.maximum returns the NaN operand, the
-    # first one if both are NaN), only the sign of a zero maximum may differ.
-    # max_slope is updated in place when its dtype is already the promoted one.
+    """
+    Horizon search of one pyramid level and direction on a window, in row blocks (blocked path).
+
+    ``hp`` is the padded level, ``p`` the padding, ``max_slope`` (n0, n1) the running maximum on the window
+    ``hp[p:p + n0, p:p + n1]``, ``shifts`` a list of ``(dy, dx, radius)`` with ``|dy|, |dx| <= p``, so the
+    shifted windows ``hp[p - dy:, p - dx:]`` are slices that never leave ``hp``. Level 0 is passed with its
+    own padding; a coarse level as a wrap-padded copy, whose slices equal ``np.roll`` of the level.
+    Returns the new maximum: ``max_slope`` itself, updated in place, when its dtype is already the promoted
+    one, else a promoted copy.
+
+    Per pixel the same ufuncs, operand order and dtypes as the reference expression of
+    ``_sky_illum_level_search``::
+
+        max_slope = np.maximum(max_slope, np.maximum((shifted - base) / radius, 0.))
+
+    except that ``max_slope`` is promoted before the first radius instead of at it (exact for
+    float32 -> float64). ``floor_once=True`` computes ``max(ms, max(q1, 0), ..., max(qn, 0))`` as
+    ``max(max(ms, 0), q1, ..., qn)``: the same numbers, because np.maximum returns the NaN operand (the
+    first one if both are NaN), but the sign of a zero maximum may differ. The caller uses it where the
+    zero sign cannot reach the output (coarse levels, which only feed the spline, and level 0 of the
+    directions other than the shadow direction) and the literal order (``floor_once=False``) elsewhere.
+    The row blocks (``_sky_illum_block_rows``) keep the buffers in cache; the numba kernels of
+    ``_sky_illum_search_accel`` replace the block loop when available.
+    """
     if len(shifts) == 0:
         return max_slope
     n0, n1 = max_slope.shape
@@ -1865,12 +2013,22 @@ def _sky_illum_search_blocked(hp, p, shifts, max_slope, floor_once):
 
 
 def _sky_illum_resample(x, y, z, x_fine, y_fine):
-    # Same values as RectBivariateSpline(x, y, z, kx=1, ky=1)(x_fine, y_fine).
-    # For kx = ky = 1 and s = 0 the knots are (x[0], x, x[-1]) and the fitted coefficients are z
-    # itself whenever (1 / dx) * dx == 1 for every knot step (the B-spline values at the data
-    # points are then exactly 1 and 0, every Givens rotation has cos = 0, sin = 1, and the back
-    # substitution only subtracts exact zeros) and z is finite; NaN or inf would be spread by the
-    # fit, so then the fit is run. The evaluation is the same FITPACK bispev with the same knots.
+    """
+    Return ``RectBivariateSpline(x, y, z, kx=1, ky=1)(x_fine, y_fine)`` (bilinear), skipping the fit when exact.
+
+    ``x``, ``y`` are the coarse row and column coordinates (in level-0 px), ``z`` the coarse max_slope
+    (len(x), len(y)), ``x_fine``, ``y_fine`` the coordinates of the next finer level. Returns float64
+    (len(x_fine), len(y_fine)), bitwise equal to the scipy call.
+
+    Why the fit can be skipped: for kx = ky = 1 and s = 0 the knots are (x[0], x, x[-1]) and the fitted
+    coefficients are ``z`` itself whenever ``(1 / dx) * dx == 1`` for every knot step (the B-spline values
+    at the data points are then exactly 1 and 0, every Givens rotation of the FITPACK least-squares solve
+    has cos = 0, sin = 1, and the back substitution only subtracts exact zeros) and ``z`` is finite; NaN
+    or inf would be spread by the fit, so then the fit is run. The evaluation is the same FITPACK
+    ``bispev`` (``scipy.interpolate.bisplev``) with the same knots. Inputs that do not meet the conditions
+    (other dtypes or shapes, non-increasing or inexact steps, non-finite ``z``) go to
+    ``RectBivariateSpline``, the reference.
+    """
     x = np.asarray(x)
     y = np.asarray(y)
     z = np.asarray(z)
@@ -2136,6 +2294,9 @@ def sky_illumination(dem,
         cos_b = np.empty(blk_shape, dtype=np.float64)
 
         def _shift_lists(move):
+            """Return ``{direction: [(dy, dx, radius), ...]}`` from a ``horizon_shift_vector`` dict, shifts
+            as Python ints and radii as the np.float64 elements of the distance array (the dtype the
+            reference division uses)."""
             return {d: [(int(s[0]), int(s[1]), r) for s, r in zip(move[d]["shift"], move[d]["distance"])]
                     for d in move}
 
@@ -2207,9 +2368,11 @@ def sky_illumination(dem,
                     overcast_d = overcast_d.astype(np.float64)
             for r0, r1 in blocks:
                 n_r = r1 - r0
-                # _ = np.arctan(max_slope)
+                # Numpy reference this block reproduces (the whole-array expressions below), not dead code:
+                #   _ = np.arctan(max_slope)
                 _ = np.arctan(max_slope[r0:r1], out=ang_b[:n_r])
-                # _d_aspect = -2 * np.sin(da) * np.cos(dir_rad - aspect)
+                # reference: _d_aspect = -2 * np.sin(da) * np.cos(dir_rad - aspect), evaluated left to right,
+                # so the constant -2 * np.sin(da) (d_aspect_coef) is formed first
                 _d_aspect = np.subtract(dir_rad, aspect[r0:r1], out=dasp_b[:n_r])
                 np.cos(_d_aspect, out=_d_aspect)
                 np.multiply(d_aspect_coef, _d_aspect, out=_d_aspect)
@@ -2255,7 +2418,7 @@ def sky_illumination(dem,
             cos_ = np.cos(_)
             buf = np.square(cos_)  # == cos_ ** 2
             uniform_a = _sky_illum_iadd(uniform_a, buf)
-            # np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.
+            # reference expression reproduced in place: np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.
             np.multiply(2., _, out=buf)
             np.sin(buf, out=buf)
             np.divide(buf, 4., out=buf)
@@ -2269,7 +2432,7 @@ def sky_illumination(dem,
                 _cos3 = np.power(cos_, 3, out=buf)  # == cos_ ** 3
                 np.maximum(_cos3, 0, out=_)
                 overcast_c = _sky_illum_iadd(overcast_c, _)
-                # 2. / 3. - np.cos(_) + _cos3 / 3.
+                # reference expression reproduced in place: 2. / 3. - np.cos(_) + _cos3 / 3.
                 np.subtract(2. / 3., cos_, out=cos_)
                 np.divide(_cos3, 3., out=_cos3)
                 np.add(cos_, _cos3, out=cos_)
@@ -2277,6 +2440,8 @@ def sky_illumination(dem,
                 np.maximum(cos_, 0, out=cos_)
                 overcast_d = _sky_illum_iadd(overcast_d, cos_)
         else:
+            # Reference expressions of the original code (used for other dtypes; the two branches above
+            # reproduce them bitwise for float64)
             uniform_a = uniform_a + (np.cos(_)) ** 2
             uniform_b = uniform_b + np.maximum(_d_aspect * (np.pi / 4. - _ / 2. - np.sin(2. * _) / 4.), 0)
             if compute_overcast:
@@ -2598,11 +2763,29 @@ def topographic_dev(dem, dem_i_nr_pixels, dem_i1, dem_i2, kernel_radius):
 @_accel.jit_kernel
 def _mstp_dev_max_kernel(dem_i1, dem_i2, dem_i_nr_pixels, has_nr_pixels, dem_centre, radii, maximum_radius, out,
                          buf):
-    # Serial kernel of the sliced numpy path in max_elevation_deviation, same float64 operations and order per pixel
-    # and radius: box sums (a + b - c - d) of the summed area tables, int64 pixel-count box converted to float64 (or
-    # (2 * r + 1) ** 2), mean, mean of squares minus mean * mean, abs, sqrt, + 1e-6, (z - mean) / std, running max
-    # replaced where not (|max| >= |dev|), radii in the same order. np.divide is a plain IEEE division (no
-    # ZeroDivisionError), as in numpy. The float64 running max of a row (buf) is rounded to float32 into out.
+    """
+    Numba kernel: DEV_max of ``max_elevation_deviation`` over all radii, for the output window.
+
+    Inputs: ``dem_i1``, ``dem_i2`` the float64 summed-area tables of the padded DEM and of its squares;
+    ``dem_i_nr_pixels`` the int64 table of the non-NaN mask, used only if ``has_nr_pixels`` (else a dummy
+    and the count is ``(2r + 1)^2``); ``dem_centre`` (H, W) the centre elevations (float32 or float64);
+    ``radii`` (int64, all > 0) in the order of ``range(minimum_radius, maximum_radius + 1, step)``;
+    ``maximum_radius`` the padding offset. Output: ``out`` (H, W) float32, written in place; ``buf`` is a
+    float64 scratch row of length W. Serial, so independent of the thread count.
+
+    Equivalence with the sliced numpy path (``_mstp_box_sum``), bitwise, per pixel and radius:
+
+    - box sums ``((a + b) - c) - d`` of the tables in the same term order;
+    - the int64 pixel-count box sum, exact in int64, converted to float64 (numpy promotes it in the
+      division);
+    - ``mean = s1 / n``; ``var = s2 / n - mean * mean`` (numpy's ``mean ** 2`` is computed as
+      ``mean * mean``); ``std = sqrt(|var|) + 1e-6``; ``dev = (float64(z) - mean) / std``;
+    - ``np.divide`` is a plain IEEE division (0 / 0 gives NaN, no ZeroDivisionError), as in numpy;
+    - the running maximum is replaced where ``not (|max| >= |dev|)``, radii in the same order, so ties
+      and NaN behave as in the numpy loop;
+    - the float64 maximum of a row is rounded to float32 once when copied into ``out``, as the final
+      ``astype(np.float32)`` does.
+    """
     n_rows, n_cols = out.shape
     n_radii = radii.shape[0]
     for i in range(n_rows):
@@ -2741,6 +2924,8 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
             return dev_max_out
         del dev_max_out  # fallback: numpy path below
 
+    # Numpy path: topographic_dev (the reference) evaluated on the output window with _mstp_box_sum, the same
+    # float64 expressions in the same order; also the fallback of the kernel and the path for radii <= 0.
     for kernel_radius in range(minimum_radius, maximum_radius + 1, step):
         if kernel_radius <= 0:
             # topographic_dev returns the padded dem itself
@@ -2786,7 +2971,15 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
 
 
 def _mstp_box_sum(table, lo, hi, n_rows, n_cols):
-    """Box sum of topographic_dev (b + a - c - d of the rolled summed area tables) on the output window."""
+    """
+    Return the box sums of ``topographic_dev`` on the output window, (n_rows, n_cols), in the table dtype.
+
+    ``lo = maximum_radius - r`` and ``hi = maximum_radius + r + 1`` are the offsets of the four corners in
+    the table of the DEM padded by (maximum_radius + 1, maximum_radius). The result is
+    ``((I[lo, lo] + I[hi, hi]) - I[hi, lo]) - I[lo, hi]``, the terms of the reference
+    ``roll(r, r) + roll(-r-1, -r-1) - roll(-r-1, r) - roll(r, -r-1)`` in the same order, taken as slices:
+    on the output window no roll wraps, so the values are bitwise identical.
+    """
     box = np.add(table[lo:lo + n_rows, lo:lo + n_cols], table[hi:hi + n_rows, hi:hi + n_cols])
     box -= table[hi:hi + n_rows, lo:lo + n_cols]
     box -= table[lo:lo + n_rows, hi:hi + n_cols]
