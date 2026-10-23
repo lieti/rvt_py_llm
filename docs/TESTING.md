@@ -155,8 +155,13 @@ equivalent.
 |---|---|---|---|---|
 | before the freeze (tests from `main`, 1021 tests) | 20 / 21 = 95 % (m21, the e3/e4 SLRM layer opacity, survived) | 21 / 21 | equivalent | MUTANTS PASS |
 | after the freeze (tests from `tests-frozen`, 1089 tests) | 21 / 21 = 100 % | 21 / 21 | equivalent | MUTANTS PASS |
+| final `main` (`de0f665`, after the refactors; tests from `tests-frozen`, 1089 tests) | 21 / 21 = 100 % | 21 / 21 | equivalent | MUTANTS PASS |
+| final `main` with mutants m22-m23 on the refactored helpers | pending | pending | pending | pending |
 
 The surviving mutant m21 led to `tests/test_char_e3e4_recipe.py` (commit `c341ec8`), added before the freeze.
+The log of the final-`main` run is `work/llm/eval/mutants_main.log` of the optimization workspace (not in this
+repository). Mutants m01-m21 do not touch the code that the three refactors changed (`_accumulate`, `_box_sum`,
+`BLOCK_ELEMS`); m22-m23 are written for those helpers.
 
 ### 3.4 linecov: line coverage
 
