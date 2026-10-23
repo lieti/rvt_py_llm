@@ -1,7 +1,65 @@
 """
-Relief Visualization Toolbox – Visualization Functions
+Relief Visualization Toolbox – layer blending, blender settings files and composite visualizations.
 
-Contains classes and methods for blending.
+Relation to the other modules
+-----------------------------
+- `rvt.vis` computes single visualizations from a DEM array (slope, hillshade, SVF, MSTP, ...).
+- `rvt.default.DefaultValues` holds the parameters of every visualization and computes (``get_*``) or saves
+  (``save_*``) them; `rvt.blend` uses it to compute a layer image that was not supplied.
+- `rvt.blend_func` holds the per-array operations used here (normalization, blend modes, opacity, color ramps).
+- `rvt.blend` (this module) combines visualizations into one image.
+
+Layer model
+-----------
+BlenderLayer
+    One layer: a visualization (given as array, as raster path, or computed from the DEM), its normalization
+    ("value" or "perc" with min / max), a blend mode (normal, multiply, screen, overlay, soft_light, luminosity),
+    an opacity in percent (0-100) and an optional matplotlib colormap.
+BlenderCombination
+    An ordered list of layers. ``layers[0]`` is the top layer, ``layers[-1]`` the bottom layer.
+    render_all_images composes from the bottom up: the bottom layer is the start image, then each layer above is
+    blended onto the result with its own blend mode and opacity.
+BlenderCombinations
+    A list of named combinations, e.g. the presets of ``settings/default_blender_combinations.json``.
+
+Settings files (JSON, directory ``settings/`` of the repository)
+---------------------------------------------------------------
+- One combination (``blender_file_example.json``, ``blender_VAT.json``, ``blender_custom_layers.json``)::
+
+      {"combination": {"name": str, "layers": [
+          {"layer": "1", "visualization_method": str, "norm": "Value" | "Perc", "min": float, "max": float,
+           "blend_mode": str, "opacity": int, "colormap": str (optional), "min_colormap_cut": float (optional),
+           "max_colormap_cut": float (optional)}, ...]}}
+
+  A layer with ``"visualization_method": "None"`` (or null) is skipped. Read by BlenderCombination.read_from_file,
+  written by BlenderCombination.save_to_file.
+- Several combinations (``default_blender_combinations.json``): ``{"combinations": [<one combination>, ...]}``,
+  read and written by BlenderCombinations.
+- Terrain presets (``default_terrains_settings.json``): ``{"terrains_settings": [{"terrain_settings": {"name": str,
+  "<visualization name>": {"stretch": {"min", "max"}, "<parameter>": {"value": ...}}, ...}}, ...]}``, read by
+  TerrainsSettings / TerrainSettings. TerrainSettings.apply_terrain copies the parameters into a DefaultValues
+  instance and the stretches into the min / max of the matching layers of a combination.
+
+Composite visualizations
+------------------------
+color_relief_image_map (CRIM), e3mstp and e4mstp compute their input visualizations with `rvt.vis` and
+DefaultValues and combine them with fixed BlenderCombination recipes, documented in each function. They return
+``(3, H, W)`` float64 RGB arrays with values in [0, 1] and NaN at no-data pixels (e4mstp writes the ``no_data``
+value there instead, when one is given).
+
+Optimized path
+--------------
+render_all_images evaluates the range test "any value outside [0, 1]" (``rvt.blend_func._outside_0_1``) once per
+array and passes the result on instead of recomputing it on the same, unchanged array (commit 8e81581, "K-11").
+The test is a pure function of the array values, so reusing it is exact; where the array may have changed (overlay
+and soft_light write into the background, a rescaled operand) the test is recomputed. The blend and opacity kernels
+themselves are evaluated in row blocks in `rvt.blend_func`; outputs are bitwise identical to the original code.
+
+Known issues
+------------
+Latent bugs (unused opacity of the bottom layer, no visible effect of the opacity of overlay / soft_light layers,
+slope units of e4mstp, copy-paste errors in TerrainSettings.read_from_json, ...) are described in the Notes of the
+affected functions and listed in docs/KNOWN_ISSUES.md; the behaviour is kept as it is.
 
 Credits:
     Žiga Kokalj (ziga.kokalj@zrc-sazu.si)

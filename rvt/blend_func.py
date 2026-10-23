@@ -1,7 +1,55 @@
 """
-Relief Visualization Toolbox – Visualization Functions
+Relief Visualization Toolbox – blend modes, normalization, opacity and color ramps (array level).
 
-Contains core functions for blending.
+This module holds the per-array operations of the blender. `rvt.blend` builds the layer model on top of it
+(BlenderLayer, BlenderCombination, e3mstp, ...); `rvt.default.DefaultValues.float_to_8bit` uses the normalization
+functions (normalize_image, normalize_lin, normalize_perc) to write 8-bit rasters. Nothing here computes a
+visualization from a DEM; that is `rvt.vis`.
+
+Function groups
+---------------
+Color ramps
+    gray_scale_to_color_ramp, truncate_colormap (matplotlib colormaps).
+Normalization (stretch to [0, 1])
+    normalize_lin (linear between two values), normalize_perc and lin_cutoff_calc_from_perc (between two
+    percentiles), advanced_normalization (dispatch by "value" / "perc"), normalize_image (the blender's entry point,
+    adds the rescale to [0, 1] and the inversion of slope and negative openness), cut_off_normalize.
+Rescaling of arrays outside [0, 1]
+    scale_0_to_1 (dispatch), scale_within_0_and_1, scale_strict_0_to_1.
+Blend modes
+    blend_normal, blend_screen, blend_multiply, blend_overlay, blend_soft_light, blend_luminosity (with lum,
+    channel_min, channel_max, clip_color, matrix_eq_min_lt_zero, matrix_eq_max_gt_one); the dispatchers
+    equation_blend, blend_multi_dim_images and blend_images.
+Opacity
+    apply_opacity, render_images.
+
+Conventions
+-----------
+- Images are 2D ``(H, W)`` gray arrays or 3D ``(3, H, W)`` RGB arrays with the band axis first.
+- Blend and opacity functions expect values in [0, 1]; render_images rescales an operand outside [0, 1] first.
+- NaN marks no-data pixels; how each function treats NaN is stated in its docstring.
+- Opacity is a percentage 0-100; a value <= 1 is taken as a fraction (see apply_opacity).
+- In-place effects on arguments: normalize_lin (and everything that calls it) clips its argument to
+  [minimum, maximum] in place; blend_overlay and blend_soft_light write their result into ``background``;
+  scale_within_0_and_1 and scale_strict_0_to_1 overwrite NaN in their argument.
+
+Blocked evaluation (optimized paths)
+------------------------------------
+normalize_lin, blend_overlay, blend_soft_light, blend_luminosity (with clip_color), blend_multi_dim_images and
+render_images evaluate their elementwise expressions on row blocks of about ``_BLOCK_ELEMS`` = 32768 elements
+instead of on whole images (commit 8e81581, "K-11"). Every element goes through the same IEEE operations, in the same
+order, with the same operand dtypes as in the original whole-array code, so the results are bitwise identical; only
+the size of the temporaries changes. The blocked path is taken only for plain float32/float64 ndarrays of one shape
+without memory overlap (see ``_float_arrays``); every other input runs the original code, which is kept next to the
+blocked code (``_blend_overlay_ref``, ``_blend_soft_light_ref``, the second half of normalize_lin, the non-blocked
+branch of ``_assign_elementwise``). Floating point warnings are reproduced with ``_fp_strict``. The results do not
+depend on the thread count (numpy only, no threads).
+
+Known issues
+------------
+Several functions behave in ways that look unintended (bounds of scale_within_0_and_1, chained comparison in
+scale_strict_0_to_1, case-sensitive mode checks, in-place writes of overlay / soft light). They are described in
+the Notes of each function and listed in docs/KNOWN_ISSUES.md; the behaviour is kept as it is.
 
 Credits:
     Žiga Kokalj (ziga.kokalj@zrc-sazu.si)
