@@ -186,7 +186,8 @@ the three MSTP scales (approximate, estimated <= x1.08), float32 slope arithmeti
 
 Commit classes (subject prefix) and what each class may change; each commit was checked by its class rule
 (see [TESTING.md](TESTING.md)). Counts of `git log --format=%s start..de0f665` (`de0f665` is the release commit of
-0.1.0); later commits are documentation rounds of class `meta:` only:
+0.1.0); later commits (documentation rounds, proof-tool updates) are not counted here, `git log --format=%s
+start..main` lists them:
 
 | class | count | allowed content | check |
 |---|---|---|---|
