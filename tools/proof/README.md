@@ -24,7 +24,9 @@ packages of the test suite (`pip install ".[test,accel]"`).
 | `doclint.py` | every public module, class, function and method has a numpy-style docstring whose `Parameters` name every parameter in signature order, and a `Returns` section when it returns a value | `--dir` = this repository (the working tree, not a git ref) | `DOCLINT PASS` / `DOCLINT FAIL (<n> problems)` |
 
 `frozen_manifest.json` holds the commit of `tests-frozen`, the SHA-256 of the 16 frozen files and the 1089 node
-ids. It was written once with `frozen_check.py --freeze` when the tag was set and is never regenerated.
+ids. It was written once with `frozen_check.py --freeze` when the tag was set and is never regenerated. The manifest
+hashes are of the git blobs (LF line endings, read with `git show`), not of the files on disk: on a checkout with
+`core.autocrlf=true` a hash of a working-tree file (CRLF) does not match, and `frozen_check.py` is still correct.
 
 ## Commands
 
