@@ -412,7 +412,39 @@ class DefaultValues:
         self.tile_size = (4000, 4000)  # size of single tile when using tile module (x_size, y_size)
 
     def save_default_to_file(self, file_path=None):
-        """Saves default attributes into .json file."""
+        """
+        Write the parameters of this instance to a json settings file.
+
+        The file has one object ``"default_settings"`` with ``overwrite``, ``ve_factor`` and one group per
+        visualization ("Hillshade", "Multiple directions hillshade", "Slope gradient", "Simple local relief model",
+        "Multi-scale relief model", "Sky-View Factor", "Anisotropic Sky-View Factor", "Openness - Positive",
+        "Openness - Negative", "Sky illumination", "Local dominance", "Multi-scale topographic position"). Each
+        parameter is ``{"value": ..., "description": ...}``; a ``*_bytscl`` tuple is ``{"mode", "min", "max",
+        "description"}`` and an ``mstp_*_scale`` tuple is ``{"min", "max", "step", "description"}``.
+        ``read_default_from_file`` reads this format back.
+
+        Parameters
+        ----------
+        file_path : str or None
+            Path of the json file; an existing file is replaced. None writes ``settings\\default_settings.json``
+            relative to the current working directory and creates the ``settings`` directory if needed.
+
+        Notes
+        -----
+        Known issue: ``tile_size`` and ``tile_size_limit`` are not written (and not read), so they do not survive
+        a settings round trip. See docs/KNOWN_ISSUES.md.
+
+        Known issue: the default path is the literal ``r"settings\\default_settings.json"`` with a backslash. On
+        Windows it is a path in the directory ``settings``; on Linux/macOS it is one file name with an empty
+        directory part, and ``os.makedirs("")`` raises FileNotFoundError when the file does not exist yet. See
+        docs/KNOWN_ISSUES.md.
+
+        The file is opened with the platform default encoding; all texts written are ASCII.
+        """
+        # Structure of this method:
+        #   1. build the nested dict "default_settings" (general values, then one group per visualization)
+        #   2. choose the default path and create its directory if file_path is None
+        #   3. write the dict as json with indent 4
         data = {"default_settings": {
             "overwrite": {
                 "value": self.overwrite,
@@ -664,7 +696,57 @@ class DefaultValues:
         dat.close()
 
     def read_default_from_file(self, file_path):
-        """Reads default attributes from file."""
+        """
+        Set the parameters of this instance from a settings file (``.json`` or legacy ``.txt``).
+
+        ``.json``: the format written by ``save_default_to_file``. Every key of that format must be present
+        (a missing key raises KeyError). Values are converted with ``int``, ``float`` or ``str`` as listed in the
+        code; ``ve_factor``, ``msrm_feature_min``, ``msrm_feature_max``, ``mstp_lightness`` and ``ld_observer_h``
+        become float, all other numbers int.
+
+        ``.txt``: lines ``name = value``, ``#`` starts a comment. Recognised names (case-insensitive):
+        overwrite, exaggeration_factor, slope_gradient, hillshading, sun_azimuth, sun_elevation,
+        multiple_hillshading, hillshade_directions, simple_local_relief, trend_radius, sky_view_factor,
+        svf_directions, search_radius, remove_noise, noise_removal (low/medium/high), anisotropic_svf,
+        anisotropy_direction, anisotropy_level (low/high), positive_openness, negative_openness,
+        sky_illumination, sky_model, max_shadow_dist, local_dominance, min_radius, max_radius. Other names are
+        ignored; a line without exactly one ``=`` gives a warning.
+
+        Parameters
+        ----------
+        file_path : str
+            Path of the settings file; the extension selects the format.
+
+        Raises
+        ------
+        FileNotFoundError
+            If a ``.json`` or ``.txt`` file does not exist.
+        KeyError
+            If a ``.json`` file lacks a key of the format.
+
+        Warns
+        -----
+        UserWarning
+            For every ``.txt`` line that does not have the form ``name = value``.
+
+        Notes
+        -----
+        Known issue: any other extension (or a missing file with another extension) is ignored without error;
+        the instance keeps its values. See docs/KNOWN_ISSUES.md.
+
+        Known issue: in ``.txt`` files ``sun_elevation`` is tested twice (hillshade first), so the second branch
+        is unreachable and ``mhs_sun_el`` is never set from a ``.txt`` file. See docs/KNOWN_ISSUES.md.
+
+        Known issue: after a json round trip ``msrm_feature_min`` and ``msrm_feature_max`` are float (0 -> 0.0),
+        so ``get_msrm_file_name`` changes from ``..._MSRM_F_M0-20_S2.tif`` to ``..._MSRM_F_M0.0-20.0_S2.tif``.
+        ``tile_size`` and ``tile_size_limit`` are not read. See docs/KNOWN_ISSUES.md.
+        """
+        # Structure of this method:
+        #   1. ".txt": parse "name = value" lines one by one; remove_noise gates noise_removal
+        #   2. ".json": load the file and set the attributes group by group (same order as
+        #      save_default_to_file: general, slope, hillshade, multi hillshade, SLRM, MSRM, SVF, ASVF,
+        #      positive and negative openness, sky illumination, local dominance, MSTP)
+        #   3. any other extension: nothing happens
         # Example file in dir settings: default_settings.json
         extension = os.path.splitext(file_path)[1]
         if extension == ".txt":
@@ -879,19 +961,62 @@ class DefaultValues:
             dat.close()
 
     def get_shadow_file_name(self, dem_path):
-        """Returns shadow name, with added hillshade parameters (hs_sun_azi == shadow azimuth,
-        hs_sun_el == shadow_elevation)."""
+        """
+        Return the file name of the shadow raster (sun position from the hillshade parameters).
+
+        Pattern: ``<dem>_shadow_A<hs_sun_azi>_H<hs_sun_el>.tif``. There is no 8-bit variant (the shadow is binary).
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         return "{}_shadow_A{}_H{}.tif".format(dem_name, self.hs_sun_azi, self.hs_sun_el)
 
     def get_shadow_path(self, dem_path):
-        """Returns path to Shadow. Generates shadow name (uses default attributes and dem name from dem_path) and
-        adds dem directory (dem_path) to it."""
+        """
+        Return the path of the shadow raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_shadow_file_name(dem_path)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_shadow_file_name(dem_path)))
 
     def get_hillshade_file_name(self, dem_path, bit8=False):
-        """Returns Hillshade name, dem name (from dem_path) with added hillshade parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the hillshade raster.
+
+        Pattern: ``<dem>_HS_A<hs_sun_azi>_H<hs_sun_el>[_8bit].tif``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_HS_A{}_H{}_8bit.tif".format(dem_name, self.hs_sun_azi, self.hs_sun_el)
@@ -899,13 +1024,44 @@ class DefaultValues:
             return "{}_HS_A{}_H{}.tif".format(dem_name, self.hs_sun_azi, self.hs_sun_el)
 
     def get_hillshade_path(self, dem_path, bit8=False):
-        """Returns path to Hillshade. Generates hillshade name (uses default attributes and dem name from dem_path) and
-        adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the hillshade raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_hillshade_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_hillshade_file_name(dem_path, bit8)))
 
     def get_slope_file_name(self, dem_path, bit8=False):
-        """Returns Slope name, dem name (from dem_path) with added slope parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the slope raster.
+
+        Pattern: ``<dem>_SLOPE[_8bit].tif``. The output unit is not part of the name.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_SLOPE_8bit.tif".format(dem_name)
@@ -913,13 +1069,44 @@ class DefaultValues:
             return "{}_SLOPE.tif".format(dem_name)
 
     def get_slope_path(self, dem_path, bit8=False):
-        """Returns path to slope. Generates slope name and adds dem directory (dem_path) to it.
-        If bit8 it returns 8bit file path."""
+        """
+        Return the path of the slope raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_slope_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_slope_file_name(dem_path, bit8)))
 
     def get_multi_hillshade_file_name(self, dem_path, bit8=False):
-        """Returns Multiple directions hillshade name, dem name (from dem_path) with added
-        multi hillshade parameters. If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the multi-direction hillshade raster.
+
+        Pattern: ``<dem>_MULTI-HS_D<mhs_nr_dir>_H<mhs_sun_el>[_8bit].tif``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_MULTI-HS_D{}_H{}_8bit.tif".format(dem_name, self.mhs_nr_dir, self.mhs_sun_el)
@@ -927,14 +1114,45 @@ class DefaultValues:
             return "{}_MULTI-HS_D{}_H{}.tif".format(dem_name, self.mhs_nr_dir, self.mhs_sun_el)
 
     def get_multi_hillshade_path(self, dem_path, bit8=False):
-        """Returns path to Multiple directions hillshade. Generates multi hillshade name (uses default attributes and
-        dem name from dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the multi-direction hillshade raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_multi_hillshade_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path),
                                              self.get_multi_hillshade_file_name(dem_path, bit8)))
 
     def get_slrm_file_name(self, dem_path, bit8=False):
-        """Returns Simple local relief model name, dem name (from dem_path) with added slrm parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the simple local relief model raster.
+
+        Pattern: ``<dem>_SLRM_R<slrm_rad_cell>[_8bit].tif``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_SLRM_R{}_8bit.tif".format(dem_name, self.slrm_rad_cell)
@@ -942,13 +1160,46 @@ class DefaultValues:
             return "{}_SLRM_R{}.tif".format(dem_name, self.slrm_rad_cell)
 
     def get_slrm_path(self, dem_path, bit8=False):
-        """Returns path to Simple local relief model. Generates slrm name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the simple local relief model raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_slrm_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_slrm_file_name(dem_path, bit8)))
 
     def get_svf_file_name(self, dem_path, bit8=False):
-        """Returns Sky-view factor name, dem name (from dem_path) with added svf parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the sky-view factor raster.
+
+        Pattern: ``<dem>_SVF_R<svf_r_max>_D<svf_n_dir><NR><8>.tif``.
+        ``<NR>`` is ``_NRlow``, ``_NRmedium`` or ``_NRhigh`` for ``svf_noise`` 1, 2, 3 and empty otherwise;
+        ``<8>`` is ``_8bit`` for ``bit8``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         out_name = "{}_SVF_R{}_D{}".format(dem_name, self.svf_r_max, self.svf_n_dir)
         if self.svf_noise == 1:
@@ -962,13 +1213,47 @@ class DefaultValues:
         return out_name + ".tif"
 
     def get_svf_path(self, dem_path, bit8=False):
-        """Returns path to Sky-view factor. Generates svf name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the sky-view factor raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_svf_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_svf_file_name(dem_path, bit8)))
 
     def get_asvf_file_name(self, dem_path, bit8=False):
-        """Returns Anisotropic Sky-view factor name, dem name (from dem_path) with added asvf parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the anisotropic sky-view factor raster.
+
+        Pattern: ``<dem>_SVF-A_R<svf_r_max>_D<svf_n_dir>_A<asvf_dir><AL><NR><8>.tif``.
+        ``<AL>`` is ``_ALlow`` or ``_ALhigh`` for ``asvf_level`` 1 or 2 and empty otherwise; ``<NR>`` is ``_NRlow``,
+        ``_NRmedium`` or ``_NRhigh`` for ``svf_noise`` 1, 2, 3 and empty otherwise;
+        ``<8>`` is ``_8bit`` for ``bit8``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         out_name = "{}_SVF-A_R{}_D{}_A{}".format(dem_name, self.svf_r_max, self.svf_n_dir, self.asvf_dir)
         if self.asvf_level == 1:
@@ -986,13 +1271,46 @@ class DefaultValues:
         return out_name + ".tif"
 
     def get_asvf_path(self, dem_path, bit8=False):
-        """Returns path to Anisotropic Sky-view factor. Generates asvf name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the anisotropic sky-view factor raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_asvf_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_asvf_file_name(dem_path, bit8)))
 
     def get_opns_file_name(self, dem_path, bit8=False):
-        """Returns Positive Openness name, dem name (from dem_path) with added pos opns parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the positive openness raster.
+
+        Pattern: ``<dem>_OPEN-POS_R<svf_r_max>_D<svf_n_dir><NR><8>.tif``.
+        ``<NR>`` is ``_NRlow``, ``_NRmedium`` or ``_NRhigh`` for ``svf_noise`` 1, 2, 3 and empty otherwise;
+        ``<8>`` is ``_8bit`` for ``bit8``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         out_name = "{}_OPEN-POS_R{}_D{}".format(dem_name, self.svf_r_max, self.svf_n_dir)
         if self.svf_noise == 1:
@@ -1006,13 +1324,47 @@ class DefaultValues:
         return out_name + ".tif"
 
     def get_opns_path(self, dem_path, bit8=False):
-        """Returns path to Positive Openness. Generates pos opns name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the positive openness raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_opns_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_opns_file_name(dem_path, bit8)))
 
     def get_neg_opns_file_name(self, dem_path, bit8=False):
-        """Returns Negative Openness name, dem name (from dem_path) with added neg opns parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the negative openness raster.
+
+        Pattern: ``<dem>_OPEN-NEG_R<svf_r_max>_D<svf_n_dir><NR><8>.tif``.
+        ``<NR>`` is ``_NRlow``, ``_NRmedium`` or ``_NRstrong`` for ``svf_noise`` 1, 2, 3 and empty
+        otherwise (known issue: the other visualizations use ``_NRhigh`` for 3, see docs/KNOWN_ISSUES.md);
+        ``<8>`` is ``_8bit`` for ``bit8``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         out_name = "{}_OPEN-NEG_R{}_D{}".format(dem_name, self.svf_r_max, self.svf_n_dir)
         if self.svf_noise == 1:
@@ -1026,13 +1378,45 @@ class DefaultValues:
         return out_name + ".tif"
 
     def get_neg_opns_path(self, dem_path, bit8=False):
-        """Returns path to Negative Openness. Generates pos neg name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the negative openness raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_neg_opns_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_neg_opns_file_name(dem_path, bit8)))
 
     def get_sky_illumination_file_name(self, dem_path, bit8=False):
-        """Returns Sky illumination name, dem name (from dem_path) with added sim parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the sky illumination raster.
+
+        Pattern: ``<dem>_SIM_<sim_sky_mod>_D<sim_nr_dir>_<sim_shadow_dist>px[_8bit].tif``.
+        The shadow settings are not part of the name.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_SIM_{}_D{}_{}px_8bit.tif".format(dem_name, self.sim_sky_mod, self.sim_nr_dir,
@@ -1042,14 +1426,46 @@ class DefaultValues:
                                                    self.sim_shadow_dist)
 
     def get_sky_illumination_path(self, dem_path, bit8=False):
-        """Returns path to Sky illumination. Generates sim name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the sky illumination raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_sky_illumination_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path),
                                              self.get_sky_illumination_file_name(dem_path, bit8)))
 
     def get_local_dominance_file_name(self, dem_path, bit8=False):
-        """Returns Local dominance name, dem name (from dem_path) with added ld parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the local dominance raster.
+
+        Pattern: ``<dem>_LD_R_M<ld_min_rad>-<ld_max_rad>_DI<ld_rad_inc>_A<ld_anglr_res>_OH<ld_observer_h>``
+        ``[_8bit].tif``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_LD_R_M{}-{}_DI{}_A{}_OH{}_8bit.tif".format(dem_name, self.ld_min_rad, self.ld_max_rad,
@@ -1060,14 +1476,46 @@ class DefaultValues:
                                                              self.ld_rad_inc, self.ld_anglr_res, self.ld_observer_h)
 
     def get_local_dominance_path(self, dem_path, bit8=False):
-        """Returns path to Local dominance. Generates ld name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the local dominance raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_local_dominance_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path),
                                              self.get_local_dominance_file_name(dem_path, bit8)))
 
     def get_msrm_file_name(self, dem_path, bit8=False):
-        """Returns Multi-scale relief model name, dem name (from dem_path) with added msrm parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the multi-scale relief model raster.
+
+        Pattern: ``<dem>_MSRM_F_M<msrm_feature_min>-<msrm_feature_max>_S<msrm_scaling_factor>[_8bit].tif``.
+        Numbers are formatted with ``str``, so an int 20 gives ``20`` and a float 20.0 gives ``20.0``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
             return "{}_MSRM_F_M{}-{}_S{}_8bit.tif".format(dem_name, self.msrm_feature_min, self.msrm_feature_max,
@@ -1077,13 +1525,46 @@ class DefaultValues:
                                                      self.msrm_scaling_factor)
 
     def get_msrm_path(self, dem_path, bit8=False):
-        """Returns path to Multi-scale relief model. Generates msrm name (uses default attributes and dem name from
-        dem_path) and adds dem directory (dem_path) to it. If bit8 it returns 8bit file path."""
+        """
+        Return the path of the multi-scale relief model raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_msrm_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_msrm_file_name(dem_path, bit8)))
 
     def get_mstp_file_name(self, dem_path, bit8=False):
-        """Returns Multi-scale topographic position name, dem name (from dem_path) with added mstp parameters.
-        If bit8 it returns 8bit file name."""
+        """
+        Return the file name of the multi-scale topographic position raster.
+
+        Pattern: ``<dem>_MSTP_<local>_<meso>_<broad>_L<mstp_lightness>[_8bit].tif`` with ``<local>`` =
+        ``mstp_local_scale[1]``, ``<meso>`` = ``mstp_meso_scale[1]``, ``<broad>`` = ``mstp_broad_scale[1]``: only
+        the maximum radius (px) of each scale is part of the name.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM. Only its base name up to the first dot is used (known issue: "my.site_v2.tif"
+            gives "my", see docs/KNOWN_ISSUES.md).
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            File name without directory.
+        """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
 
         mstp_file_name = "{}_MSTP_{}_{}_{}_L{}.tif".format(
@@ -1100,6 +1581,23 @@ class DefaultValues:
         return mstp_file_name
 
     def get_mstp_path(self, dem_path, bit8=False):
+        """
+        Return the path of the multi-scale topographic position raster next to the DEM.
+
+        ``os.path.normpath(os.path.join(os.path.dirname(dem_path), get_mstp_file_name(dem_path, bit8)))``.
+
+        Parameters
+        ----------
+        dem_path : str or pathlib.Path
+            Path of the DEM; the output is placed in its directory and named after its base name.
+        bit8 : bool
+            True gives the name of the 8-bit raster (``_8bit`` before ``.tif``), False the float raster.
+
+        Returns
+        -------
+        str
+            Normalized path in the DEM directory.
+        """
         return os.path.normpath(os.path.join(os.path.dirname(dem_path), self.get_mstp_file_name(dem_path, bit8)))
 
     def get_visualization_file_name(self,
@@ -1107,7 +1605,24 @@ class DefaultValues:
                                     dem_path: Path,
                                     path_8bit: bool
                                     ) -> str:
-        """"Return visualization path."""
+        """
+        Return the output file name of ``rvt_visualization`` by calling its ``get_<vis>_file_name`` method.
+
+        Parameters
+        ----------
+        rvt_visualization : RVTVisualization
+            Visualization whose file name is wanted.
+        dem_path : str or pathlib.Path
+            Path of the DEM; its base name up to the first dot starts the file name.
+        path_8bit : bool
+            True gives the name of the 8-bit raster; ignored for SHADOW (no 8-bit variant).
+
+        Returns
+        -------
+        str or None
+            File name without directory, e.g. ``dem_SLOPE.tif``; None if ``rvt_visualization`` is not a member
+            of ``RVTVisualization``.
+        """
         if rvt_visualization == rvt.default.RVTVisualization.SLOPE:
             return self.get_slope_file_name(dem_path=dem_path, bit8=path_8bit)
         elif rvt_visualization == rvt.default.RVTVisualization.HILLSHADE:
@@ -1142,7 +1657,25 @@ class DefaultValues:
             output_dir_path: Path,
             path_8bit: bool
     ) -> Path:
-        """"Return visualization path."""
+        """
+        Return ``output_dir_path / <file name>`` for ``rvt_visualization`` (see ``get_visualization_file_name``).
+
+        Parameters
+        ----------
+        rvt_visualization : RVTVisualization
+            Visualization whose output path is wanted.
+        dem_path : str or pathlib.Path
+            Path of the DEM; its base name up to the first dot starts the file name.
+        output_dir_path : pathlib.Path
+            Output directory (a str works too, ``str / Path`` gives a ``Path``).
+        path_8bit : bool
+            True gives the path of the 8-bit raster; ignored for SHADOW.
+
+        Returns
+        -------
+        pathlib.Path or None
+            Output path; None if ``rvt_visualization`` is not a member of ``RVTVisualization``.
+        """
         if rvt_visualization == rvt.default.RVTVisualization.SLOPE:
             return output_dir_path / Path(self.get_slope_file_name(dem_path=dem_path, bit8=path_8bit))
         elif rvt_visualization == rvt.default.RVTVisualization.HILLSHADE:
