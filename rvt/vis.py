@@ -587,6 +587,52 @@ def _svf_accumulate(acc, term):
     return acc + term
 
 
+@_accel.jit_kernel
+def _svf_max_slope_kernel(height, row0, col0, dys, dxs, radii, out):
+    # Serial kernel of one direction of the horizon scan in _svf_compute_window, for the block
+    # out[i, j] <- pixel height[row0 + i, col0 + j]. Same operations per pixel and radius as the numpy path: the
+    # difference in the height dtype (the d_buf buffer), widened exactly to float64 and divided by the np.float64
+    # radius (the q_buf buffer), then fmax into the float64 maximum that starts at float64(float32(-1000)), radii in
+    # the same order. The maximum starts non-NaN and only takes q when q > max, so a NaN q is skipped and the maximum
+    # never becomes NaN, as np.fmax(max, NaN) == max.
+    n_rows, n_cols = out.shape
+    start = np.float64(np.float32(-1000.0))
+    for i in range(n_rows):
+        out_r = out[i]
+        h_row = row0 + i
+        h_r = height[h_row, col0:col0 + n_cols]
+        for c in range(n_cols):
+            out_r[c] = start
+        for k in range(dys.shape[0]):
+            s_col = col0 - dxs[k]
+            s_r = height[h_row - dys[k], s_col:s_col + n_cols]
+            rad = radii[k]
+            for c in range(n_cols):
+                q = np.float64(s_r[c] - h_r[c]) / rad
+                m = out_r[c]
+                out_r[c] = q if q > m else m
+
+
+def _svf_kernel_ok(height, scan):
+    """True if the numba horizon kernel performs the same operations as the numpy scan: native float32/float64
+    height, (shifted - height) in the height dtype, / np.float64 radius and the fmax with the float32 start
+    promoted to float64."""
+    if height.dtype not in (np.float32, np.float64) or not height.flags.c_contiguous:
+        return False
+    probe = height[:1, :1]
+    d = probe - probe
+    if d.dtype != height.dtype:
+        return False
+    for steps in scan:
+        for _, _, radius in steps:
+            if not isinstance(radius, np.float64):
+                return False
+    q = d / scan[0][0][2]
+    if q.dtype != np.float64:
+        return False
+    return np.fmax(np.zeros(probe.shape, dtype=np.float32) - 1000, q).dtype == np.float64
+
+
 def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, compute_opns, compute_asvf,
                         a_main_direction, a_poly_level, a_min_weight):
     """
@@ -614,6 +660,12 @@ def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, c
                                                                     move[direction]["distance"])]
             for direction in move]
 
+    # Accelerated horizon search (numba kernel, same operations); the numpy scan below is the fallback
+    use_kernel = _accel.enabled() and _svf_kernel_ok(height, scan)
+    if use_kernel:
+        scan_arr = [(np.array([s[0] for s in steps], dtype=np.int64), np.array([s[1] for s in steps], dtype=np.int64),
+                     np.array([s[2] for s in steps], dtype=np.float64)) for steps in scan]
+
     svf_win = asvf_win = opns_win = None
     block_rows = max(1, _SVF_BLOCK_ELEMS // max(1, n_cols))
     for r0 in range(0, n_rows, block_rows):
@@ -625,8 +677,17 @@ def _svf_compute_window(height, radius_max, move, num_directions, compute_svf, c
         opns_blk = h_blk * 0 if compute_opns else None
 
         d_buf = q_buf = None
+        ms_buf = np.empty(h_blk.shape, dtype=np.float64) if use_kernel else None
         for i_dir, steps in enumerate(scan):
-            max_slope = np.zeros(h_blk.shape, dtype=np.float32) - 1000
+            if use_kernel:
+                dys, dxs, rads = scan_arr[i_dir]
+                if _accel.call(_svf_max_slope_kernel, height, r + r0, r, dys, dxs, rads, ms_buf):
+                    steps = ()  # max_slope is ms_buf; np.arctan below writes a new array, so ms_buf is reused
+                    max_slope = ms_buf
+                else:
+                    use_kernel = False  # fallback: numpy scan from this direction on
+            if not use_kernel:
+                max_slope = np.zeros(h_blk.shape, dtype=np.float32) - 1000
             for i_rad, (dy, dx, radius) in enumerate(steps):
                 # np.roll(height, (dy, dx))[i, j] == height[i - dy, j - dx] (no wrap on the window)
                 shifted = height[r + r0 - dy:r + r1 - dy, r - dx:r - dx + n_cols]
