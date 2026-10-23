@@ -237,9 +237,9 @@ rules, which every future change has to keep:
   either re-initialise their outputs after False or guard their inputs so that only typing and compilation, which
   happen before any write, can fail.
 - **Bitwise contract of the kernels.** Kernels are compiled with `numba.njit(nogil=True)` (`_accel.dispatcher`,
-  `_accel.py:168`): no fastmath, no FMA contraction, no reassociation, default error model, no on-disk cache. NaN
-  rules are written out explicitly where numpy's `fmax`/`maximum` define them. Accelerated and numpy paths are
-  bitwise equal; the tests compare them (`tests/test_accel.py`, the per-function test files).
+  `_accel.py:143`, the `njit` call at `:168`): no fastmath, no FMA contraction, no reassociation, default error
+  model, no on-disk cache. NaN rules are written out explicitly where numpy's `fmax`/`maximum` define them.
+  Accelerated and numpy paths are bitwise equal; the tests compare them (`tests/test_accel.py`, the per-function test files).
 - **No threads in kernels.** All kernels are serial (`parallel=False`), so results do not depend on the thread
   count. `_accel.num_threads` (`_accel.py:86`) reads `RVT_NUM_THREADS`, then `NUMBA_NUM_THREADS`, and is applied only
   to kernels declared `parallel=True` (none). The numpy work uses no BLAS. A pipeline that runs one tile per process
