@@ -1,0 +1,3506 @@
+{
+  "check": "dev",
+  "cand": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm",
+  "cand_hash": "5d053dca2dcf",
+  "cand_git": {
+    "commit": "3df56b70b5b6dffd377f4b70b4dadec7e30521c8",
+    "tree": "487d1ae6f7fbc5dec35f11073833e914bee383c9",
+    "dirty": false,
+    "branch": "main"
+  },
+  "ref": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\ref",
+  "ref_hash": "7c26b0d7ba47",
+  "targets": [
+    "local_dominance",
+    "svf_asvf_opns",
+    "neg_opns",
+    "sky_illumination",
+    "msrm",
+    "mstp",
+    "e3mstp",
+    "e4mstp",
+    "slrm",
+    "slope",
+    "hillshade"
+  ],
+  "tolerance": {
+    "_meaning": "Per output, in DN of the 8-bit visualization defined by `display`. 5 DN = 2 % of 255.",
+    "dn_p999_max": 5,
+    "dn_max_max": 13,
+    "dn_mean_max": 0.5,
+    "dn_local_mean_max": 1.5,
+    "local_window_px": 31,
+    "nan_mismatch_px_max": 0,
+    "require_same_shape": true,
+    "require_same_dtype": true,
+    "exact_float_abs": 1e-05
+  },
+  "all_exact": true,
+  "passed": true,
+  "rows": [
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "real_1024_high"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "real_1024_medium"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            3,
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            1024,
+            1024
+          ],
+          "cand_shape": [
+            1024,
+            1024
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "syn_1024_off300"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "syn_512_nan"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "syn_512_off0"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "syn_512_off2500"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            512,
+            512
+          ],
+          "cand_shape": [
+            3,
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            512,
+            512
+          ],
+          "cand_shape": [
+            512,
+            512
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "syn_512_off300"
+    },
+    {
+      "outputs": {
+        "ld": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "local_dominance",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "svf": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "asvf": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        },
+        "opns": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "svf_asvf_opns",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "neg_opns": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "neg_opns",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "sim": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "sky_illumination",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "msrm": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "msrm",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "mstp": {
+          "shape": [
+            3,
+            611,
+            1033
+          ],
+          "cand_shape": [
+            3,
+            611,
+            1033
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "mstp",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "e3mstp": {
+          "shape": [
+            3,
+            611,
+            1033
+          ],
+          "cand_shape": [
+            3,
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e3mstp",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "e4mstp": {
+          "shape": [
+            3,
+            611,
+            1033
+          ],
+          "cand_shape": [
+            3,
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "e4mstp",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "slrm": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slrm",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "slope": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float32",
+          "cand_dtype": "float32",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "slope",
+      "data": "syn_odd_611x1033"
+    },
+    {
+      "outputs": {
+        "hillshade": {
+          "shape": [
+            611,
+            1033
+          ],
+          "cand_shape": [
+            611,
+            1033
+          ],
+          "dtype": "float64",
+          "cand_dtype": "float64",
+          "nan_mismatch_px": 0,
+          "dn_mean": 0.0,
+          "dn_p999": 0.0,
+          "dn_max": 0.0,
+          "dn_local_mean_max": 0.0,
+          "float_max_abs": 0.0,
+          "exact": true,
+          "failed": [],
+          "passed": true
+        }
+      },
+      "passed": true,
+      "failed": [],
+      "exact": true,
+      "dn_p999": 0.0,
+      "dn_max": 0.0,
+      "dn_mean": 0.0,
+      "dn_local_mean_max": 0.0,
+      "float_max_abs": 0.0,
+      "target": "hillshade",
+      "data": "syn_odd_611x1033"
+    }
+  ]
+}

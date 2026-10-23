@@ -78,7 +78,8 @@ MUTANTS = [
 
 CONTROLS = [
     ("c01", "vis.py", "nan_dem", "nan_mask_renamed", 0, "local rename in vis.py (all occurrences)"),
-    ("c02", "vis.py", "Slope is defined as 0 for horizontal plane", "Slope is 0 for a horizontal plane", 1,
+    ("c02", "vis.py", "Compute slope and aspect with central finite differences.",
+     "Compute the slope and the aspect with central finite differences.", 1,
      "docstring edit"),
 ]
 

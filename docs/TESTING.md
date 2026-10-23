@@ -227,16 +227,30 @@ exercise (no skips, kernels actually ran), not only that nothing failed.
 ## 6. Release evidence
 
 The evaluation harness of the optimization run (`eval/` of the parent workspace, frozen, see section 3.6) is
-rerun on the release commit of 0.1.0. The release step fills this table; until then the cells say "pending".
+rerun on the release candidate of 0.1.0 (2026-10-23, Windows 11, Intel i9-14900K, 32 logical CPUs, Python 3.11.17,
+numpy 2.4.6). Copies of the reports are in [release_evidence/0.1.0/](release_evidence/0.1.0/).
 
-Release commit: pending.
+Measured commit: `3df56b7` (package content hash `5d053dca2dcf`, as computed by `eval/common.py` `impl_hash`).
+Later commits up to the tag `v0.1.0` change no file under `rvt/` (`git diff --stat 3df56b7 v0.1.0 -- rvt` is empty),
+so the package that was measured is the released one.
 
 | check | what it compares | result | report |
 |---|---|---|---|
-| eval check `dev` | 11 visualizations on the `dev` DEM windows, bitwise against `baseline-fixed` | pending | pending |
-| eval check `dev --no-accel` | as `dev`, with numba made unimportable | pending | pending |
-| eval determinism | default, 1 and 2 threads, repeated calls | pending | pending |
-| eval check `bench_quick` | outputs on the `bench_quick` window | pending | pending |
-| `holdout` (via the final gate) | 11 visualizations on the `holdout` windows | pending | pending |
-| bench quick against `opt/perf` | speed of the release commit against tag `start` (`opt/perf`), 1 thread | pending | pending |
-| final gate | all of the above, `GATE FINAL PASS` / `FAIL` | pending | pending |
+| eval check `dev` | 11 visualizations on the 8 `dev` DEM windows against `baseline-fixed` (8-bit tolerance, exactness reported) | PASS, exact | `check_dev_20261023-144312_19692.json` |
+| eval check `dev --no-accel` | as `dev`, with `RVT_NO_ACCEL=1` and numba made unimportable | PASS, exact | `check_dev_noaccel_20261023-144549_19088.json` |
+| eval determinism | default threading twice, 1 thread, 2 threads: bitwise equal | PASS | `check_determinism_20261023-145142_29184.json` |
+| eval check `holdout` | 11 visualizations on the `holdout` windows (never used during development) | PASS, exact | `check_holdout_20261023-144724_30768.json` |
+| eval check `bench_final` | outputs on the three 2048 x 2048 px `bench_final` windows | PASS, exact | `check_bench_final_20261023-144937_33688.json` |
+| bench quick against `opt/perf` | speed of `3df56b7` against `rvt` `opt/perf` (= tag `start`), 1 thread, `bench_quick` | pipeline x1.00 [0.995-1.012], no target regressed | `bench_quick_1t_20261023-144020_5544.json` |
+| final gate, speed, 1 thread | 11 targets against `baseline-fixed` on `bench_final` | pipeline x11.41 [11.32-11.43] (opt/perf: x11.44 [11.35-11.46]) | `bench_final_1t_20261023-170737_32096.json` |
+| final gate, speed, default threads (informative) | as above, default threading | pipeline x11.37 [11.31-11.57] | `bench_final_mt_20261023-174445_18544.json` |
+| final gate | all of the above | `GATE FINAL PASS` | `gate_final.log` |
+
+"exact" means that every output differs from `baseline-fixed` by at most 1e-5 in float with an identical NaN mask
+(`eval/common.py`); 0 DN difference in every 8-bit comparison.
+
+Incident during these measurements: a stray `python -` process left by a crashed Git Bash command (not related to
+rvt) occupied one CPU core from 12:03 to 17:38, so the bench quick run and most of the final gate ran with one core
+busy. Baseline and candidate are timed alternately in the same rounds, and the 1-thread pipeline factor agrees
+with the opt/perf gate within 0.3 % (intervals overlap), so the comparison is not biased; absolute times may be
+slightly longer than on an idle machine.

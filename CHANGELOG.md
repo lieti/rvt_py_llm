@@ -3,7 +3,7 @@
 All notable changes of rvt_py_llm. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). Details and evidence: [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md).
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-10-23
 
 First release of rvt_py_llm, a drop-in of rvt_py (import name `rvt`). Outputs are bitwise identical to tag `start`,
 which is bitwise identical to the upstream code with the precision fix (`baseline-fixed`) on the evaluation sets.
@@ -48,7 +48,9 @@ which is bitwise identical to the upstream code with the precision fix (`baselin
 - At the freeze: `equiv.py` (accel, t1, noaccel; 153/153 public functions executed) and `mutants.py` (21/21 mutants
   killed by the tests and by equiv) PASS. For each refactor commit: tests (accel and `RVT_NO_ACCEL=1`) and
   `equiv.py` PASS. Every commit of `start..main` passes `astcheck.py` for its class (see docs/TESTING.md).
-- Evaluation harness on the release commit: see docs/TESTING.md, section Release evidence.
+- Evaluation harness (frozen `eval/`) on the measured commit `3df56b7`: GATE FINAL PASS; dev, dev without numba, holdout
+  and bench_final exact against `baseline-fixed`; determinism PASS; pipeline x11.41 [11.32-11.43] on `bench_final`, 1
+  thread; x1.00 [0.995-1.012] against `opt/perf`. Details: docs/TESTING.md, section 6 (Release evidence).
 
 ## Earlier history
 
