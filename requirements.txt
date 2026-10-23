@@ -1,3 +1,5 @@
+# Upstream development environment (pandas, geopandas, rasterio, jupyter are not needed by rvt/);
+# runtime requirements are in setup.py (install_requires: numpy, scipy, matplotlib, gdal).
 gdal
 numpy
 scipy
