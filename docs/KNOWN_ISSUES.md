@@ -101,8 +101,16 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Impact: tiled processing (`rvt.tile`, or any external tiling) differs from the full-raster result. Measured on a
   synthetic 1024 px window with 512 px tiles and a 128 px buffer: origins 248 and 256 give an identical interior;
   origins 252, 254 and 255 differ by up to 1.9e-4, 3.1e-4 and 6.1e-4 (1 level on a 0-1 -> 0-255 scale).
-- Repro: `out/repro_opt/sim_tile_origin.py` of the optimization workspace (too long for this list); see also the
-  tiling section below.
+- Repro: [repro/sim_tile_origin.py](repro/sim_tile_origin.py) (self-contained, imports `rvt` from the repository
+  root, about 5 s with numba): `python docs/repro/sim_tile_origin.py` ->
+  ```
+  tile origin 256 (mod 8 = 0): max |tile - full| = 0, max difference on a 0..1 -> 0..255 scale 0 DN
+  tile origin 248 (mod 8 = 0): max |tile - full| = 0, max difference on a 0..1 -> 0..255 scale 0 DN
+  tile origin 252 (mod 8 = 4): max |tile - full| = 0.000192, max difference on a 0..1 -> 0..255 scale 1 DN
+  tile origin 254 (mod 8 = 6): max |tile - full| = 0.000307, max difference on a 0..1 -> 0..255 scale 1 DN
+  tile origin 255 (mod 8 = 7): max |tile - full| = 0.000612, max difference on a 0..1 -> 0..255 scale 1 DN
+  ```
+  (first output line, the import path, omitted; printed at `de0f665`). See also the tiling section below.
 - Pinned: not pinned. AUDIT #28; note 6 of the notes for the upstream authors.
 - Status: documented, not changed in 0.1.0.
 
