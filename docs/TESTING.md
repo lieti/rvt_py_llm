@@ -1,0 +1,217 @@
+# Testing and proof of equivalence
+
+The contract of rvt_py_llm 0.1.0 is: every output of every public function, method and class is bitwise identical
+to tag `start` (the optimized code, itself bitwise identical to the fixed upstream baseline on the evaluation sets),
+with and without numba, for any thread count; the public API is unchanged. This file describes the tests that
+encode the contract, the tools that prove each commit keeps it, and how to run them.
+
+## 1. Test suites
+
+All tests are in `tests/` (1089 tests, about 10 s in one process on the development machine). `tests/conftest.py`
+puts the repository root first on `sys.path` and asserts that the imported `rvt` comes from this repository, so the
+tests never run against an installed copy.
+
+| suite | files | tests | origin | expected values |
+|---|---|---|---|---|
+| equivalence tests of the optimized paths | `test_accel.py`, `test_mean_filter.py`, `test_sky_view_factor.py`, `test_local_dominance.py`, `test_sky_illumination.py`, `test_mstp.py`, `test_blend.py` (+ `conftest.py`) | 223 | commit `8413d3e` (tag `start`) | a transcription of the upstream `np.roll` / `np.where` code of tag `baseline-fixed`, kept in each test module; most comparisons are bitwise |
+| characterization tests | `test_char_vis.py`, `test_char_blend_func.py`, `test_char_blend.py`, `test_char_e3e4_recipe.py`, `test_char_default.py`, `test_char_tile.py`, `test_char_accel.py` | 859 | 0.1.0, commits `48f2386`, `dcd3d17`, `77c245d`, `c341ec8` | analytic results, properties, plain reference implementations in the test file, hand-written tables |
+| API snapshot | `test_api_snapshot.py` | 7 | 0.1.0, commit `77c245d` | the public API at `start`, generated once by `collect_api()` |
+
+What the equivalence tests cover: each optimized function against the upstream formulation on small seeded
+synthetic DEMs (multi-block sizes, NaN patches, float32 and float64, edge radii); MSTP offset invariance at
++2,500 m; SVF exact invariance on a 1/256 m grid; two calls bitwise equal; `RVT_NUM_THREADS=1` against `2`; the
+accelerated path against the numpy path (skipped when numba is missing); numba missing or failing to compile or run.
+
+What the characterization tests cover: every public function and method of `rvt.vis`, `rvt.blend_func`,
+`rvt.blend`, `rvt.default`, `rvt.tile` and the helpers of `rvt._accel`: output dtype and shape, NaN mask, edge
+behaviour, parameter checks (exception type), in-place effects on arguments, settings files, output file names,
+GeoTIFF outputs (written to `tmp_path`), and the e3MSTP / e4MSTP recipes rebuilt layer by layer with plain code.
+Behaviour that looks wrong is pinned with the comment `# pins current behaviour` and listed in
+[KNOWN_ISSUES.md](KNOWN_ISSUES.md).
+
+### How expected values are derived
+
+No test reads a stored result file: there are no golden files, binary or text. Expected values are:
+
+- analytic: a plane has slope `atan(|grad|)`; a flat DEM has hillshade `sin(elevation)` and sky-view factor 1; the
+  integral image of ones is `(i + 1)(j + 1)`; a wall of height h at distance d has horizon `atan(h / d)`; local
+  dominance of a 10 m peak is `11.7 / 1.7`;
+- properties: shape, dtype, NaN mask, transpose and flip symmetry, invariance to an elevation offset, the identity
+  of a returned object, whether an argument changed;
+- a plain reference implementation kept in the test file (the upstream code for the equivalence tests, a plain
+  byte scale for `float_to_8bit`, the e3/e4 recipes written out layer by layer), never produced by calling the
+  function under test;
+- hand-written tables (default values, file names from the formatting rules).
+
+The single exception is the API snapshot: `SNAPSHOT` in `tests/test_api_snapshot.py` was generated once from the
+code at `start` and pasted. It fails when a public name, a signature, a default argument or a `DefaultValues` default
+changes; an intended change edits `SNAPSHOT` in the same commit (not allowed in 0.1.0, see section 2).
+
+Tolerances: comparisons with the upstream transcription are bitwise unless the test states a tolerance and why
+(e.g. `1e-6` for a float32 sum, `1e-4` for MSTP at +2,500 m against 0 m).
+
+### Platform note
+
+`tests/test_char_default.py::test_json_default_path_is_settings_default_settings_json_in_cwd` pins the Windows
+behaviour of a path with a backslash (KNOWN_ISSUES KI-52) and is expected to fail on Linux and macOS;
+`tests/test_char_blend.py:94` is a Windows-only test for the same pattern (KI-35). The suite was run on Windows 11
+only.
+
+## 2. The frozen-test rule
+
+The tests are the contract, so they may not move while the code moves.
+
+- Tag `tests-frozen` (annotated tag on commit `c341ec8`) marks the test set. After it, files that existed under
+  `tests/` at the tag may not be modified, renamed or deleted, and no `conftest.py`, `pytest.ini`, `tox.ini`,
+  `pyproject.toml` or `setup.cfg` may skip, deselect or xfail them. New tests go into new files.
+- A manifest holds the SHA-256 of every frozen file (16 files, 1089 test nodes).
+- `frozen_check.py` proves for a commit that (1) `git diff tests-frozen..<commit> -- tests` lists only added
+  `test_*.py` files and no pytest configuration changed in a line that mentions pytest; (2) every frozen file
+  matches its hash; (3) every frozen test node reports PASSED (no skip, xfail, deselect or error), with accelerators
+  on and with `RVT_NO_ACCEL=1`. Last line `FROZEN PASS` or `FROZEN FAIL`.
+
+A failing frozen test means the code change is wrong, not the test.
+
+## 3. The proof chain
+
+The proof tools are not part of this repository: they live in the parent workspace of the 0.1.0 work
+(`work/llm/*.py`, run from the workspace root with `pixi run python ...`), together with their logs. They use the
+standard library and the packages of the pinned environment only.
+
+### 3.1 astcheck: what a commit may change, proven without running code
+
+`astcheck.py` classifies every commit of a range by its subject prefix and checks it against the parent:
+
+| class | rule |
+|---|---|
+| `docs:` | the AST of every `rvt/**/*.py` file with docstrings removed is identical (comments and blank lines are not in the AST) |
+| `msg:` | as `docs:`, but string constants inside `raise` statements and `warn(...)` calls may differ |
+| `meta:` | no file under `rvt/` changes |
+| `test:` | only files under `tests/` are added; no existing file under `tests/` changes |
+| `refactor:` | any change; such a commit must pass the tests and `equiv.py` |
+
+`--range start..main` checks every commit; merge commits are skipped. Last line `ASTCHECK PASS` or `ASTCHECK FAIL`.
+The tool was tested on commits that hide a code change inside a `docs:` or `msg:` commit, and catches them.
+
+### 3.2 equiv: bitwise record comparison of two trees
+
+`equiv.py` runs the same test files (normally from tag `tests-frozen`) against two trees, A (normally `start`) and B
+(the candidate), under the pytest plugin `equiv_plugin.py`. The plugin records, for every test and in call order,
+every return from a public function or method of `rvt.*`: the qualified name, a hash of the returned value (arrays:
+dtype, shape and SHA-256 of the raw bytes, so one flipped bit, -0.0 against 0.0 or a different NaN payload counts),
+a hash of the array arguments after the call (in-place effects), and after the test a hash of every file the test
+wrote. The two record logs must be identical record by record. A test that passes in both trees but returns a
+different bit pattern inside its tolerance is therefore still a failure. Nothing is stored between runs.
+
+Variants, each in fresh processes for both trees:
+
+- `accel`: default environment (numba kernels on, default threading);
+- `t1`: `RVT_NUM_THREADS`, `NUMBA_NUM_THREADS`, `OMP_NUM_THREADS` and the other thread variables set to 1;
+- `noaccel`: `RVT_NO_ACCEL=1` (numpy fallback path).
+
+The report also lists public functions that no test called. Any skipped test fails the run. Last line `EQUIV PASS`
+or `EQUIV FAIL`.
+
+Results:
+
+| run | tests | records accel / t1 / noaccel | public API executed | result |
+|---|---|---|---|---|
+| `start` against the then `main`, tests from `main` before the freeze | 1021 | 47,024 / 47,024 / 21,320 | 153 / 153 | EQUIV PASS |
+| `start` against `main` at `tests-frozen`, tests from `tests-frozen` | 1089 | 58,182 / 58,182 / 28,958 | 153 / 153 | EQUIV PASS |
+| each `refactor:` commit (69525a0, 2e1a306, 8839afd) | 1089 | accel, t1, noaccel | 153 / 153 | EQUIV PASS |
+
+The record count depends on what the tests call: the frozen test `test_class_docstring_attributes_all_exist` creates
+one `DefaultValues` per attribute entry in its docstring, so a docstring edit that merges two entries changes the
+count. This is why the documentation of the local dominance radii was kept at 75 entries.
+
+What equiv covers: every public function, method and class reached by the 1089 tests, on the inputs of those tests
+(small synthetic arrays and GeoTIFFs), on one machine. It does not cover inputs the tests do not use (large
+rasters, other CPUs); the evaluation harness (section 3.6) covers real DEM windows.
+
+### 3.3 mutants: do the tests and equiv notice wrong changes?
+
+No mutation library is in the environment, so `mutants.py` has 21 hand-written mutants, each one plausible mistake
+in one place: wrong padding mode, float32 instead of float64 accumulation, a changed constant, swapped operands, a
+changed NaN rule in a numba kernel, an off-by-one in the tile overlap, a changed default, an `RVT_NO_ACCEL` value no
+longer accepted, a changed layer opacity in the e3/e4 recipes. For each mutant a scratch tree is built, the frozen
+tests run once under the recording plugin, and the mutant counts as killed by tests if the run fails and as killed
+by equiv if its records differ from the unmutated tree. Two control edits (a local rename, a docstring edit) must
+not be reported.
+
+Thresholds, fixed before the first run and never lowered: tests kill >= 90 %, equiv kills 100 %, both controls
+equivalent.
+
+| run | killed by tests | killed by equiv | controls | result |
+|---|---|---|---|---|
+| before the freeze (tests from `main`, 1021 tests) | 20 / 21 = 95 % (m21, the e3/e4 SLRM layer opacity, survived) | 21 / 21 | equivalent | MUTANTS PASS |
+| after the freeze (tests from `tests-frozen`, 1089 tests) | 21 / 21 = 100 % | 21 / 21 | equivalent | MUTANTS PASS |
+
+The surviving mutant m21 led to `tests/test_char_e3e4_recipe.py` (commit `c341ec8`), added before the freeze.
+
+### 3.4 linecov: line coverage
+
+`linecov.py` measures line coverage of `rvt` by the test suite with `trace.Trace` (the environment has no
+coverage.py). Report only, not a gate. With numba on, kernel bodies run compiled and count as not executed.
+
+| module | executable lines | executed | coverage |
+|---|---|---|---|
+| vis.py | 1259 | 1017 | 80.8 % |
+| blend.py | 1113 | 1043 | 93.7 % |
+| blend_func.py | 423 | 414 | 97.9 % |
+| default.py | 1908 | 1444 | 75.7 % |
+| tile.py | 334 | 318 | 95.2 % |
+| _accel.py | 67 | 46 | 68.7 % |
+| total | 5105 | 4282 | 83.9 % |
+
+Measured on `main` before the freeze, accelerators on. No public function or method has a body that never executed.
+
+### 3.5 doclint: docstring completeness
+
+`doclint.py` checks that every public module, class, function and method has a numpy-style docstring whose
+`Parameters` section names every parameter in signature order and that functions returning a value have a
+`Returns` section. Problems at `start`: 175; at `main` after the documentation pass: 0.
+
+### 3.6 Evaluation harness of the optimization run
+
+The optimization run was judged by a frozen harness (`eval/` of the workspace): correctness of 11 visualizations
+on real DEM windows (`dev`, `holdout`, `bench_final`), also with numba made unimportable; determinism with default,
+1 and 2 threads; benchmarks with a fresh process per call. On `start` it reported `GATE FINAL PASS` with every output
+bitwise identical to `baseline-fixed` (`out/gate_final/` of the workspace). The 0.1.0 release reruns these checks on
+the final `main`; their result is recorded in [../CHANGELOG.md](../CHANGELOG.md).
+
+## 4. Commands
+
+Run from the repository root unless stated. Do not run plain `pytest` at the root: the upstream scripts
+`test_tile.py` and `test_rvt_tile.py` there are not part of the suite; always pass the `tests` path.
+
+| step | Windows PowerShell | Linux bash |
+|---|---|---|
+| tests, default path | `python -m pytest tests -q` | `python -m pytest tests -q` |
+| tests, numpy fallback | `$env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL` | `RVT_NO_ACCEL=1 python -m pytest tests -q` |
+| tests, one thread | `$env:RVT_NUM_THREADS="1"; python -m pytest tests -q; Remove-Item Env:RVT_NUM_THREADS` | `RVT_NUM_THREADS=1 python -m pytest tests -q` |
+
+Expected last line: `1089 passed` (3 warnings). In the development workspace, prefix with `pixi run` and pass the
+path of the checkout, e.g. `pixi run pytest rvt_py_llm/tests -q`.
+
+Proof tools, from the workspace root (PowerShell and bash are the same command):
+
+```
+pixi run python work/llm/astcheck.py --repo rvt_py_llm --range start..main      # ASTCHECK PASS
+pixi run python work/llm/frozen_check.py --ref main                               # FROZEN PASS
+pixi run python work/llm/equiv.py                                                 # start vs main, frozen tests; EQUIV PASS (~2 min)
+pixi run python work/llm/equiv.py --b-dir <worktree>                              # start vs a worktree as it is on disk
+pixi run python work/llm/mutants.py --ref main --tests-ref tests-frozen          # MUTANTS PASS
+pixi run python work/llm/linecov.py --ref main --out <file.md>                   # coverage table
+pixi run python work/llm/doclint.py --dir rvt_py_llm                              # DOCLINT PASS
+```
+
+## 5. Lesson: a helper script that shadowed a package
+
+The first line-coverage helper was saved as `work/llm/coverage.py`. The proof tools put `work/llm` on
+`PYTHONPATH` so that pytest can load `equiv_plugin.py`; numba imports the `coverage` package when it is present, and
+found the helper script instead, so numba failed to import in those runs. The test suite then skipped the 20 tests
+that need numba, the accelerated paths fell back to numpy, and two mutants in numba kernels (m06, m07) survived
+because no kernel ran. Nothing was wrong with the code under test; the measuring setup had changed it. The helper was
+renamed to `linecov.py`, and `equiv.py` and `mutants.py` now fail on any skipped test, so that a silent loss of the
+accelerated path cannot pass again. The general point: a proof run has to check that it exercised what it claims to
+exercise (no skips, kernels actually ran), not only that nothing failed.
