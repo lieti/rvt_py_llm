@@ -1481,6 +1481,49 @@ def horizon_generate_coarse_dem(dem_fine,
                                 conv_to,
                                 max_radius
                                 ):
+    """
+    Build the next coarser pyramid level for the sky illumination horizon search.
+
+    The ``max_radius`` border of ``dem_fine`` is removed, the rest is padded at the right and bottom so
+    that the coarse grid contains the corner pixels, and each coarse pixel takes the maximum of a
+    ``pyramid_scale`` x ``pyramid_scale`` window divided by ``pyramid_scale`` (heights in coarse-pixel
+    units, so that height / distance stays an angle tangent). The result is padded by ``max_radius``
+    with its own minimum.
+
+    Parameters
+    ----------
+    dem_fine : numpy.ndarray
+        2D level (heights in fine-pixel units) including a ``max_radius`` border, shape
+        (n + 2 * max_radius, m + 2 * max_radius).
+    pyramid_scale : int
+        Resolution ratio between two levels (2 in ``sky_illumination``).
+    conv_from : int
+        First offset of the maximum window: ``1 - pyramid_scale // 2`` for an even scale,
+        ``-(pyramid_scale // 2)`` for an odd one.
+    conv_to : int
+        ``pyramid_scale // 2``; padding added after the data for the window.
+    max_radius : int
+        Border width in px, removed first and added again at the end.
+
+    Returns
+    -------
+    numpy.ndarray
+        float64, shape (n // pyramid_scale + 1 + 2 * max_radius, m // pyramid_scale + 1 + 2 * max_radius).
+
+    Notes
+    -----
+    Padding: edge mode at the right and bottom (``|1 - n % pyramid_scale|`` px, none when the remainder is
+    1), then symmetric ``(-conv_from, conv_to)`` for the window, then constant (the coarse minimum) for the
+    border. NaN propagates through ``np.maximum`` and ``min``.
+
+    Known issues (see docs/KNOWN_ISSUES.md): the running maximum starts from ``np.zeros``, so a level
+    entirely below 0 becomes 0; for an even scale the window reaches one row/column before the first one,
+    where the padding supplies nothing and ``np.roll`` wraps to the last row/column.
+
+    See Also
+    --------
+    horizon_generate_pyramids, sky_illumination
+    """
     # first reduce the size for the edge required for horizon search
     dem_fine = dem_fine[max_radius:-max_radius, max_radius:-max_radius]
 
@@ -1543,6 +1586,48 @@ def horizon_generate_pyramids(dem,
                               max_pyramid_radius=7,
                               pyramid_scale=3,
                               ):
+    """
+    Build the DEM pyramid and the search shifts of every level for the sky illumination horizon search.
+
+    Level 0 is the DEM padded by ``max_pyramid_radius`` px with its minimum. Each further level is
+    ``horizon_generate_coarse_dem`` of the previous one. Levels are added until
+    ``max_fine_radius / pyramid_scale ** L <= max_pyramid_radius``. Level 0 searches radii 1 ..
+    ``max_pyramid_radius``; higher levels start at ``max_pyramid_radius // pyramid_scale`` (in their own
+    pixels), so that each level continues where the finer one stopped; the last level searches up to
+    ``round(max_fine_radius / pyramid_scale ** L)``.
+
+    Parameters
+    ----------
+    dem : numpy.ndarray
+        2D elevation array, shape (H, W) (float32 in ``sky_illumination``). Not modified.
+    num_directions : int
+        Number of search directions. Default 4.
+    max_fine_radius : int
+        Total search distance in level-0 px, e.g. 100 px = 25 m at 0.25 m/px. Default 100.
+    max_pyramid_radius : int
+        Search radius within one level, in that level's px; also the border width. Default 7.
+    pyramid_scale : int
+        Resolution ratio between two levels. Default 3.
+
+    Returns
+    -------
+    dict
+        ``{level: {"num_directions", "radius_pixels", "min_radius", "shift", "dem", "i_lin", "i_col"}}``
+        for level 0 .. L: ``shift`` from ``horizon_shift_vector``, ``dem`` the level array with its border
+        (level 0 in the input dtype, higher levels float64), ``i_lin`` / ``i_col`` the row and column
+        indices ``np.arange`` of that array.
+
+    Notes
+    -----
+    With the ``sky_illumination`` settings (scale 2, radius 20 px, ``max_fine_radius`` 100 px) there are
+    3 coarse levels, radii 20, 20, 20, 12 px. Any NaN in ``dem`` makes ``dem.min()`` NaN, so the padding
+    and every coarse level are NaN (see ``sky_illumination``). The pyramid is anchored at the top-left
+    corner of ``dem``, so it depends on the origin of a tile (see ``sky_illumination``).
+
+    See Also
+    --------
+    horizon_generate_coarse_dem, horizon_shift_vector, sky_illumination
+    """
     # In the levels higher than 1, determine the minimal search distance
     # and number of search distances.
     # If you have for instance
@@ -1822,38 +1907,116 @@ def sky_illumination(dem,
                      no_data=None
                      ):
     """
-    Compute topographic corrections for sky illumination.
+    Compute sky illumination (diffuse light from a uniform or overcast sky), optionally with cast shadow.
+
+    For each of ``num_directions`` directions the horizon angle h is found with a multi-resolution horizon
+    search (``horizon_generate_pyramids``: scale 2, 20 px per level, up to ``max_fine_radius`` px), and the
+    irradiance of the visible sky is integrated per direction with the pixel's slope and aspect (Kokalj and
+    Hesse 2017; docs/listofvis_skyillum.rst). With da = pi / num_directions and
+    ``g = -2 sin(da) cos(direction - aspect)``:
+
+    - uniform = ``da cos(slope) sum cos(h)^2 + sin(slope) min(sum max(g (pi/4 - h/2 - sin(2h)/4), 0), pi)``,
+      returned divided by pi (1 on flat open terrain);
+    - overcast = ``0.33 uniform + 0.67 (2 da / 3 cos(slope) sum max(cos(h)^3, 0)
+      + sin(slope) sum max(g (2/3 - cos h + cos(h)^3 / 3), 0))``, divided by its maximum over the array;
+    - shadow (``compute_shadow``): ``horizon`` = h in degrees in the direction nearest to the sun, and
+      ``shadow`` = 1 where ``horizon < shadow_el`` (lit), 0 where the pixel is in cast shadow. The shaded
+      results are ``0.8 * model + 0.2 * shadow``.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W). Any NaN makes the whole result NaN (see Notes).
     resolution : float
-        DEM pixel size.
+        Pixel size (m/px), used for slope and aspect only (see Notes). Must not be negative.
     sky_model : str
-        Sky model, it can be 'overcast' or 'uniform'.
+        ``"overcast"`` (default) or ``"uniform"``, case-insensitive.
     compute_shadow : bool
-        If True it computes and adds shadow.
+        Compute the cast shadow and return the shaded model. Default False.
     shadow_horizon_only : bool
-        Returns dict {"shadow": shadow, "horizon": horizon}
+        With ``compute_shadow``: return ``{"shadow", "horizon"}`` right after the horizon search of the sun
+        direction, skipping the remaining directions. Ignored without ``compute_shadow``. Default False.
     max_fine_radius : int
-        Max shadow modeling distance in pixels.
+        Horizon search distance in px, e.g. 100 px = 25 m at 0.25 m/px. Default 100.
     num_directions : int
-        Number of directions to search for horizon.
+        Number of horizon search directions. Default 32.
     shadow_az : int or float
-        Shadow azimuth.
+        Sun azimuth for the shadow, degrees clockwise from north, in [0, 360]. Replaced by the nearest
+        search direction. Default 315.
     shadow_el : int or float
-        Shadow elevation.
+        Sun elevation for the shadow, degrees above the horizon, in [0, 90]. Default 35.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
+        Default None.
 
     Returns
     -------
-    sky_illumination : numpy.ndarray
-        2D numpy result array of Sky illumination.
+    numpy.ndarray or dict
+        float64 (H, W): uniform / pi, ``0.8 * uniform + 0.2 * shadow`` (uniform not divided by pi, see
+        Notes), overcast, or
+        ``0.8 * overcast + 0.2 * shadow``, according to ``sky_model`` and ``compute_shadow``. With
+        ``compute_shadow`` and ``shadow_horizon_only``: ``{"shadow": numpy.ndarray int64 (H, W) of 0/1,
+        "horizon": numpy.ndarray float64 (H, W) in degrees}``.
+
+    Raises
+    ------
+    Exception
+        If ``ve_factor`` is outside [-10000, 10000], ``shadow_az`` is outside [0, 360], ``shadow_el`` is
+        outside [0, 90], ``resolution`` is negative, or ``sky_model`` is unknown.
+
+    Notes
+    -----
+    Edges: slope and aspect come from the DEM padded by 20 px in symmetric mode; the pyramid pads with the
+    DEM minimum (constant), so the terrain beyond the edge is treated as low and open.
+
+    Known issues (see docs/KNOWN_ISSUES.md):
+
+    - the heights are not divided by ``resolution`` (``sky_view_factor`` does divide), so the horizon
+      angles use m per px: ``horizon`` and ``shadow`` are the same for any resolution;
+    - any NaN in the DEM makes ``dem.min()`` NaN, which spreads through the pyramid padding, the coarse
+      levels and the spline to every pixel: the whole result (and ``horizon``) is NaN;
+    - the uniform model is divided by pi only after the shaded result is formed, so
+      ``0.8 * uniform + 0.2 * shadow`` uses the undivided uniform (0.8 pi + 0.2 on flat terrain);
+    - ``shadow_az`` is matched to the direction key nearest to ``360 - shadow_az`` without wrap-around:
+      ``shadow_az = 0`` picks the key 348.75 (32 directions), i.e. the same as ``shadow_az = 11.25``, while
+      ``shadow_az = 360`` picks 0;
+    - a tilted plane gives different values by facing direction (slope 26.6°, uniform model,
+      ``max_fine_radius`` 20 px: about 1.060 facing east or west, 0.952 facing north or south), and values
+      above 1, the flat-terrain value;
+    - the pyramid is anchored at the top-left corner of the array, so a tile matches the full-raster
+      result exactly only when its origin is a multiple of 2^3 = 8 px (3 coarse levels with the defaults).
+
+    Implementation (bitwise identical to the original whole-array code, which is kept as the reference
+    and the fallback):
+
+    - level 0 is searched only on the unpadded extent: every level-0 shift is at most 20 px, the width of
+      the padding, so the shifted windows are slices and ``np.roll`` never wraps there;
+    - coarse levels keep ``np.roll`` semantics on their full extent (the spline reads all of them), via
+      a wrap-padded copy whose slices equal the rolled arrays;
+    - level search and the per-direction terms run in row blocks of about 32768 elements
+      (``_sky_illum_block_rows``) with the same ufuncs, operand order and dtypes per pixel; the level
+      search has numba kernels (``_sky_illum_search_kernel``, ``_sky_illum_search_literal_kernel``;
+      ``RVT_NO_ACCEL=1`` switches them off);
+    - ``_sky_illum_resample`` evaluates the linear spline without refitting it when the fitted
+      coefficients are the data themselves.
+
+    See Also
+    --------
+    shadow_horizon, horizon_generate_pyramids, slope_aspect
     """
+    # Structure:
+    #   1. checks, no_data -> NaN (in place), float32, ve_factor, sky model;
+    #   2. slope and aspect (symmetric padding by 20 px), DEM pyramid with the shifts of every level;
+    #   3. choose the level-0 window (inner0) and the blocked path; allocate accumulators; map shadow_az
+    #      to the nearest direction key; prepare wrap-padded coarse levels for the blocked path;
+    #   4. per direction: horizon search from the coarsest level to level 0, resampling max_slope to the
+    #      next finer level with a linear spline;
+    #   5. per direction: horizon of the sun direction (return early for shadow_horizon_only), then the
+    #      uniform / overcast directional terms (blocked or whole-array);
+    #   6. combine with slope: uniform, overcast (normalised by its maximum), shaded variants; uniform / pi;
+    #   7. return the array selected by sky_model and compute_shadow.
     # standard pyramid settings
     pyramid_scale = 2
     max_pyramid_radius = 20
@@ -2141,17 +2304,6 @@ def sky_illumination(dem,
     # normalize
     uniform_out = uniform_out / np.pi
 
-    # # return results within dict
-    # dict_sky_illumination = {"uniform": uniform_out,
-    #                          "overcast": overcast_out,
-    #                          "shadow": shadow_out,
-    #                          "horizon": horizon_out,
-    #                          "uniform_shaded": uniform_sh_out,
-    #                          "overcast_shaded": overcast_sh_out,
-    #                          }
-    # dict_sky_illumination = {k: v for k, v in dict_sky_illumination.items() if v is not None}  # filter out none
-    # return dict_sky_illumination
-
     # output
     if compute_uniform and not compute_shadow:
         return uniform_out
@@ -2171,29 +2323,48 @@ def shadow_horizon(dem,
                    no_data=None
                    ):
     """
-    Compute shadow and horizon.
+    Compute the cast shadow and the horizon angle towards the sun.
+
+    Calls ``sky_illumination(..., compute_shadow=True, shadow_horizon_only=True)`` with its default search
+    (32 directions, 100 px), which stops after the direction nearest to the sun.
 
     Parameters
     ----------
     dem : numpy.ndarray
-        Input digital elevation model as 2D numpy array.
+        2D elevation array (m), shape (H, W).
     resolution : float
-        DEM pixel size.
+        Pixel size (m/px). Must not be negative. Does not affect the result (see ``sky_illumination``).
     shadow_az : int or float
-        Shadow azimuth.
+        Sun azimuth, degrees clockwise from north, in [0, 360]; replaced by the nearest search direction.
+        Default 315.
     shadow_el : int or float
-        Shadow elevation.
+        Sun elevation, degrees above the horizon, in [0, 90]. Default 35.
     ve_factor : int or float
-        Vertical exaggeration factor.
-    no_data : int or float
-        Value that represents no_data, all pixels with this value are changed to np.nan .
+        Vertical exaggeration, in [-10000, 10000]. Default 1.
+    no_data : int or float or None
+        Pixels equal to it are set to NaN **in the caller's array**. Default None.
 
     Returns
     -------
-    dict_out : dict
-        Returns {"shadow": shadow, "horizon": horizon};
-        shadow : 2D binary numpy array (numpy.ndarray) of shadows;
-        horizon; 2D numpy array (numpy.ndarray) of horizon.
+    dict
+        ``{"shadow": numpy.ndarray int64 (H, W), "horizon": numpy.ndarray float64 (H, W)}``: ``horizon`` is
+        the horizon elevation angle in degrees in the sun direction; ``shadow`` is 1 where
+        ``horizon < shadow_el`` (lit) and 0 where the pixel lies in cast shadow.
+
+    Raises
+    ------
+    Exception
+        If ``ve_factor`` is outside [-10000, 10000], ``shadow_az`` is outside [0, 360], ``shadow_el`` is
+        outside [0, 90], or ``resolution`` is negative.
+
+    Notes
+    -----
+    The known issues of ``sky_illumination`` apply (resolution not used for the angles, any NaN makes the
+    result NaN, ``shadow_az`` 0 and 360 differ, tile origin), see docs/KNOWN_ISSUES.md.
+
+    See Also
+    --------
+    sky_illumination, hillshade
     """
     if not (10000 >= ve_factor >= -10000):
         raise Exception("rvt.visualization.shadow_horizon: ve_factor must be between -10000 and 10000!")
