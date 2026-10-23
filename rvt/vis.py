@@ -167,6 +167,8 @@ def byte_scale(data,
             raise ValueError("`cmax` should be larger than `cmin`.")
         elif c_scale == 0:
             c_scale = 1
+        # c_scale is not used below: the divisions use c_max - c_min, so a constant band gives 0 / 0 = NaN, i.e. 255
+        # (known issue, see docs/KNOWN_ISSUES.md)
 
         if data.dtype == np.uint8:
             # TODO: the following line seems not good to  me - if cmin=0, then that pixel will get negative value
@@ -175,9 +177,6 @@ def byte_scale(data,
             byte_data[byte_data < 0] = 0
             byte_data[np.isnan(byte_data)] = 0  # change no_data to 0
             return np.asarray(byte_data, dtype=np.uint8) + np.asarray(low, dtype=np.uint8)
-
-        # scale = float(high - low) / cscale  # old scipy fn
-        # byte_data = (data * 1.0 - cmin) * scale + 0.4999  # old scipy fn
 
         byte_data = (high + 0.9999) * (data - c_min) / (c_max - c_min)  # copied from IDL BYTSCL
         byte_data[byte_data > high] = high
@@ -1161,7 +1160,7 @@ def sky_view_factor_compute(height_arr,
     # Search for horizon in each direction...
     for i_dir, direction in enumerate(move):
         # Reset maximum at each iteration (i.e. at the start of new direction),
-        # smallest possible elevation angle is -1000 rad (i.e. -90 deg)
+        # the start is a slope (tangent) of -1000, i.e. an elevation angle of about -89.94 deg, below any real horizon
         max_slope = np.zeros(height.shape, dtype=np.float32) - 1000
 
         # ... and for each search radius
