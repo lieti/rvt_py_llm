@@ -226,7 +226,7 @@ def gray_scale_to_color_ramp(gray_scale, colormap, min_colormap_cut=None, max_co
             raise Exception("rvt.blend_func.gray_scale_to_color_ramp: min_colormap_cut and max_colormap_cut must be"
                             " between 0 and 1!")
         if min_colormap_cut >= max_colormap_cut:
-            raise Exception("rvt.blend_func.gray_scale_to_color_ramp: min_colormap_cut can't be smaller than"
+            raise Exception("rvt.blend_func.gray_scale_to_color_ramp: min_colormap_cut has to be smaller than"
                             " max_colormap_cut!")
         cm = truncate_colormap(cmap=cm, minval=min_colormap_cut, maxval=max_colormap_cut)
 
