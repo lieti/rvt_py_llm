@@ -185,18 +185,20 @@ the three MSTP scales (approximate, estimated <= x1.08), float32 slope arithmeti
 ## The 0.1.0 pass (`start..main`)
 
 Commit classes (subject prefix) and what each class may change; each commit was checked by its class rule
-(see [TESTING.md](TESTING.md)):
+(see [TESTING.md](TESTING.md)). Counts of `git log --format=%s start..de0f665` (`de0f665` is the release commit of
+0.1.0); later commits are documentation rounds of class `meta:` only:
 
 | class | count | allowed content | check |
 |---|---|---|---|
 | `test:` | 4 | new test files only | frozen check |
-| `docs:` | 21 | docstrings, comments, blank lines | AST without docstrings identical |
+| `docs:` | 22 (21 in the list below, plus 3001dc3) | docstrings, comments, blank lines | AST without docstrings identical |
 | `msg:` | 2 | text of exception messages only | AST differs only in string constants inside `raise` |
 | `refactor:` | 3 | behaviour-neutral code edits | full test suite + bitwise record comparison (`equiv.py`) PASS |
-| `meta:` | 1 (e6b518f), plus the packaging and repository-document commits that follow the list below | packaging, repository documents | no change under `rvt/` |
+| `meta:` | 12 (e6b518f, plus the packaging and repository-document commits after the list below) | packaging, repository documents | no change under `rvt/` |
 
-Commits up to the merge of the refactors (the packaging and document commits of this release, including the one
-that adds this file, come after them):
+Commits up to the merge of the refactors. The packaging and document commits of this release (`meta:`, including the
+one that adds this file) come after them, and so does one `docs:` commit, 3001dc3 (`docs: shadow_horizon and
+get_sky_illumination state the measured NaN effect`, docstrings of `rvt/vis.py` and `rvt/default.py` only):
 
 | commit | subject |
 |---|---|
