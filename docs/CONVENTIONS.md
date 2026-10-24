@@ -106,8 +106,11 @@ Functions without a `no_data` parameter (`mean_filter`, `sky_view_factor_compute
 `DefaultValues.get_*` pass the caller's array and `no_data` on, so they inherit the row of the function they call
 (checked: `get_hillshade`, `get_slrm` modify, `get_sky_view_factor` does not); `get_neg_opns` ignores `no_data`
 (KI-65) and does not modify. Other in-place effects (not caused by `no_data`): `DefaultValues.float_to_8bit` clips its
-argument (KI-60); `blend_func.scale_within_0_and_1` overwrites NaN (KI-20); overlay and soft light write into the
-background (KI-33).
+argument (KI-60). Up to 0.1.0 `blend_func.scale_within_0_and_1` and `scale_strict_0_to_1` overwrote NaN (KI-20,
+KI-21), overlay and soft light wrote into the background (KI-33), and `blend.color_relief_image_map` (also through
+`e3mstp`) set `svf_r_max` on the caller's `DefaultValues` (KI-45); these effects are gone in 0.1.1
+(docs/FIXES_0_1_1.md). The `no_data` replacement in the caller's DEM by `color_relief_image_map`, `e3mstp` and
+`e4mstp` is unchanged.
 
 ## 4. Documents
 
