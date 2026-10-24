@@ -16,7 +16,7 @@ packages of the test suite (`pip install ".[test,accel]"`).
 
 | tool | proves | default | last line |
 |---|---|---|---|
-| `astcheck.py` | every commit of a range changes only what its subject class allows: `docs:` the AST of `rvt/**/*.py` without docstrings is identical; `msg:` as `docs:` except string constants in `raise` / `warn(...)`; `meta:` nothing under `rvt/` changes; `test:` only new files under `tests/`; `refactor:` is listed as `needs-equiv` | `--repo` = this repository; `--range` or `--base/--head/--class` required | `ASTCHECK PASS` / `ASTCHECK FAIL` |
+| `astcheck.py` | every commit of a range changes only what its subject class allows: `docs:` the AST of `rvt/**/*.py` without docstrings is identical; `msg:` as `docs:` except string constants in `raise` / `warn(...)`; `meta:` nothing under `rvt/` changes; `test:` only new files under `tests/`; `refactor:` is listed as `needs-equiv`. Classes of the 0.1.1 fix phase: `fix:` only existing `rvt/**/*.py` files modified, with a code change, docstrings and comments changed only in functions whose code changes, module and class docstrings unchanged (listed as `needs-tests+equiv_diff`); `retire:` only files of the frozen test set (`frozen_manifest.json` at the parent) modified, no file added or deleted, no pytest configuration (listed as `needs-retire_check`); `tool:` only `tools/proof/**` (listed as `needs-selftest`). Self-test: `astcheck_selftest.py` | `--repo` = this repository; `--range` or `--base/--head/--class` required | `ASTCHECK PASS` / `ASTCHECK FAIL` |
 | `frozen_check.py` | the files under `tests/` at tag `tests-frozen` are unchanged (SHA-256 against `frozen_manifest.json`), no file there was modified, renamed or deleted, no pytest configuration changed, and all 1089 frozen test nodes report PASSED with accelerators and with `RVT_NO_ACCEL=1` | `--ref main` | `FROZEN PASS` / `FROZEN FAIL` |
 | `equiv.py` (with `equiv_plugin.py`) | two trees (A and B) give bitwise identical records for every public call made by the frozen tests: return value hash, array arguments after the call, files written; variants `accel`, `t1` (all thread variables 1), `noaccel` (`RVT_NO_ACCEL=1`); a skipped test fails the run | A = `start`, B = `main`, tests from `tests-frozen`; `--b-dir <checkout>` uses a directory as it is on disk | `EQUIV PASS` / `EQUIV FAIL` |
 | `mutants.py` | the frozen tests and `equiv.py` detect 21 hand-written wrong changes (tests kill >= 90 %, equiv kills 100 %) and do not report 2 behaviour-neutral control edits | `--ref main`, `--tests-ref tests-frozen` | `MUTANTS PASS` / `MUTANTS FAIL` |
@@ -37,6 +37,7 @@ needed here).
 |---|---|---|---|
 | commit classes since `start` | `python tools/proof/astcheck.py --repo . --range start..HEAD` | `ASTCHECK PASS` | 5 s |
 | one commit against a class | `python tools/proof/astcheck.py --base HEAD~1 --head HEAD --class docs` | `ASTCHECK PASS` | 1 s |
+| astcheck self-test | `python tools/proof/astcheck_selftest.py` | `ASTCHECK SELFTEST PASS` | 5 s |
 | frozen tests | `python tools/proof/frozen_check.py` (or `--ref <branch or commit>`) | `FROZEN PASS` | 22 s |
 | bitwise equivalence, `start` against `main` | `python tools/proof/equiv.py` | `EQUIV PASS` | 100 s |
 | bitwise equivalence of a checkout as it is on disk | `python tools/proof/equiv.py --b-dir <checkout>` | `EQUIV PASS` | 100 s |
