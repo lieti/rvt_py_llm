@@ -78,6 +78,12 @@ from scipy.interpolate import griddata, RectBivariateSpline
 from scipy.ndimage import distance_transform_edt
 from scipy.spatial import cKDTree
 
+# Window shapes of mean_filter, slrm, msrm, max_elevation_deviation and mstp (keyword ``kernel_shape``). Windows of
+# radius r >= DISK_MIN_RADIUS_PX px take the disk footprint when the shape is "disk" or "disk_equal_area"; smaller
+# windows stay square, because a disk of a few px is dominated by its discretisation (docs/DISK_WINDOWS.md).
+DISK_MIN_RADIUS_PX = 8
+_KERNEL_SHAPES = ("square", "disk", "disk_equal_area")
+
 
 def byte_scale(data,
                c_min=None,
@@ -573,9 +579,162 @@ def _box_sum(table, lo, hi, n_rows, n_cols):
     return box
 
 
-def mean_filter(dem, kernel_radius):
+def _disk_path(kernel_shape, radii, where, error):
     """
-    Apply a square mean (low-pass) filter, ignoring NaN.
+    Validate ``kernel_shape`` and return True when the call takes the disk path.
+
+    ``radii`` is a callable that returns the window radii of the call in px; it is evaluated only for "disk" and
+    "disk_equal_area", so on the square path this function only checks the value. The disk path is taken when the
+    shape is not "square" and the largest radius (``int``) is at least ``DISK_MIN_RADIUS_PX``; a call whose radii are
+    all smaller runs the square code unchanged. Any other value of ``kernel_shape`` raises ``error`` (the exception
+    type the calling function uses for bad arguments) with a message that starts with ``where``.
+    """
+    if not (isinstance(kernel_shape, str) and kernel_shape in _KERNEL_SHAPES):
+        raise error("{}: kernel_shape must be 'square', 'disk' or 'disk_equal_area'!".format(where))
+    if kernel_shape == "square":
+        return False
+    radii = [int(r) for r in radii()]
+    return len(radii) > 0 and max(radii) >= DISK_MIN_RADIUS_PX
+
+
+def _window_radius(r, kernel_shape):
+    """
+    Return the radius r_w (px, float) of the disk window that stands for the square window of radius r px.
+
+    "disk": ``r_w = r`` (the disk inscribed in the square); "disk_equal_area": ``r_w = (2r + 1) / sqrt(pi)``, the disk
+    with the area (2r + 1)^2 of the square window (e.g. r = 20 px gives r_w = 23.13 px = 5.78 m at 0.25 m/px).
+    """
+    if kernel_shape == "disk_equal_area":
+        return float((2 * r + 1) / np.sqrt(np.pi))
+    return float(r)
+
+
+def _window_footprint(r_w, disk):
+    """
+    Return the boolean footprint of a window of radius ``r_w`` px, shape (2b + 1, 2b + 1) with b = floor(r_w).
+
+    Disk (``disk`` True): offset (dy, dx) from the centre pixel belongs to the window iff ``dx^2 + dy^2 <= r_w^2``
+    (the exact discrete disk; the convention of GRASS r.neighbors -c, SAGA and ArcGIS). Square: every offset with
+    |dx|, |dy| <= b, the (2r + 1) x (2r + 1) window of the square path for an integer ``r_w = r``.
+    """
+    b = int(np.floor(r_w))
+    if not disk:
+        return np.ones((2 * b + 1, 2 * b + 1), dtype=bool)
+    d = np.arange(-b, b + 1)
+    return d[:, None] * d[:, None] + d[None, :] * d[None, :] <= r_w * r_w
+
+
+def _disk_window_sums(dem_pad, out_shape, windows, squares):
+    """
+    Return the mean-removed window sums of a padded tile for several windows, by FFT convolution.
+
+    Contract
+    --------
+    Inputs: ``dem_pad`` the 2D tile padded by p px on every side with the padding mode of the calling function
+    (float32 or float64, NaN = no data), p >= floor(r_w) of every window; ``out_shape`` (H, W) the shape of the tile
+    before padding; ``windows`` a sequence of (r_w, disk) pairs (radius in px, footprint of ``_window_footprint``);
+    ``squares`` True to compute the sums of squares too.
+
+    Returns ``(zbar, sums)``: ``zbar`` (float) the mean of the non-NaN pixels of ``dem_pad`` in float64 (0.0 when all
+    are NaN); ``sums`` an iterator that yields, per window in the order given, float64 arrays (H, W) on the output
+    window (padded pixel (p + i, p + j) for output pixel (i, j)):
+
+    - ``s1``: the sum of ``z - zbar`` over the valid pixels of the window;
+    - ``s2``: the sum of ``(z - zbar)^2`` over the valid pixels (None if ``squares`` is False);
+    - ``count``: the number of valid pixels, rounded to the nearest integer (``np.rint``) from the convolution of
+      the valid mask when the tile has NaN; without NaN the footprint size (a float).
+
+    Algorithm: ``z - zbar`` (NaN set to 0) and, if needed, its square and the valid mask are transformed once per call
+    with ``scipy.fft.rfft2`` (float64, ``workers=1``); per window the footprint, centred on index (0, 0) with
+    wrap-around, is transformed once, and each product is transformed back with ``irfft2``. The FFT size is
+    ``next_fast_len`` of the padded size (deterministic); circular convolution cannot wrap into the output window,
+    because the padding p >= floor(r_w) separates it from the far edge by at least the window radius. The kernel
+    spectrum is real (the footprint is symmetric under (dy, dx) -> (-dy, -dx)), so its real part is used.
+
+    Why mean removal: sums of z and z^2 at real elevations (hundreds of metres) carry the FFT rounding of the large
+    values into the small within-window variance (E[z^2] - E[z]^2 cancels); sums of ``z - zbar`` are exact
+    translations of the same statistics, so the rounding error scales with the relief of the tile, not with its
+    elevation.
+
+    Cost: three forward transforms of the padded tile per call, and per window one forward and two (three with NaN)
+    inverse transforms; memory about four float64 / complex128 arrays of the FFT size. No numba, no threads,
+    nothing is kept between calls.
+    """
+    from scipy import fft as sp_fft  # imported here so that the square path never loads scipy.fft
+
+    n_rows, n_cols = out_shape
+    pad = (dem_pad.shape[0] - n_rows) // 2
+    fft_shape = (sp_fft.next_fast_len(dem_pad.shape[0], real=True),
+                 sp_fft.next_fast_len(dem_pad.shape[1], real=True))
+    valid = ~np.isnan(dem_pad)
+    has_nan = not bool(valid.all())
+    zbar = float(np.nanmean(dem_pad, dtype=np.float64)) if valid.any() else 0.0
+
+    # data spectra, once per call: z - zbar (NaN -> 0), its square, the valid mask (only with NaN)
+    z = dem_pad.astype(np.float64)
+    z -= zbar
+    if has_nan:
+        z[~valid] = 0.0
+    spec_1 = sp_fft.rfft2(z, s=fft_shape, workers=1)
+    spec_2 = None
+    if squares:
+        np.square(z, out=z)
+        spec_2 = sp_fft.rfft2(z, s=fft_shape, workers=1)
+    del z
+    spec_n = sp_fft.rfft2(valid.astype(np.float64), s=fft_shape, workers=1) if has_nan else None
+    del valid
+    out = (slice(pad, pad + n_rows), slice(pad, pad + n_cols))
+
+    def _sums():
+        for r_w, disk in windows:
+            footprint = _window_footprint(r_w, disk)
+            b = footprint.shape[0] // 2
+            kernel = np.zeros(fft_shape)
+            offsets = np.arange(-b, b + 1)
+            kernel[np.ix_(offsets % fft_shape[0], offsets % fft_shape[1])] = footprint
+            spec_k = sp_fft.rfft2(kernel, workers=1).real
+            del kernel
+            s1 = sp_fft.irfft2(spec_1 * spec_k, s=fft_shape, workers=1)[out].copy()
+            s2 = None
+            if spec_2 is not None:
+                s2 = sp_fft.irfft2(spec_2 * spec_k, s=fft_shape, workers=1)[out].copy()
+            if spec_n is not None:
+                count = np.rint(sp_fft.irfft2(spec_n * spec_k, s=fft_shape, workers=1)[out])
+            else:
+                count = float(np.count_nonzero(footprint))
+            del spec_k
+            yield s1, s2, count
+
+    return zbar, _sums()
+
+
+def _mean_filter_disk(dem, radii, kernel_shape):
+    """
+    Yield the disk mean filter of ``dem`` for each radius in ``radii`` (px), float32 (H, W), NaN where ``dem`` is NaN.
+
+    Every radius gets the disk of ``_window_radius(r, kernel_shape)`` (the caller applies ``DISK_MIN_RADIUS_PX``).
+    The DEM is padded in edge mode by floor(r_w) of the largest window, as the square path pads; the window sums of
+    ``z - zbar`` come from ``_disk_window_sums`` (data spectra once for all radii) and the mean is
+    ``s1 / count + zbar`` in float64, rounded to float32.
+    """
+    windows = [(_window_radius(r, kernel_shape), True) for r in radii]
+    pad = int(np.floor(max(r_w for r_w, _ in windows)))
+    idx_nan_dem = np.isnan(dem)
+    dem_pad = np.pad(dem, pad, mode="edge")
+    zbar, sums = _disk_window_sums(dem_pad, dem.shape, windows, False)
+    del dem_pad
+    for s1, _, count in sums:
+        with np.errstate(divide="ignore", invalid="ignore"):  # windows without a valid pixel: output NaN anyway
+            mean = s1 / count
+        mean += zbar
+        mean = mean.astype(np.float32)
+        mean[idx_nan_dem] = np.nan
+        yield mean
+
+
+def mean_filter(dem, kernel_radius, kernel_shape="square"):
+    """
+    Apply a mean (low-pass) filter with a square or disk window, ignoring NaN.
 
     Each output pixel is the mean of the non-NaN pixels in the (2r + 1) x (2r + 1) window centred on it,
     with r = ``int(kernel_radius)``. The DEM is padded in edge mode, so windows at the border repeat the
@@ -588,12 +747,22 @@ def mean_filter(dem, kernel_radius):
     kernel_radius : int or float
         Window radius r in px (window 2r + 1 px wide), e.g. r = 10 px = 2.5 m at 0.25 m/px. Truncated with
         ``int``.
+    kernel_shape : str
+        "square" (default, the (2r + 1) x (2r + 1) window), "disk" (pixels with dx^2 + dy^2 <= r^2) or
+        "disk_equal_area" (dx^2 + dy^2 <= r_w^2 with r_w = (2r + 1) / sqrt(pi), the disk with the square's area).
+        The disk shapes apply for r >= ``DISK_MIN_RADIUS_PX`` (8 px = 2 m at 0.25 m/px); smaller windows stay
+        square (bitwise the default result).
 
     Returns
     -------
     numpy.ndarray
         float32 (H, W); NaN where ``dem`` is NaN. For ``kernel_radius == 0`` the input array itself is
         returned (same object, not a copy).
+
+    Raises
+    ------
+    ValueError
+        If ``kernel_shape`` is not one of the three values.
 
     Notes
     -----
@@ -610,10 +779,18 @@ def mean_filter(dem, kernel_radius):
     A ``kernel_radius`` in (0, 1) is not the shortcut for 0 but gives r = 0, a 1 x 1 window, i.e. a float32
     copy of ``dem``.
 
+    Disk windows (``kernel_shape`` "disk" or "disk_equal_area", r >= 8 px): the DEM is padded in edge mode by
+    floor(r_w) px and the window sums of ``z - zbar`` (``zbar`` the float64 mean of the non-NaN padded pixels) and
+    of the valid mask are FFT convolutions with the disk footprint (``_disk_window_sums``, scipy.fft, float64,
+    ``workers=1``); the mean is ``s1 / count + zbar``, rounded to float32. No numba kernel and no threads, so
+    ``RVT_NO_ACCEL`` and the thread count do not change the result. See docs/DISK_WINDOWS.md.
+
     See Also
     --------
     slrm, msrm, integral_image
     """
+    if _disk_path(kernel_shape, lambda: (kernel_radius,), "rvt.vis.mean_filter", ValueError):
+        return next(_mean_filter_disk(dem, (int(kernel_radius),), kernel_shape))
     radius_cell = int(kernel_radius)
 
     if kernel_radius == 0:
