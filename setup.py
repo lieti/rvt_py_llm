@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="rvt_py_llm",
-    version="0.1.0",
+    version="0.1.1",
     author="ZRC SAZU and University of Ljubljana (UL FGG)",
     author_email="ziga.kokalj@zrc-sazu.si",
     maintainer="Tibor Lieskovský",

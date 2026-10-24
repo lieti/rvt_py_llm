@@ -1,4 +1,4 @@
-# Architecture of rvt (rvt_py_llm 0.1.0)
+# Architecture of rvt (rvt_py_llm 0.1.1)
 
 This document describes how the package `rvt` is organised, which functions do the work behind each public entry
 point, how data flows through a visualization, and how the optional accelerated paths are built. It is written for
@@ -290,9 +290,11 @@ For a process that computes one cheap visualization on a small tile, `RVT_NO_ACC
 | `tests/test_char_accel.py` | characterization | `rvt._accel` registry structure, return types, runtime failures |
 | `tests/test_api_snapshot.py` | API snapshot | signatures, defaults, `DefaultValues` attributes, `RVTVisualization` members |
 | `tests/test_proof_box_sum.py` | proof (added after the release audit) | `rvt.vis._box_sum` against the reference operation order on inputs where the order changes the rounding |
+| `tests/test_fix_0_1_1_*.py` (6 files) | 0.1.1 fix tests | X1 overlay / soft light into a new array and the opacity mix, X2 e4MSTP slope in degrees, X3 clip and `scale_*`, X4 `default` unchanged, X5 opacity range, e3/e4 rebuilt through `BlenderCombination` |
 
-The suite has 1093 tests and runs in about 10 s on one process; every file listed above except
-`tests/test_proof_box_sum.py` is frozen at tag `tests-frozen` (1089 tests, see [TESTING.md](TESTING.md)).
+The suite has 1194 tests and runs in about 12 s on one process; every file listed above is frozen at tag
+`tests-frozen` (0.1.1 freeze, 1194 tests; the 0.1.0 freeze of 1089 tests is tag `tests-frozen-0.1.0`, see
+[TESTING.md](TESTING.md)).
 
 ## 6. If you need to change X, look at Y
 

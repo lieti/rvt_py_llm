@@ -3,12 +3,17 @@
 ## What this repository is
 
 rvt_py_llm is the upstream Relief Visualization Toolbox Python library (rvt_py, EarthObservation/RVT_py, by Žiga
-Kokalj et al.) with one MSTP precision fix, eleven performance commits that keep every output bitwise identical, and
-a documentation and test pass (0.1.0). The import name is `rvt`. Read [README.md](README.md) first, then
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where things are.
+Kokalj et al.) with one MSTP precision fix, eleven performance commits that keep every output bitwise identical, a
+documentation and test pass (0.1.0), and five fixes of the blend path that change CRIM, e3MSTP and e4MSTP on
+purpose (0.1.1, [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)). The import name is `rvt`. Read [README.md](README.md)
+first, then [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for where things are.
 
 Tags: `baseline` (upstream `bab109c`), `baseline-fixed` (`03702f4`, + precision fix), `start` (`8413d3e`, optimized
-code + equivalence tests), `tests-frozen` (annotated, on `c341ec8`, the frozen test set).
+code + equivalence tests), `v0.1.0` (`74c63d0`), `tests-frozen` (annotated, on `5b5cbad`, the frozen test set of
+0.1.1), `tests-frozen-0.1.0` (the 0.1.0 freeze, `c341ec8`), `v0.1.1`.
+
+The reference for rule 1 below is `v0.1.1` from 0.1.1 on: `start` up to 0.1.0; the 0.1.1 fixes changed the outputs
+of the functions listed in [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md) and nothing else.
 
 ## Hard rules
 
@@ -46,13 +51,20 @@ and why.
 | `refactor:` | behaviour-neutral code edits | full test suite (accel and `RVT_NO_ACCEL=1`) + `equiv.py` PASS |
 | `test:` | new test files only | frozen check PASS |
 | `meta:` | packaging, repository documents (`*.md`, `setup.py`, requirements) | no change under `rvt/` |
+| `fix:` | 0.1.1 only: code under `rvt/` of one listed fix, with the docstrings and comments of the changed functions | full tests (accel and `RVT_NO_ACCEL=1`) PASS; record differences only in the listed functions |
+| `retire:` | 0.1.1 only: edits of frozen test files limited to listed nodes that pinned a fixed behaviour | only listed nodes changed |
+| `tool:` | `tools/proof/**` only | the tool's own self-test |
+
+`fix:`, `retire:` and `tool:` were used once, for the 0.1.1 fixes, under a written list of the allowed functions and
+nodes (see [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md) and [docs/TESTING.md](docs/TESTING.md)); rule 4 below still
+applies to every other behaviour.
 
 ## How to verify a change
 
 From the repository root:
 
 ```
-python -m pytest tests -q                                   # 1093 passed
+python -m pytest tests -q                                   # 1194 passed
 RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
