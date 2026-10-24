@@ -17,6 +17,14 @@ docs/TESTING.md section 7) and apply only to a tree that contains them. Each is 
 function or method (``scope``), so that it does not depend on the exact layout of the fixed lines; an edit that
 matches nothing stops the run with an error naming the scope.
 
+The mutants m29-m33 (``MUTANTS_0_2_0``) target the disk path of 0.2.0 (``kernel_shape="disk"``,
+docs/DISK_WINDOWS.md) in the same form; their scopes are the private names of that path in ``rvt/vis.py``
+(``_window_footprint``, ``_disk_window_sums``, ``_mean_filter_disk``, and the module-level assignment of
+``DISK_MIN_RADIUS_PX``), so they apply only to a tree that contains it: window radius off by one, mean removal
+dropped, FFT pixel counts not rounded, square window at r = 8 px, ``zbar`` not added back by the mean filter.
+The unrounded counts change the outputs only at the rounding level (bits of DEV where a window holds one valid
+pixel), below every tolerance of the tests, so that mutant is expected to be killed by equiv only.
+
 Thresholds (fixed before the first run, never lowered): tests kill >= 90 % of the mutants; equiv
 kills 100 %; both controls are equivalent. Last line ``MUTANTS PASS`` or ``MUTANTS FAIL``.
 
@@ -118,6 +126,32 @@ MUTANTS_0_1_1 = [
      "X4 deep copy removed: CRIM writes svf_r_max into the caller's default"),
 ]
 
+
+def _drop_zbar(m):
+    """m33: remove the term that adds zbar back (``+ zbar``, ``zbar +``, ``+= zbar``, ``np.add(x, zbar``)."""
+    if m.group(1):
+        return m.group(1) + "0.0"
+    return "+= 0.0" if m.group(0).startswith("+=") else ""
+
+
+# 0.2.0 disk windows (kernel_shape="disk" / "disk_equal_area", docs/DISK_WINDOWS.md), same form as MUTANTS_0_1_1.
+# The scopes are the private names of the disk path in rvt/vis.py; "DISK_MIN_RADIUS_PX" is the module-level
+# assignment of that constant. They apply only to a tree that contains the disk path.
+MUTANTS_0_2_0 = [
+    ("m29", [("vis.py", "_window_footprint", r"(def _window_footprint\((\w+)[^)]*\)[^:\n]*:[ \t]*\n)",
+              r"\1    \2 = \2 + 1\n")],
+     "disk path: window radius off by one (footprint of r_w + 1)"),
+    ("m30", [("vis.py", "_disk_window_sums", r"(\bz_?bar\s*=\s*)[^\n]+", r"\g<1>0.0")],
+     "disk path: mean removal dropped (zbar = 0, sums of z and z^2 at full elevation)"),
+    ("m31", [("vis.py", "_disk_window_sums", r"np\.(?:rint|round|around)\(", "(lambda a, *args, **kwargs: a)(")],
+     "disk path: pixel counts of the FFT not rounded to integers"),
+    ("m32", [("vis.py", "DISK_MIN_RADIUS_PX", r"(\bDISK_MIN_RADIUS_PX\s*(?::[^=\n]+)?=\s*)8\b", r"\g<1>9")],
+     "disk path: square window used at r = 8 px (threshold 9 px)"),
+    ("m33", [("vis.py", "_mean_filter_disk",
+              r"\+=\s*z_?bar\b|\s*\+\s*z_?bar\b|\bz_?bar\s*\+(?!=)\s*|(np\.add\([^,]+,\s*)z_?bar\b", _drop_zbar)],
+     "disk path: mean filter does not add zbar back"),
+]
+
 CONTROLS = [
     ("c01", "vis.py", "nan_dem", "nan_mask_renamed", 0, "local rename in vis.py (all occurrences)"),
     ("c02", "vis.py", "Compute slope and aspect with central finite differences.",
@@ -143,9 +177,15 @@ def apply(root, file, old, new, occurrence):
 
 
 def _scope_lines(text, scope):
-    """Return (first, last) 1-based line numbers of a top-level function or of "Class.method" in `text`."""
+    """Return (first, last) 1-based line numbers of a top-level function, of "Class.method", or of the module-level
+    assignment of a name (``NAME = ...``) in `text`."""
     names = scope.split(".")
     body = ast.parse(text).body
+    if len(names) == 1:
+        for n in body:
+            targets = n.targets if isinstance(n, ast.Assign) else [n.target] if isinstance(n, ast.AnnAssign) else []
+            if any(isinstance(t, ast.Name) and t.id == scope for t in targets):
+                return n.lineno, n.end_lineno
     node = None
     for name in names:
         node = next((n for n in body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
@@ -190,7 +230,7 @@ def main():
     plan = [("mutant", mid, desc, lambda root, e=(file, old, new, occ): apply(root, *e))
             for mid, file, old, new, occ, desc in MUTANTS]
     plan += [("mutant", mid, desc, lambda root, e=edits: apply_scoped(root, e))
-             for mid, edits, desc in MUTANTS_0_1_1]
+             for mid, edits, desc in MUTANTS_0_1_1 + MUTANTS_0_2_0]
     plan += [("control", mid, desc, lambda root, e=(file, old, new, occ): apply(root, *e))
              for mid, file, old, new, occ, desc in CONTROLS]
 

@@ -63,6 +63,11 @@ BASE_FILES = {
 }
 
 CODE = BASE.replace("return x + 1", "return x + 2")  # a real change of f
+# a feature: f gets a parameter and its docstring describes it; a new helper h with its own docstring
+FEAT = BASE.replace("def f(x, d):\n    \"\"\"Doc.\"\"\"", "def f(x, d, k=\"a\"):\n    \"\"\"Doc.\n\n    k: kind.\"\"\"\n"
+                    "    # new: k selects h") \
+    .replace("    return x + 1", "    if k != \"a\":\n        return h(x)\n    return x + 1") \
+    + '\n\ndef h(z):\n    """New helper."""\n    return z - 1\n'
 
 # (subject, {path: new content, or None to delete}, expected ok)
 STEPS = [
@@ -106,6 +111,28 @@ STEPS = [
     ("tool: sneaky test change", {TOOL: "print('tool 3')\n", TEST_B: "def test_b():\n    pass\n"}, False),
     ("tool: sneaky code change", {TOOL: "print('tool 4')\n", A: CODE}, False),
     ("tool: sneaky file next to tools/proof", {"tools/other.py": "print('x')\n"}, False),
+    # feat: new code under rvt/ (with the docstrings of the changed functions and classes) and settings/
+    ("feat: new parameter, its docstring, a new helper and a settings key", {A: FEAT, S: '{"r": 10, "k": "a"}\n'},
+     True),
+    ("feat: code change only", {A: CODE}, True),
+    ("feat: class docstring together with a change of the class code",
+     {A: BASE.replace("return 3", "return 4").replace("Class doc.", "Class doc, new value.")}, True),
+    ("feat: sneaky class docstring edit without a class change", {A: CODE.replace("Class doc.", "New class doc.")},
+     False),
+    ("feat: sneaky docstring edit of an unchanged function", {A: CODE.replace("Other doc.", "Other new doc.")}, False),
+    ("feat: sneaky comment edit of an unchanged function", {A: CODE.replace("# a comment", "# another comment")},
+     False),
+    ("feat: sneaky method docstring edit", {A: CODE.replace("Method doc.", "New method doc.")}, False),
+    ("feat: sneaky module docstring", {A: '"""Module doc."""\n' + CODE}, False),
+    ("feat: settings only, no code change", {S: '{"r": 14}\n'}, False),
+    ("feat: docstring only, no code change", {A: BASE.replace('"""Doc."""', '"""New doc."""')}, False),
+    ("feat: sneaky test change", {A: CODE, TEST_B: "def test_b():\n    pass\n"}, False),
+    ("feat: sneaky new test file", {A: CODE, "tests/test_e.py": "def test_e():\n    pass\n"}, False),
+    ("feat: sneaky tool change", {A: CODE, TOOL: "print('tool 5')\n"}, False),
+    ("feat: sneaky new package file", {A: CODE, "rvt/b.py": "X = 1\n"}, False),
+    ("feat: sneaky new settings file", {A: CODE, "settings/t.txt": "x = 1\n"}, False),
+    ("feat: sneaky deletion of a settings file", {A: CODE, S: None}, False),
+    ("feat: sneaky change outside rvt/ and settings/", {A: CODE, "setup.py": "X = 2\n"}, False),
 ]
 
 
@@ -155,13 +182,14 @@ def main():
         git(repo, "reset", "-q", "--hard", base)
         for subject, changes in (("fix: real code change", {A: CODE}),
                                  ("retire: edit of a frozen test file", {TEST_A: "def test_a():\n    pass\n"}),
-                                 ("tool: proof tool change", {TOOL: "print('t')\n"})):
+                                 ("tool: proof tool change", {TOOL: "print('t')\n"}),
+                                 ("feat: new parameter", {A: FEAT, S: '{"r": 10, "k": "a"}\n'})):
             write(repo, changes)
             git(repo, "add", "-A")
             git(repo, "commit", "-q", "-m", subject)
         range_ok = astcheck.check_range(str(repo), f"{base}..HEAD")
         print(f"{'ok' if range_ok else 'WRONG':<5} expected pass, got {'pass' if range_ok else 'fail'}: "
-              f"check_range over fix:, retire:, tool:")
+              f"check_range over fix:, retire:, tool:, feat:")
         ok &= range_ok
     print("ASTCHECK SELFTEST PASS" if ok else "ASTCHECK SELFTEST FAIL")
     return 0 if ok else 1

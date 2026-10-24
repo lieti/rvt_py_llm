@@ -26,16 +26,26 @@ in brackets, which this tool does not run:
   section 7, RETIRE OK: only the listed nodes change]
 - ``tool``: only files under ``tools/proof/`` change. [the tool's own self-test; review of the diff]
 
+Class of the 0.2.0 feature phase (disk windows, docs/DISK_WINDOWS.md):
+
+- ``feat``: only existing files under ``rvt/`` (Python only) and ``settings/`` are modified (none added or deleted),
+  and the AST without docstrings of at least one ``rvt/**/*.py`` file differs. As for ``fix``: a function or method
+  whose code is unchanged keeps its docstring and its source text, and module docstrings are unchanged; a class
+  docstring may change only together with the code of that class (e.g. a new attribute set in ``__init__``).
+  [full tests with and without ``RVT_NO_ACCEL=1``; the scoped record comparison with an empty function allow-list,
+  EQUIV_DIFF OK; the determinism check of the new path, DET OK]
+
 Usage (from the repository root; ``--repo`` defaults to this repository)::
 
     python tools/proof/astcheck.py --base start --head HEAD --class docs
     python tools/proof/astcheck.py --repo . --range start..HEAD
 
 ``--range`` checks every commit in the range against its parent, using the class named by the commit
-subject prefix (``docs:``, ``msg:``, ``meta:``, ``test:``, ``refactor:``, ``fix:``, ``retire:``, ``tool:``).
-Merge commits are skipped. Commits of the classes ``refactor``, ``fix``, ``retire`` and ``tool`` that pass are
-listed with the further check they need (``needs-equiv``, ``needs-tests+equiv_diff``, ``needs-retire_check``,
-``needs-selftest``). The last line is ``ASTCHECK PASS`` or ``ASTCHECK FAIL``.
+subject prefix (``docs:``, ``msg:``, ``meta:``, ``test:``, ``refactor:``, ``fix:``, ``retire:``, ``tool:``,
+``feat:``). Merge commits are skipped. Commits of the classes ``refactor``, ``fix``, ``retire``, ``tool`` and
+``feat`` that pass are listed with the further check they need (``needs-equiv``, ``needs-tests+equiv_diff``,
+``needs-retire_check``, ``needs-selftest``, ``needs-tests+equiv_diff+det``). The last line is ``ASTCHECK PASS`` or
+``ASTCHECK FAIL``.
 """
 
 import argparse
@@ -47,9 +57,9 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]  # repository root
-CLASSES = ("docs", "msg", "meta", "test", "refactor", "fix", "retire", "tool")
+CLASSES = ("docs", "msg", "meta", "test", "refactor", "fix", "retire", "tool", "feat")
 NEEDS = {"refactor": "needs-equiv", "fix": "needs-tests+equiv_diff", "retire": "needs-retire_check",
-         "tool": "needs-selftest"}
+         "tool": "needs-selftest", "feat": "needs-tests+equiv_diff+det"}
 RUNTIME_DATA = ("settings/", "test_data/")  # read by rvt.default / rvt.blend at run time
 MANIFEST = "tools/proof/frozen_manifest.json"  # frozen test set: {"commit": ..., "files": [...], ...}
 PYTEST_CONFIG = ("conftest.py", "pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini")  # by file name
@@ -183,6 +193,53 @@ def _check_fix(repo, base, head, files):
     return problems
 
 
+def _class_codes(source):
+    """Return {class name: AST dump without docstrings} of the top-level classes (methods included)."""
+    return {node.name: ast.dump(strip_docstrings(copy.deepcopy(node))) for node in ast.parse(source).body
+            if isinstance(node, ast.ClassDef)}
+
+
+def _check_feat(repo, base, head, files):
+    """Rules of the feat: class (module docstring)."""
+    problems = []
+    code_changed = False
+    for s, p in files:
+        if not p.startswith(("rvt/", "settings/")):
+            problems.append(f"{s} {p}: feat commit changes a file outside rvt/ and settings/")
+            continue
+        if s != "M":
+            problems.append(f"{s} {p}: feat commit may only modify existing files of rvt/ and settings/")
+            continue
+        if p.startswith("settings/"):
+            continue
+        if not p.endswith(".py"):
+            problems.append(f"{s} {p}: feat commit changes a non-Python package file")
+            continue
+        before_src = git(repo, "show", f"{base}:{p}")
+        after_src = git(repo, "show", f"{head}:{p}")
+        code_changed |= normalized_dump(before_src, "docs") != normalized_dump(after_src, "docs")
+        before, after = _units(before_src), _units(after_src)
+        cls_before, cls_after = _class_codes(before_src), _class_codes(after_src)
+        for name in sorted(set(before) & set(after)):
+            (code_b, doc_b, text_b), (code_a, doc_a, text_a) = before[name], after[name]
+            if name == "<module>":
+                if doc_b != doc_a:
+                    problems.append(f"{p}: feat commit changes the module docstring")
+            elif code_b is None:  # class: its docstring may change with its code
+                if doc_b != doc_a and cls_before.get(name) == cls_after.get(name):
+                    problems.append(f"{p}::{name}: feat commit changes the docstring of a class whose code is "
+                                    f"unchanged")
+            elif code_b == code_a and doc_b != doc_a:
+                problems.append(f"{p}::{name}: feat commit changes the docstring of a function whose code is "
+                                f"unchanged")
+            elif code_b == code_a and text_b != text_a:
+                problems.append(f"{p}::{name}: feat commit changes comments or layout of a function whose code is "
+                                f"unchanged")
+    if not code_changed and not problems:
+        problems.append("feat commit changes no code under rvt/ (use docs:)")
+    return problems
+
+
 def _check_retire(repo, base, files):
     """Rules of the retire: class (module docstring)."""
     try:
@@ -211,6 +268,8 @@ def check(repo, base, head, cls):
         return problems
     if cls == "fix":
         return _check_fix(repo, base, head, files)
+    if cls == "feat":
+        return _check_feat(repo, base, head, files)
     if cls == "retire":
         return _check_retire(repo, base, files)
     if cls == "tool":
