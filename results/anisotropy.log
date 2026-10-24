@@ -1,0 +1,31 @@
+bank 1 m high, 12 px = 3.0 m wide, 0.25 m/px; crest pixels; areas in px
+r=  8 px =  2.00 m
+  square: area    289, SLRM 45/0 0.918, DEV 45/0 0.825
+  disk: area    197, SLRM 45/0 0.995, DEV 45/0 0.982
+  disk_eqarea: area    293, SLRM 45/0 1.000, DEV 45/0 0.999
+  octagon: area    229, SLRM 45/0 1.013, DEV 45/0 1.041
+  contrast at 0 deg relative to square (SLRM, DEV): square 1.000/1.000, disk 0.720/0.878, disk_eqarea 0.951/0.923, octagon 0.797/0.872
+r= 16 px =  4.00 m
+  square: area   1089, SLRM 45/0 0.893, DEV 45/0 0.857
+  disk: area    797, SLRM 45/0 0.996, DEV 45/0 0.994
+  disk_eqarea: area   1093, SLRM 45/0 0.996, DEV 45/0 0.994
+  octagon: area    869, SLRM 45/0 1.018, DEV 45/0 1.024
+  contrast at 0 deg relative to square (SLRM, DEV): square 1.000/1.000, disk 0.847/0.865, disk_eqarea 0.950/0.938, octagon 0.868/0.878
+r= 32 px =  8.00 m
+  square: area   4225, SLRM 45/0 0.929, DEV 45/0 0.849
+  disk: area   3209, SLRM 45/0 0.998, DEV 45/0 0.995
+  disk_eqarea: area   4205, SLRM 45/0 1.000, DEV 45/0 1.001
+  octagon: area   3465, SLRM 45/0 1.003, DEV 45/0 1.006
+  contrast at 0 deg relative to square (SLRM, DEV): square 1.000/1.000, disk 0.933/0.871, disk_eqarea 0.970/0.936, octagon 0.947/0.896
+r= 48 px = 12.00 m
+  square: area   9409, SLRM 45/0 0.950, DEV 45/0 0.846
+  disk: area   7213, SLRM 45/0 1.000, DEV 45/0 0.999
+  disk_eqarea: area   9417, SLRM 45/0 0.999, DEV 45/0 0.998
+  octagon: area   7669, SLRM 45/0 1.003, DEV 45/0 1.009
+  contrast at 0 deg relative to square (SLRM, DEV): square 1.000/1.000, disk 0.958/0.875, disk_eqarea 0.982/0.940, octagon 0.966/0.895
+r= 96 px = 24.00 m
+  square: area  37249, SLRM 45/0 0.974, DEV 45/0 0.843
+  disk: area  28917, SLRM 45/0 1.000, DEV 45/0 0.999
+  disk_eqarea: area  37225, SLRM 45/0 1.000, DEV 45/0 1.000
+  octagon: area  30637, SLRM 45/0 1.001, DEV 45/0 1.004
+  contrast at 0 deg relative to square (SLRM, DEV): square 1.000/1.000, disk 0.980/0.880, disk_eqarea 0.991/0.941, octagon 0.985/0.903

@@ -1,0 +1,28 @@
+local  square     0.602 s  peak 0.67 GB
+local  disk       2.430 s  peak 0.76 GB
+local  octagon   16.810 s  peak 0.98 GB
+meso   square     1.013 s  peak 1.19 GB
+meso   disk       3.950 s  peak 1.29 GB
+meso   octagon   29.831 s  peak 1.34 GB
+broad  square     1.603 s  peak 1.34 GB
+broad  disk      14.748 s  peak 1.96 GB
+broad  octagon   34.787 s  peak 1.63 GB
+mstp   square    11.616 s
+mstp   disk      24.167 s
+mstp   octagon   86.536 s
+rvt    square     1.802 s (numba=True)
+n = 2048² px, 0.25 m/px, one thread, median of 3 (s); peak GB by tracemalloc
+
+| band (radii) | square (SAT) | disk (FFT) | octagon (tables) | ratio disk/square | ratio octagon/square |
+|---|---|---|---|---|---|
+| local (1–5 px, 5 radii) | 0.602 | 2.430 | 16.810 | 4.0 | 27.9 |
+| meso (5–50 px, 10 radii) | 1.013 | 3.950 | 29.831 | 3.9 | 29.4 |
+| broad (50–500 px, 10 radii) | 1.603 | 14.748 | 34.787 | 9.2 | 21.7 |
+
+| whole MSTP (3 bands, 25 radii) | time (s) | peak GB |
+|---|---|---|
+| square (this prototype, mean removed) | 11.616 | 1.40 |
+| disk (this prototype, mean removed) | 24.167 | 2.03 |
+| octagon (this prototype, mean removed) | 86.536 | 1.70 |
+| rvt.vis.mstp 0.1.0 square path (numba) | 1.802 | 0.26 |
+COST DONE /home/user/rvt_py_llm/results/cost_2048.json

@@ -1,0 +1,13 @@
+low    disk         mstp all: {'p999': 110.0, 'max': 183, 'mean': 15.358642578125, 'share_gt5_pct': 85.47134399414062}  slrm: {'p999': 1.0, 'max': 2, 'mean': 0.16080856323242188, 'share_gt5_pct': 0.0}
+low    disk_t8      mstp all: {'p999': 30.0, 'max': 44, 'mean': 6.624351501464844, 'share_gt5_pct': 51.53350830078125}  slrm: {'p999': 1.0, 'max': 2, 'mean': 0.16080856323242188, 'share_gt5_pct': 0.0}
+low    disk_eqarea  mstp all: {'p999': 30.0, 'max': 52, 'mean': 6.379596710205078, 'share_gt5_pct': 48.993682861328125}  slrm: {'p999': 1.0, 'max': 1, 'mean': 0.054462432861328125, 'share_gt5_pct': 0.0}
+low    octagon      mstp all: {'p999': 110.0, 'max': 183, 'mean': 13.94759750366211, 'share_gt5_pct': 80.61141967773438}  slrm: {'p999': 1.0, 'max': 1, 'mean': 0.12835311889648438, 'share_gt5_pct': 0.0}
+medium disk         mstp all: {'p999': 110.0, 'max': 181, 'mean': 16.75448226928711, 'share_gt5_pct': 89.12811279296875}  slrm: {'p999': 1.0, 'max': 1, 'mean': 0.14437103271484375, 'share_gt5_pct': 0.0}
+medium disk_t8      mstp all: {'p999': 16.0, 'max': 17, 'mean': 5.849292755126953, 'share_gt5_pct': 47.872161865234375}  slrm: {'p999': 1.0, 'max': 1, 'mean': 0.14437103271484375, 'share_gt5_pct': 0.0}
+medium disk_eqarea  mstp all: {'p999': 17.0, 'max': 34, 'mean': 3.3012466430664062, 'share_gt5_pct': 13.517379760742188}  slrm: {'p999': 1.0, 'max': 1, 'mean': 0.056133270263671875, 'share_gt5_pct': 0.0}
+medium octagon      mstp all: {'p999': 110.0, 'max': 180, 'mean': 15.920242309570312, 'share_gt5_pct': 85.55564880371094}  slrm: {'p999': 1.0, 'max': 1, 'mean': 0.11712265014648438, 'share_gt5_pct': 0.0}
+high   disk         mstp all: {'p999': 48.0, 'max': 171, 'mean': 9.382854461669922, 'share_gt5_pct': 79.79965209960938}  slrm: {'p999': 34.85700000001816, 'max': 54, 'mean': 2.6250038146972656, 'share_gt5_pct': 12.13226318359375}
+high   disk_t8      mstp all: {'p999': 19.0, 'max': 23, 'mean': 7.757568359375, 'share_gt5_pct': 70.20759582519531}  slrm: {'p999': 34.85700000001816, 'max': 54, 'mean': 2.6250038146972656, 'share_gt5_pct': 12.13226318359375}
+high   disk_eqarea  mstp all: {'p999': 10.0, 'max': 27, 'mean': 3.6195449829101562, 'share_gt5_pct': 21.52862548828125}  slrm: {'p999': 12.0, 'max': 15, 'mean': 0.6921501159667969, 'share_gt5_pct': 1.3172149658203125}
+high   octagon      mstp all: {'p999': 47.0, 'max': 171, 'mean': 8.193771362304688, 'share_gt5_pct': 74.73678588867188}  slrm: {'p999': 27.0, 'max': 42, 'mean': 2.0374984741210938, 'share_gt5_pct': 9.527587890625}
+SAMPLES DONE
