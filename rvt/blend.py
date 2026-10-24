@@ -1991,9 +1991,11 @@ def e3mstp(dem, resolution, default: rvt.default.DefaultValues = rvt.default.Def
     3   MSTP (DefaultValues.get_mstp), RGB                 value 0..1       (bottom)    --
     ==  =================================================  ===============  ==========  =======
 
-    The SLRM uses ``default.slrm_rad_cell`` (px) and ``default.ve_factor``; the CRIM is computed with ``default``
-    (see color_relief_image_map); the MSTP uses ``default.mstp_local_scale``, ``mstp_meso_scale``,
-    ``mstp_broad_scale`` (px) and ``mstp_lightness``.
+    The SLRM uses ``default.slrm_rad_cell`` (px), ``default.ve_factor`` and ``default.slrm_kernel_shape``; the CRIM
+    is computed with ``default`` (see color_relief_image_map); the MSTP uses ``default.mstp_local_scale``,
+    ``mstp_meso_scale``, ``mstp_broad_scale`` (px), ``mstp_lightness`` and ``mstp_kernel_shape``. The window shapes
+    (0.2.0, docs/DISK_WINDOWS.md) are "square" by default; "disk" or "disk_equal_area" change the SLRM and MSTP
+    layers through ``get_slrm`` and ``get_mstp``.
 
     Parameters
     ----------
@@ -2083,7 +2085,8 @@ def e4mstp(dem, resolution, default: rvt.default.DefaultValues=rvt.default.Defau
         Pixel size in m/px (x and y).
     default : rvt.default.DefaultValues
         Visualization parameters for MSTP, SVF, openness and local dominance; not modified. The default is one
-        instance created at import time and shared by all calls.
+        instance created at import time and shared by all calls. ``default.mstp_kernel_shape`` (0.2.0, "square" by
+        default, docs/DISK_WINDOWS.md) sets the window shape of the MSTP layer through ``get_mstp``.
     no_data : float or None
         No-data value of ``dem``; None means the DEM has no such value (NaN is no-data anyway).
 

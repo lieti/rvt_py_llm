@@ -41,6 +41,17 @@ Five functions have a faster path that returns bitwise identical results to the 
 - the kernels are serial, so results do not depend on the thread count (``RVT_NUM_THREADS``,
   ``NUMBA_NUM_THREADS``; see ``rvt._accel``).
 
+Window shapes (0.2.0)
+---------------------
+``mean_filter``, ``slrm``, ``msrm``, ``max_elevation_deviation`` and ``mstp`` take ``kernel_shape``: "square" (the
+default and the only shape up to 0.1.1, bitwise unchanged), "disk" (pixels with dx^2 + dy^2 <= r^2) or
+"disk_equal_area" (r_w = (2r + 1) / sqrt(pi), the disk with the area of the square). Windows of radius
+>= ``DISK_MIN_RADIUS_PX`` = 8 px become disks (``msrm``: all its windows when its largest radius is >= 8 px); calls
+whose windows are all smaller run the square code. The disk path (``_disk_window_sums``) convolves the
+mean-removed tile, its square and the valid mask with the footprint by FFT (``scipy.fft``, float64,
+``workers=1``); it has no numba kernel and no threads, so ``RVT_NO_ACCEL`` and the thread count do not change it.
+Definition, threshold, cost and open questions: docs/DISK_WINDOWS.md.
+
 Conventions (docs/CONVENTIONS.md)
 ---------------------------------
 - Elevation in metres, 2D ``numpy.ndarray``, row 0 is north. Pixel size (``resolution*``) in m/px.
@@ -663,8 +674,10 @@ def _disk_window_sums(dem_pad, out_shape, windows, squares):
     translations of the same statistics, so the rounding error scales with the relief of the tile, not with its
     elevation.
 
-    Cost: three forward transforms of the padded tile per call, and per window one forward and two (three with NaN)
-    inverse transforms; memory about four float64 / complex128 arrays of the FFT size. No numba, no threads,
+    Cost: up to three forward transforms of the padded tile per call, and per window one forward and one to three
+    inverse transforms (s1; s2 if ``squares``; the count only with NaN); memory about four float64 / complex128
+    arrays of the FFT size. ``mstp`` with the default scales on a 2048 x 2048 px tile (0.25 m/px, no NaN, one
+    thread) took about 7.5 s with disks against 1.5 s with squares (docs/DISK_WINDOWS.md). No numba, no threads,
     nothing is kept between calls.
     """
     from scipy import fft as sp_fft  # imported here so that the square path never loads scipy.fft
@@ -744,8 +757,10 @@ def mean_filter(dem, kernel_radius, kernel_shape="square"):
     Apply a mean (low-pass) filter with a square or disk window, ignoring NaN.
 
     Each output pixel is the mean of the non-NaN pixels in the (2r + 1) x (2r + 1) window centred on it,
-    with r = ``int(kernel_radius)``. The DEM is padded in edge mode, so windows at the border repeat the
-    edge pixels. Window sums come from a float64 summed-area table (integral image).
+    with r = ``int(kernel_radius)`` (``kernel_shape`` "square"; for the disk shapes the window is the disk
+    dx^2 + dy^2 <= r_w^2 when r >= 8 px). The DEM is padded in edge mode, so windows at the border repeat the
+    edge pixels. Window sums come from a float64 summed-area table (integral image), for disks from FFT
+    convolutions.
 
     Parameters
     ----------
