@@ -386,13 +386,28 @@ def test_snapshot_not_empty():
 
 def test_public_api_matches_snapshot():
     current = collect_api()
-    removed = sorted(set(SNAPSHOT) - set(current))
-    added = sorted(set(current) - set(SNAPSHOT))
-    changed = sorted(k for k in set(SNAPSHOT) & set(current) if SNAPSHOT[k] != current[k])
+    # 0.2.0: kernel_shape, the last parameter of the five window functions, and the three DefaultValues
+    # attributes that hold it (SNAPSHOT is a frozen module-level literal, so the 0.2.0 entries go into a copy)
+    expected = dict(SNAPSHOT)
+    expected.update({
+        'rvt.vis.max_elevation_deviation': "(dem, minimum_radius, maximum_radius, step, kernel_shape='square')",
+        'rvt.vis.mean_filter': "(dem, kernel_radius, kernel_shape='square')",
+        'rvt.vis.msrm': "(dem, resolution, feature_min, feature_max, scaling_factor, ve_factor=1, no_data=None, "
+                        "kernel_shape='square')",
+        'rvt.vis.mstp': "(dem, local_scale=(1, 5, 1), meso_scale=(5, 50, 5), broad_scale=(50, 500, 50), "
+                        "lightness=1.2, ve_factor=1, no_data=None, kernel_shape='square')",
+        'rvt.vis.slrm': "(dem, radius_cell=20, ve_factor=1, no_data=None, kernel_shape='square')",
+        'rvt.default.DefaultValues().msrm_kernel_shape': "'square'",
+        'rvt.default.DefaultValues().mstp_kernel_shape': "'square'",
+        'rvt.default.DefaultValues().slrm_kernel_shape': "'square'",
+    })
+    removed = sorted(set(expected) - set(current))
+    added = sorted(set(current) - set(expected))
+    changed = sorted(k for k in set(expected) & set(current) if expected[k] != current[k])
     report = []
     report += ["removed: {}".format(k) for k in removed]
     report += ["added:   {}".format(k) for k in added]
-    report += ["changed: {}\n    was {}\n    now {}".format(k, SNAPSHOT[k], current[k]) for k in changed]
+    report += ["changed: {}\n    was {}\n    now {}".format(k, expected[k], current[k]) for k in changed]
     assert not report, "public API differs from the snapshot:\n" + "\n".join(report)
 
 

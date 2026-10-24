@@ -132,7 +132,10 @@ EXPECTED_DEFAULTS = {
 
 
 def test_default_attribute_names_are_exactly_the_documented_table():
-    assert sorted(vars(DefaultValues())) == sorted(EXPECTED_DEFAULTS)
+    # 0.2.0: kernel_shape, three attributes added to the frozen table EXPECTED_DEFAULTS
+    expected = dict(EXPECTED_DEFAULTS, slrm_kernel_shape="square", msrm_kernel_shape="square",
+                    mstp_kernel_shape="square")
+    assert sorted(vars(DefaultValues())) == sorted(expected)
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED_DEFAULTS))
@@ -177,7 +180,8 @@ def _changed_copy():
     dv = DefaultValues()
     for name, value in sorted(vars(dv).items()):
         if isinstance(value, str):
-            setattr(dv, name, {"degree": "percent", "overcast": "uniform"}[value])
+            # 0.2.0: kernel_shape, the *_kernel_shape attributes are "square" by default
+            setattr(dv, name, {"degree": "percent", "overcast": "uniform", "square": "disk"}[value])
         elif isinstance(value, int):
             setattr(dv, name, value + 1)
         elif isinstance(value, float):
@@ -284,6 +288,8 @@ def test_txt_settings_are_parsed(tmp_path):
         mhs_nr_dir=8, slrm_compute=1, slrm_rad_cell=12, svf_compute=1, svf_n_dir=32, svf_r_max=7, svf_noise=3,
         asvf_compute=1, asvf_dir=45, asvf_level=2, pos_opns_compute=1, neg_opns_compute=1, sim_compute=1,
         sim_sky_mod="uniform", sim_shadow_dist=50, ld_compute=1, ld_min_rad=5, ld_max_rad=15)
+    # 0.2.0: kernel_shape, not in TXT_SETTINGS, so the three attributes keep their default
+    expected.update(slrm_kernel_shape="square", msrm_kernel_shape="square", mstp_kernel_shape="square")
     assert vars(dv) == expected
     # pins current behaviour, KNOWN_ISSUES candidate: "sun_elevation" is tested twice in the parser (hillshade
     # first, multi hillshade second), so the second branch is dead and mhs_sun_el keeps its default 35 here.
