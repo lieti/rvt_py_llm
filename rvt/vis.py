@@ -579,18 +579,25 @@ def _box_sum(table, lo, hi, n_rows, n_cols):
     return box
 
 
+def _check_kernel_shape(kernel_shape, where, error):
+    """
+    Raise ``error`` (the exception type the calling function uses for bad arguments), with a message that starts
+    with ``where``, unless ``kernel_shape`` is "square", "disk" or "disk_equal_area".
+    """
+    if not (isinstance(kernel_shape, str) and kernel_shape in _KERNEL_SHAPES):
+        raise error("{}: kernel_shape must be 'square', 'disk' or 'disk_equal_area'!".format(where))
+
+
 def _disk_path(kernel_shape, radii, where, error):
     """
-    Validate ``kernel_shape`` and return True when the call takes the disk path.
+    Validate ``kernel_shape`` (``_check_kernel_shape``) and return True when the call takes the disk path.
 
     ``radii`` is a callable that returns the window radii of the call in px; it is evaluated only for "disk" and
     "disk_equal_area", so on the square path this function only checks the value. The disk path is taken when the
     shape is not "square" and the largest radius (``int``) is at least ``DISK_MIN_RADIUS_PX``; a call whose radii are
-    all smaller runs the square code unchanged. Any other value of ``kernel_shape`` raises ``error`` (the exception
-    type the calling function uses for bad arguments) with a message that starts with ``where``.
+    all smaller runs the square code unchanged.
     """
-    if not (isinstance(kernel_shape, str) and kernel_shape in _KERNEL_SHAPES):
-        raise error("{}: kernel_shape must be 'square', 'disk' or 'disk_equal_area'!".format(where))
+    _check_kernel_shape(kernel_shape, where, error)
     if kernel_shape == "square":
         return False
     radii = [int(r) for r in radii()]
@@ -2990,7 +2997,57 @@ def _mstp_dev_max_kernel(dem_i1, dem_i2, dem_i_nr_pixels, has_nr_pixels, dem_cen
             out[i, j] = buf[j]
 
 
-def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
+def _max_elevation_deviation_disk(dem, radii, kernel_shape):
+    """
+    Return DEV_max of ``max_elevation_deviation`` over ``radii`` (px) with disk windows, float32 (H, W).
+
+    Radii >= ``DISK_MIN_RADIUS_PX`` get the disk of ``_window_radius(r, kernel_shape)``, smaller positive radii the
+    square (2r + 1) x (2r + 1) footprint, all through one set of FFT spectra (``_disk_window_sums``). The DEM is
+    padded in symmetric mode by floor(r_w) of the largest window. Per radius, with ``s1``, ``s2`` the window sums
+    of ``z - zbar`` and its square and ``n`` the valid count: ``mean = s1 / n``, ``var = s2 / n - mean ** 2``,
+    ``std = sqrt(|var|) + 1e-6``, ``dev = ((z - zbar) - mean) / std``, the expressions of the square path shifted by
+    ``zbar``. The running maximum keeps ``max`` where ``|max| >= |dev|`` (radii in order), the tie rule of the square
+    path; it is rounded to float32 once at the end. A radius <= 0 contributes, as on the square path, the elevation
+    one pixel up and left of the centre with NaN as 0 (known issue, docs/KNOWN_ISSUES.md).
+    """
+    radii = [int(r) for r in radii]
+    windows = [(_window_radius(r, kernel_shape), True) if r >= DISK_MIN_RADIUS_PX else (float(r), False)
+               for r in radii if r > 0]
+    pad = int(np.floor(max(r_w for r_w, _ in windows)))
+    n_rows, n_cols = dem.shape
+    idx_nan_dem = np.isnan(dem)
+    dem_pad = np.pad(dem, pad, mode="symmetric")
+    zbar, sums = _disk_window_sums(dem_pad, dem.shape, windows, True)
+    # z - zbar at the centre pixels, as _disk_window_sums computes it
+    dem_centre = dem_pad[pad:pad + n_rows, pad:pad + n_cols].astype(np.float64)
+    dem_centre -= zbar
+    dev_max_out = None
+    for kernel_radius in radii:
+        if kernel_radius <= 0:
+            # the square path takes the padded dem (NaN -> 0) one pixel up and left (known issue)
+            dev = dem_pad[pad - 1:pad - 1 + n_rows, pad - 1:pad - 1 + n_cols]
+            dev = np.where(np.isnan(dev), dev.dtype.type(0), dev)
+        else:
+            s1, s2, count = next(sums)
+            with np.errstate(divide="ignore", invalid="ignore"):  # windows without a valid pixel: output NaN
+                dem_mean = s1 / count
+                dem_std = s2 / count - dem_mean ** 2
+                np.abs(dem_std, out=dem_std)
+                np.sqrt(dem_std, out=dem_std)
+            dem_std += 1e-6  # as on the square path: no division by 0 where the window is flat
+            dev = (dem_centre - dem_mean) / dem_std
+            del s1, s2, count, dem_mean, dem_std
+        if dev_max_out is None:
+            dev_max_out = dev
+        else:
+            dev_max_out = np.where(np.abs(dev_max_out) >= np.abs(dev), dev_max_out, dev)
+        del dev
+    dev_max_out = dev_max_out.astype(np.float32)
+    dev_max_out[idx_nan_dem] = np.nan
+    return dev_max_out
+
+
+def max_elevation_deviation(dem, minimum_radius, maximum_radius, step, kernel_shape="square"):
     """
     Compute the maximum deviation from mean elevation (DEV_max) over a range of window radii.
 
@@ -3010,11 +3067,22 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
         0.25 m/px.
     step : int
         Radius step in px, truncated with ``int``; must be positive (``range`` raises ValueError for 0).
+    kernel_shape : str
+        "square" (default, (2D + 1) x (2D + 1) windows), "disk" (pixels with dx^2 + dy^2 <= D^2) or
+        "disk_equal_area" (dx^2 + dy^2 <= r_w^2 with r_w = (2D + 1) / sqrt(pi), the disk with the square's area).
+        When the largest radius is >= ``DISK_MIN_RADIUS_PX`` (8 px = 2 m at 0.25 m/px) every radius of the call
+        goes through the FFT path, with the disk from 8 px and the square below; when all radii are < 8 px the
+        square code runs unchanged (bitwise the default result).
 
     Returns
     -------
     numpy.ndarray
         float32 (H, W), signed deviation in standard deviations; NaN where ``dem`` is NaN.
+
+    Raises
+    ------
+    ValueError
+        If ``kernel_shape`` is not one of the three values.
 
     Notes
     -----
@@ -3037,10 +3105,22 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step):
     ``topographic_dev`` returns the DEM), taken one pixel up and left of the centre (output (i, j) is
     ``z[i - 1, j - 1]``, with the symmetric padding at the border), not a deviation.
 
+    Disk windows (``_max_elevation_deviation_disk``): the DEM is padded in symmetric mode by floor(r_w) of the
+    largest window; the window sums of ``z - zbar`` and ``(z - zbar)^2`` (``zbar`` the float64 mean of the non-NaN
+    padded pixels) and of the valid mask are FFT convolutions (``_disk_window_sums``, scipy.fft, float64,
+    ``workers=1``, data spectra once per call). The deviation, the ``abs`` and ``+ 1e-6`` of the std, the tie rule
+    and the final float32 rounding are those of the square path; removing ``zbar`` first keeps the rounding error
+    at the scale of the relief, not of the elevation (DEV of a tile at +2 500 m within 1e-7 of the same tile at
+    0 m, tests/test_disk_oracle.py). No numba kernel and no threads on this path. See docs/DISK_WINDOWS.md.
+
     See Also
     --------
     mstp, topographic_dev, integral_image
     """
+    if _disk_path(kernel_shape, lambda: range(int(minimum_radius), int(maximum_radius) + 1, int(step)),
+                  "rvt.vis.max_elevation_deviation", ValueError):
+        return _max_elevation_deviation_disk(dem, range(int(minimum_radius), int(maximum_radius) + 1, int(step)),
+                                             kernel_shape)
     minimum_radius = int(minimum_radius)
     maximum_radius = int(maximum_radius)
     step = int(step)
@@ -3147,7 +3227,8 @@ def mstp(dem,
          broad_scale=(50, 500, 50),
          lightness=1.2,
          ve_factor=1,
-         no_data=None
+         no_data=None,
+         kernel_shape="square"
          ):
     """
     Compute multi-scale topographic position (MSTP) as an RGB image.
@@ -3174,6 +3255,11 @@ def mstp(dem,
     no_data : int or float or None
         Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
         Default None.
+    kernel_shape : str
+        Window shape of the three ``max_elevation_deviation`` calls: "square" (default), "disk" or
+        "disk_equal_area". A scale whose largest radius is >= 8 px (``DISK_MIN_RADIUS_PX``) uses the disk from 8 px
+        and the square below it; a scale whose radii are all < 8 px (the default local scale 1..5 px) stays on the
+        square code. With the defaults the meso band changes from 10 px, the broad band at every radius.
 
     Returns
     -------
@@ -3184,8 +3270,8 @@ def mstp(dem,
     Raises
     ------
     Exception
-        If a scale has minimum > maximum, a step larger than maximum - minimum, or ``ve_factor`` is outside
-        [-1000, 10000].
+        If a scale has minimum > maximum, a step larger than maximum - minimum, ``ve_factor`` is outside
+        [-1000, 10000], or ``kernel_shape`` is not "square", "disk" or "disk_equal_area".
 
     Notes
     -----
@@ -3210,6 +3296,7 @@ def mstp(dem,
                         " to be within min and max!")
     if not (10000 >= ve_factor >= -1000):
         raise Exception("rvt.vis.mstp: ve_factor must be between -1000 and 10000!")
+    _check_kernel_shape(kernel_shape, "rvt.vis.mstp", Exception)
 
     # change no_data to np.nan
     if no_data is not None:
@@ -3219,11 +3306,11 @@ def mstp(dem,
     dem = dem * ve_factor
 
     local_dev = max_elevation_deviation(dem=dem, minimum_radius=local_scale[0], maximum_radius=local_scale[1],
-                                        step=local_scale[2])
+                                        step=local_scale[2], kernel_shape=kernel_shape)
     meso_dev = max_elevation_deviation(dem=dem, minimum_radius=meso_scale[0], maximum_radius=meso_scale[1],
-                                       step=meso_scale[2])
+                                       step=meso_scale[2], kernel_shape=kernel_shape)
     broad_dev = max_elevation_deviation(dem=dem, minimum_radius=broad_scale[0], maximum_radius=broad_scale[1],
-                                        step=broad_scale[2])
+                                        step=broad_scale[2], kernel_shape=kernel_shape)
 
     cutoff = lightness
     # RGB order - broad, meso, local
