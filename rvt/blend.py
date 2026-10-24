@@ -78,6 +78,7 @@ Copyright:
 
 # TODO: more testing, find and fix bugs if they exists
 
+import copy
 import datetime
 import json
 import os
@@ -1929,6 +1930,7 @@ def color_relief_image_map(dem, resolution, default: rvt.default.DefaultValues =
     """
     slope_norm = ("value", 0, 0.8)  # radians: 0..0.8 rad = 0..45.8 deg
     op_on_norm = ("value", -28, 28)
+    default = copy.deepcopy(default)  # the caller's object (and the shared default instance) stays unchanged
     default.svf_r_max = 10
 
     if no_data is not None:
