@@ -13,16 +13,17 @@ Proves without running anything that a commit cannot change behaviour:
 - ``test``: only files under ``tests/`` are added; no existing file under ``tests/`` changes.
 - ``refactor``: any change is allowed here; such commits must be proven by ``equiv.py`` and the tests.
 
-Classes of the 0.1.1 fix phase (FIX_BRIEF_LLM.md section 2); each also needs the check named in brackets, which
-this tool does not run:
+Classes of the 0.1.1 fix phase (docs/FIXES_0_1_1.md; docs/TESTING.md section 7); each also needs the check named
+in brackets, which this tool does not run:
 
 - ``fix``: only existing ``rvt/**/*.py`` files are modified, and the AST without docstrings of at least one of them
   differs. A function or method whose code (AST without docstrings) is unchanged keeps its docstring and its source
   text (comments); the module and class docstrings are unchanged. Docstrings and comments may change only in the
-  functions whose code changes. [full tests with and without ``RVT_NO_ACCEL=1``; ``equiv_diff.py`` EQUIV_DIFF OK]
+  functions whose code changes. [full tests with and without ``RVT_NO_ACCEL=1``; the scoped record comparison of
+  docs/TESTING.md section 7, EQUIV_DIFF OK]
 - ``retire``: only files of the frozen test set (``tools/proof/frozen_manifest.json`` at the parent commit) are
-  modified; no file is added or deleted; no pytest configuration file changes. [``retire_check.py`` RETIRE OK:
-  only the listed nodes change]
+  modified; no file is added or deleted; no pytest configuration file changes. [the retire check of docs/TESTING.md
+  section 7, RETIRE OK: only the listed nodes change]
 - ``tool``: only files under ``tools/proof/`` change. [the tool's own self-test; review of the diff]
 
 Usage (from the repository root; ``--repo`` defaults to this repository)::

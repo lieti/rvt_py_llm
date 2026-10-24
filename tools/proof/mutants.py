@@ -12,8 +12,8 @@ replaced, and the frozen tests run once under the recording plugin of ``equiv.py
 Two control edits that must *not* change behaviour (a local rename, a docstring edit) check that
 equiv.py does not report false differences.
 
-The mutants m24-m28 (``MUTANTS_0_1_1``) target the code of the 0.1.1 fixes X1-X5 (FIX_BRIEF_LLM.md) and apply
-only to a tree that contains them. Each is a list of regular-expression edits limited to the source of one
+The mutants m24-m28 (``MUTANTS_0_1_1``) target the code of the 0.1.1 fixes X1-X5 (docs/FIXES_0_1_1.md,
+docs/TESTING.md section 7) and apply only to a tree that contains them. Each is a list of regular-expression edits limited to the source of one
 function or method (``scope``), so that it does not depend on the exact layout of the fixed lines; an edit that
 matches nothing stops the run with an error naming the scope.
 
