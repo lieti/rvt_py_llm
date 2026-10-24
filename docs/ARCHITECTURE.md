@@ -128,14 +128,15 @@ blend.e4mstp                            blend.py:2040
   DefaultValues.get_neg_opns            blend.py:2106 (call)
   DefaultValues.get_sky_view_factor     blend.py:2112 (call; flat-terrain svf, r = int(10 / resolution) px = 10 m)
   DefaultValues.get_mstp                blend.py:2115 (call)
-  vis.slope_aspect                      blend.py:2160 (call)
+  vis.slope_aspect                      blend.py:2160 (call; degrees since 0.1.1, radians before)
   BlenderCombination.render_all_images  blend.py:2131, 2152, 2192 (calls; three combinations)
 
 BlenderCombination.render_all_images    blend.py:616
   layer loop, bottom layer first        blend.py:740
   blend_func.normalize_image            per layer (calls in blend.py:769-946)
   blend_func.gray_scale_to_color_ramp   blend.py:953 (call; layers with a colormap)
-  blend_func._outside_0_1, scale_0_to_1 blend.py:969-975 (range tests reused, K-11)
+  blend_func._outside_0_1, np.clip      blend.py:969-975 (range tests reused, K-11; the clip replaced
+                                                       scale_0_to_1 in 0.1.1)
   blend_func.blend_images               blend.py:979 (call) -> def blend_func.py:1171
   blend_func._render_images             blend.py:984 (call) -> def blend_func.py:1262; opacity, row blocks of
                                                        _BLOCK_ELEMS (K-11)
@@ -159,8 +160,8 @@ points; optimization report §4): sky illumination 1.33 s (numpy arctan/cos/sin/
 | `normal` (and any unknown name) | `blend_normal` (`blend_func.py:761`) | returns `active` | none |
 | `multiply` | `blend_multiply` (`blend_func.py:799`) via `blend_multi_dim_images` (`:1113`) and `equation_blend` (`:1049`) | one numpy expression; when a layer is RGB, `blend_multi_dim_images` assigns each band per row block through `_assign_elementwise` (`:1082`) | none |
 | `screen` | `blend_screen` (`blend_func.py:780`), same route as multiply | as multiply | none |
-| `overlay` | `blend_overlay` (`blend_func.py:895`), same route | `_blend_in_place_blocked` (`:818`) with `_overlay_masks` / `_overlay_branches` (`:871`, `:876`); reference `_blend_overlay_ref` (`:881`) | writes into `background` (KI-33) |
-| `soft_light` | `blend_soft_light` (`blend_func.py:940`), same route | `_blend_in_place_blocked` with `_soft_light_masks` / `_soft_light_branches` (`:929`, `:934`); reference `_blend_soft_light_ref` (`:973`) | writes into `background` (KI-33) |
+| `overlay` | `blend_overlay` (`blend_func.py:895`), same route | `_blend_in_place_blocked` (`:818`) with `_overlay_masks` / `_overlay_branches` (`:871`, `:876`); reference `_blend_overlay_ref` (`:881`) | none: both paths write into a copy of `background` (0.1.1; up to 0.1.0 into `background` itself, KI-33) |
+| `soft_light` | `blend_soft_light` (`blend_func.py:940`), same route | `_blend_in_place_blocked` with `_soft_light_masks` / `_soft_light_branches` (`:929`, `:934`); reference `_blend_soft_light_ref` (`:973`) | none: as overlay (0.1.1; KI-33 up to 0.1.0) |
 | `luminosity` | `blend_luminosity` (`blend_func.py:988`) | `_luminosity_clip_blocked` (`:698`) for float `(3, H, W)` backgrounds without `min_c`/`max_c`; otherwise the original whole-array code in the same function | none |
 
 Only overlay and soft light keep the original code as a separate `_ref` function; multiply and screen are
@@ -304,8 +305,8 @@ The suite has 1093 tests and runs in about 10 s on one process; every file liste
 | the block size of the blocked loops | `BLOCK_ELEMS` (`_blocking.py:19`) | speed only; sky illumination also rounds its block to a multiple of 16 rows (`vis._sky_illum_block_rows`, `vis.py:1835`) |
 | a blend mode | the mode's function in `rvt/blend_func.py` (table "Blend modes" in section 2) and, for overlay and soft light, its `_blend_*_ref` function | blocked and reference paths must give the same bits and the same in-place effects and warnings |
 | a normalization | `blend_func.normalize_image` (`blend_func.py:1504`), `advanced_normalization` (`:420`), `normalize_lin` (`:278`), `normalize_perc` (`:387`) | `normalize_lin` has a blocked path (`_row_slices`); the percent stretch is per image |
-| a composite recipe (CRIM, e3MSTP, e4MSTP) | `blend.color_relief_image_map` (`blend.py:1876`), `blend.e3mstp` (`blend.py:1968`), `blend.e4mstp` (`blend.py:2040`) | `tests/test_char_e3e4_recipe.py` rebuilds the recipes layer by layer |
-| layer rendering | `BlenderCombination.render_all_images` (`blend.py:616`) | range tests are reused between layers (K-11); overlay and soft light write into the background (KI-33) |
+| a composite recipe (CRIM, e3MSTP, e4MSTP) | `blend.color_relief_image_map` (`blend.py:1876`), `blend.e3mstp` (`blend.py:1968`), `blend.e4mstp` (`blend.py:2040`) | `tests/test_char_e3e4_recipe.py` rebuilds the recipes layer by layer; CRIM works on a deep copy of `default` (0.1.1) |
+| layer rendering | `BlenderCombination.render_all_images` (`blend.py:616`) | range tests are reused between layers (K-11); operands outside [0, 1] are clipped (0.1.1); the background range test is recomputed after overlay and soft light (conservative since 0.1.1, when they stopped writing into the background) |
 | reading or writing rasters | `default.get_raster_arr`, `default.save_raster` (`default.py:4125`, `:4194`), `rvt/tile.py` | GDAL only inside `rvt.default` and `rvt.tile` |
 | tiling overlaps | `tile._get_rvt_visualization_overlap` (`tile.py:372`) | measured minimum buffers are in KNOWN_ISSUES, section "Tiling facts" |
 | an exception message | the `raise` line | only in a `msg:` commit; exception types must not change |
