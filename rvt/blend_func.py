@@ -923,7 +923,8 @@ def blend_overlay(active, background):
     expressions are evaluated per row block and copied where their mask holds (``_blend_in_place_blocked``);
     otherwise ``_blend_overlay_ref`` (the original code) runs. Results are bitwise identical.
     """
-    return _blend_in_place_blocked(active, background, _overlay_masks, _overlay_branches, _blend_overlay_ref)
+    # the in-place driver writes into a copy, so the result is a new array and the caller's background is unchanged
+    return _blend_in_place_blocked(active, background.copy(), _overlay_masks, _overlay_branches, _blend_overlay_ref)
 
 
 def _soft_light_masks(active, background):
@@ -966,7 +967,8 @@ def blend_soft_light(active, background):
 
     Accelerated path: as blend_overlay, with ``_blend_soft_light_ref`` as the original code.
     """
-    return _blend_in_place_blocked(active, background, _soft_light_masks, _soft_light_branches,
+    # the in-place driver writes into a copy, so the result is a new array and the caller's background is unchanged
+    return _blend_in_place_blocked(active, background.copy(), _soft_light_masks, _soft_light_branches,
                                    _blend_soft_light_ref)
 
 
