@@ -12,6 +12,11 @@ replaced, and the frozen tests run once under the recording plugin of ``equiv.py
 Two control edits that must *not* change behaviour (a local rename, a docstring edit) check that
 equiv.py does not report false differences.
 
+The mutants m24-m28 (``MUTANTS_0_1_1``) target the code of the 0.1.1 fixes X1-X5 (FIX_BRIEF_LLM.md) and apply
+only to a tree that contains them. Each is a list of regular-expression edits limited to the source of one
+function or method (``scope``), so that it does not depend on the exact layout of the fixed lines; an edit that
+matches nothing stops the run with an error naming the scope.
+
 Thresholds (fixed before the first run, never lowered): tests kill >= 90 % of the mutants; equiv
 kills 100 %; both controls are equivalent. Last line ``MUTANTS PASS`` or ``MUTANTS FAIL``.
 
@@ -21,6 +26,8 @@ Usage (from the repository root)::
 """
 
 import argparse
+import ast
+import re
 import sys
 from pathlib import Path
 
@@ -80,6 +87,35 @@ MUTANTS = [
      "_box_sum: the two subtractions in the other order"),
     ("m23", "vis.py", "if acc.dtype == np.result_type(acc.dtype, term.dtype):", "if True:", 1,
      "_accumulate: always in place (a float32 accumulator stays float32)"),
+    # m14-m16 and m21 (blend_func.blend_screen, apply_opacity; e3mstp SLRM layer) are outside the 0.1.1 changes and
+    # still apply to the fixed code; no mutant of m01-m23 had to be retired for 0.1.1.
+]
+
+# 0.1.1 fixes: (id, [(file, scope, pattern, replacement), ...], description). `scope` is a top-level function or
+# "Class.method"; the pattern is applied (all matches) to the source lines of that scope only. The replacement is a
+# re.sub replacement string or a function of the match.
+_CLIP = r"np\.clip\(\s*(\w+)\s*,\s*0(?:\.0*)?\s*,\s*1(?:\.0*)?\s*\)|\b_clip\w*\(\s*(\w+)\s*\)"  # clip to [0, 1]
+
+
+def _rescale(prefix):
+    return lambda m: "{}scale_0_to_1({})".format(prefix, m.group(1) or m.group(2))
+
+
+MUTANTS_0_1_1 = [
+    ("m24", [("blend.py", "BlenderCombination.render_all_images",
+              r"(_render_images\(\s*)(\w+)(\s*,\s*)(\w+)(\s*,)", r"\1\2\3\2\5")],
+     "X1 opacity mix dropped: render_all_images mixes the blend result with itself"),
+    ("m25", [("blend_func.py", "blend_multi_dim_images",
+              r"(_assign_elementwise\(\s*blended_image\[i, :, :\],\s*func,\s*active\[i, :, :\],\s*)background(\s*\))",
+              r"\1background if i == 0 else blended_image[i - 1, :, :]\2")],
+     "X1 band aliasing restored: RGB over gray blends band i onto band i-1"),
+    ("m26", [("blend.py", "e4mstp", r"""output_units\s*=\s*(["'])degree\1""", 'output_units="radian"')],
+     "X2 slope unit flipped: e4mstp slope in radians again"),
+    ("m27", [("blend_func.py", "_render_images", _CLIP, _rescale("")),
+             ("blend.py", "BlenderCombination.render_all_images", _CLIP, _rescale("rvt.blend_func."))],
+     "X3 clip replaced by the rescale (scale_0_to_1) in both sites"),
+    ("m28", [("blend.py", "color_relief_image_map", r"(?:copy\.)?deepcopy\(\s*default\s*\)", "default")],
+     "X4 deep copy removed: CRIM writes svf_r_max into the caller's default"),
 ]
 
 CONTROLS = [
@@ -106,6 +142,34 @@ def apply(root, file, old, new, occurrence):
     path.write_text(text, encoding="utf-8")
 
 
+def _scope_lines(text, scope):
+    """Return (first, last) 1-based line numbers of a top-level function or of "Class.method" in `text`."""
+    names = scope.split(".")
+    body = ast.parse(text).body
+    node = None
+    for name in names:
+        node = next((n for n in body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+                     and n.name == name), None)
+        if node is None:
+            raise SystemExit(f"scope {scope!r} not found")
+        body = node.body
+    first = min([d.lineno for d in node.decorator_list] + [node.lineno])
+    return first, node.end_lineno
+
+
+def apply_scoped(root, edits):
+    """Apply regular-expression edits, each limited to the source lines of one function or method."""
+    for file, scope, pattern, repl in edits:
+        path = root / "rvt" / file
+        text = path.read_text(encoding="utf-8")
+        lines = text.splitlines(keepends=True)
+        first, last = _scope_lines(text, scope)
+        segment, count = re.subn(pattern, repl, "".join(lines[first - 1:last]))
+        if count == 0:
+            raise SystemExit(f"pattern not found in {file}::{scope}: {pattern[:60]!r}")
+        path.write_text("".join(lines[:first - 1]) + segment + "".join(lines[last:]), encoding="utf-8")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--ref", default="main")
@@ -122,23 +186,30 @@ def main():
         return 1
     print(f"base {a.ref}, tests {a.tests_ref}: {base_tail}")
 
+    # (kind, id, description, function applying the edit to a scratch tree)
+    plan = [("mutant", mid, desc, lambda root, e=(file, old, new, occ): apply(root, *e))
+            for mid, file, old, new, occ, desc in MUTANTS]
+    plan += [("mutant", mid, desc, lambda root, e=edits: apply_scoped(root, e))
+             for mid, edits, desc in MUTANTS_0_1_1]
+    plan += [("control", mid, desc, lambda root, e=(file, old, new, occ): apply(root, *e))
+             for mid, file, old, new, occ, desc in CONTROLS]
+
     results = {}
-    for kind, items in (("mutant", MUTANTS), ("control", CONTROLS)):
-        for mid, file, old, new, occ, desc in items:
-            if only and mid not in only:
-                continue
-            root = equiv.assemble(f"M_{mid}", ref=a.ref, tests_ref=a.tests_ref)
-            apply(root, file, old, new, occ)
-            log, tail = equiv.run(root, f"M_{mid}", "accel")
-            bad, _ = equiv.compare(base_log, log)
-            by_tests = log["exitstatus"] != 0
-            by_equiv = bool(bad) or by_tests
-            results[mid] = (kind, by_tests, by_equiv)
-            if kind == "mutant":
-                verdict = f"tests {'KILLED' if by_tests else 'survived'}, equiv {'KILLED' if by_equiv else 'survived'}"
-            else:
-                verdict = "equivalent (ok)" if not by_equiv else f"FALSE DIFFERENCE: {bad[:1]}"
-            print(f"{mid} {desc:<62} {verdict}  [{tail}]")
+    for kind, mid, desc, edit in plan:
+        if only and mid not in only:
+            continue
+        root = equiv.assemble(f"M_{mid}", ref=a.ref, tests_ref=a.tests_ref)
+        edit(root)
+        log, tail = equiv.run(root, f"M_{mid}", "accel")
+        bad, _ = equiv.compare(base_log, log)
+        by_tests = log["exitstatus"] != 0
+        by_equiv = bool(bad) or by_tests
+        results[mid] = (kind, by_tests, by_equiv)
+        if kind == "mutant":
+            verdict = f"tests {'KILLED' if by_tests else 'survived'}, equiv {'KILLED' if by_equiv else 'survived'}"
+        else:
+            verdict = "equivalent (ok)" if not by_equiv else f"FALSE DIFFERENCE: {bad[:1]}"
+        print(f"{mid} {desc:<62} {verdict}  [{tail}]")
 
     muts = [r for r in results.values() if r[0] == "mutant"]
     ctrls = [r for r in results.values() if r[0] == "control"]
