@@ -1,0 +1,3 @@
+__pycache__/
+.proof_scratch/
+results/png/*.png
