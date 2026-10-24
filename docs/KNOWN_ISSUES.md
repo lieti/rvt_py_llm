@@ -4,7 +4,10 @@ This file lists behaviour of `rvt` that looks unintended. None of it is changed 
 release is that every output stays bitwise identical to tag `start` (see [TESTING.md](TESTING.md)). Each entry
 is described in the docstring of the function concerned ("Known issue ... see docs/KNOWN_ISSUES.md"), and most
 are pinned by a frozen characterization test, so a fix shows up as a failing test that has to be replaced on
-purpose. Deciding which of these to fix, and how, is left to the upstream authors.
+purpose. Deciding which of these to fix, and how, is left to the upstream authors. Release 0.1.1 fixes the entries
+KI-19, KI-20, KI-21, KI-33, KI-34, KI-36, KI-45 and KI-47 (their Status line names the commit; the fixes, readings
+and open questions are described in [FIXES_0_1_1.md](FIXES_0_1_1.md)); the entries keep their 0.1.0 text as
+evidence.
 
 Conventions of this list:
 
@@ -16,7 +19,8 @@ Conventions of this list:
   numba 0.68.0, by code that is behaviour-identical to `start`.
 - **Pinned** names the frozen test that asserts the current behaviour (`tests/<file>:<line>` or
   `tests/<file>::<test>`); "not pinned" means no test asserts it.
-- **Status** is "documented, not changed in 0.1.0" for every entry.
+- **Status** is "documented, not changed in 0.1.0" for every entry not fixed in 0.1.1, and "fixed in 0.1.1
+  (<commit>), see docs/FIXES_0_1_1.md" for the fixed ones.
 - Upstream review numbers (`AUDIT #n`) refer to the internal review that preceded 0.1.0; they are given only to
   connect the two lists.
 
@@ -373,7 +377,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   bf.scale_0_to_1(np.array([-2.0, 3.0]))                              # -> [-2.  3.]
   ```
 - Pinned: `tests/test_char_blend_func.py:369` (`test_scale_within_bounds_are_always_0_and_1`), `:452`. AUDIT #26.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (d09e45d), see docs/FIXES_0_1_1.md
 
 ### KI-20 scale_within_0_and_1 overwrites NaN in the caller's array and loses the NaN mask
 - Where: `rvt/blend_func.py:561` at `start` (the restoring lines were commented out upstream).
@@ -384,7 +388,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   img = np.array([-1.0, np.nan, 2.0]); out = bf.scale_within_0_and_1(img); img, out   # -> [-1. -1.  2.] [-1. -1.  2.]
   ```
 - Pinned: `tests/test_char_blend_func.py:405`.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (d09e45d), see docs/FIXES_0_1_1.md
 
 ### KI-21 scale_strict_0_to_1 raises ValueError for every non-constant array (chained comparison)
 - Where: `rvt/blend_func.py:598` at `start` (`scaled[0 > scaled > -0.01] = 0`); NaN set to 0 in place at `:590`;
@@ -403,7 +407,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   bf.scale_0_to_1(np.array([0.2, 0.3]))                               # -> ValueError
   ```
 - Pinned: `tests/test_char_blend_func.py:418`, `:429`, `:459`.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (d09e45d), see docs/FIXES_0_1_1.md
 
 ### KI-22 apply_opacity: opacity 1 means 100 %, values above 100 extrapolate
 - Where: `rvt/blend_func.py:613` at `start` (`if opacity > 1: opacity = opacity / 100`).
@@ -557,7 +561,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   ```
 - Pinned: `tests/test_char_blend_func.py:922`; `tests/test_char_e3e4_recipe.py:79`, `:325` (e3MSTP soft light 70 % and
   65 % differ by less than 1e-6). AUDIT #31.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (c2456b1), see docs/FIXES_0_1_1.md
 
 ### KI-34 overlay and soft light of an RGB active layer on a gray background chain the bands
 - Where: `rvt/blend_func.py:478-481` at `start` (`blend_multi_dim_images`, case `a_rgb and not b_rgb`), with KI-33.
@@ -572,7 +576,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   bf.blend_multi_dim_images("overlay", a, b)[:, 0, 0]   # -> [0.125 0.0625 0.03125] (0.125 per band expected)
   ```
 - Pinned: not pinned.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (c2456b1), see docs/FIXES_0_1_1.md
 
 ## rvt.blend
 
@@ -601,7 +605,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   c.create_layer("y", "value", 0, 1, "normal", 100, image=np.full((1, 2), 0.4)); c.render_all_images()   # -> [[0.70000005 0.70000005]]
   ```
 - Pinned: `tests/test_char_blend.py:157`.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (a37ab44), see docs/FIXES_0_1_1.md
 
 ### KI-37 BlenderLayer.check_data accepts min == max for "value"
 - Where: `rvt/blend.py:143` at `start` (only `min > max` raises).
@@ -733,7 +737,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   rb.color_relief_image_map(np.random.default_rng(0).normal(size=(30, 30)).astype(np.float32), 1.0, default=d); d.svf_r_max   # -> 10
   ```
 - Pinned: `tests/test_char_blend.py:1186`, `:1259-1267`.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (c72646c), see docs/FIXES_0_1_1.md
 
 ### KI-46 render_all_images: the blend mode and opacity of the bottom layer are never used
 - Where: `rvt/blend.py:600-605` at `start` (the first rendered layer becomes `rendered_image` as it is).
@@ -761,7 +765,7 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   s = v.slope_aspect(dem=dem, resolution_x=1.0, resolution_y=1.0)["slope"]; float(np.nanmax(s)), float(1 - np.nanmax(s) / 55)  # -> 1.5005..., 0.9727...
   ```
 - Pinned: `tests/test_char_e3e4_recipe.py:157`. AUDIT #32.
-- Status: documented, not changed in 0.1.0.
+- Status: fixed in 0.1.1 (33a2bd5), see docs/FIXES_0_1_1.md
 
 ### KI-48 e3mstp: the upstream docstring named Reds_r(0.5-1); the code uses OrRd 0..1
 - Where: docstring `rvt/blend.py:1344` against code `rvt/blend.py:1366-1367` at `start`.
@@ -1220,7 +1224,8 @@ flat-terrain SVF use radii in m (`int(10 / resolution)` px).
   cumulative sums as `integral_image`, in `max_elevation_deviation`: `rvt/vis.py:2892-2898` at `234b156`), so
   their rounding depends on the tile origin; this is a likely cause, not a measured one.
 - e3mstp, e4mstp: the blend rescales image-wide when an intermediate leaves [0, 1] (`rvt/blend_func.py:555-563` at
-  `start`, now `rvt/blend_func.py:1361-1368`, `scale_within_0_and_1`, see KI-19), a tile-wide statistic.
+  `start`, now `rvt/blend_func.py:1361-1368`, `scale_within_0_and_1`, see KI-19), a tile-wide statistic. Since 0.1.1
+  such an operand is clipped per pixel instead (X3); the tiling measurements of this section were made before 0.1.1.
 - 8-bit conversion: the default display stretch of sky illumination is a percent cut (`rvt/default.py:319` at
   `start`, now `rvt/default.py:405` in `DefaultValues.__init__`, `sim_bytscl = ("percent", 0.25, 0.00)`), computed
   per image with `np.nanpercentile` (`rvt/blend_func.py:177` at `start`, now `rvt/blend_func.py:378` in
