@@ -73,6 +73,7 @@ Rules:
 | Dtype | inputs converted to float32; some outputs are float64 (stated per function) |
 | NaN | NaN in the input stays NaN in the output at the same pixels unless a function fills it (stated per function) |
 | Edges | each function pads with its own mode (reflect, edge, symmetric); the mode is stated in its docstring |
+| Window shape | `kernel_shape` of `mean_filter`, `slrm`, `msrm`, `max_elevation_deviation`, `mstp` (0.2.0): `"square"` (default, (2r + 1) x (2r + 1) px), `"disk"` (pixels with dx² + dy² <= r²) or `"disk_equal_area"` (dx² + dy² <= r_w², r_w = (2r + 1) / sqrt(pi)); disks only for windows of r >= 8 px (`DISK_MIN_RADIUS_PX`), MSRM one shape for all its radii. Documents state the shape with the radius, e.g. "disk, r = 20 px = 5 m at 0.25 m/px" ([DISK_WINDOWS.md](DISK_WINDOWS.md)) |
 | `ve_factor` | vertical exaggeration, checked to lie in [-10000, 10000]; `mstp` accepts only [-1000, 10000] (KNOWN_ISSUES KI-05) |
 | Accelerators | optional numba kernels registered through `rvt/_accel.py`, with a numpy fallback; `RVT_NO_ACCEL=1` switches them off; results are bitwise identical either way |
 | Threads | `RVT_NUM_THREADS`, then `NUMBA_NUM_THREADS`; results do not depend on the thread count |
