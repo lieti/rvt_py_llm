@@ -1289,15 +1289,15 @@ def _render_images(active, background, opacity, active_outside=None, background_
         As render_images.
     """
 
-    # Both active and background image have to be between 0 and 1, scale if not
+    # Both active and background image have to be between 0 and 1, clip if not (new array; NaN and dtype kept)
     if active_outside is None:
         active_outside = _outside_0_1(active)
     if active_outside:
-        active = scale_0_to_1(active)
+        active = np.clip(active, 0, 1)
     if background_outside is None:
         background_outside = _outside_0_1(background)
     if background_outside:
-        background = scale_0_to_1(background)
+        background = np.clip(background, 0, 1)
 
     # True if image has 3 bands (RGB), false if single band
     a_rgb = len(active.shape) == 3
@@ -1363,15 +1363,12 @@ def scale_within_0_and_1(numeric_value):
     if np.nanmin(numeric_value) >= 0 and np.nanmax(numeric_value) <= 1:
         return numeric_value
 
-    # NaN is replaced in the caller's array and not restored at the end (see Notes)
-    numeric_value[np.isnan(numeric_value)] = np.nanmin(numeric_value)  # nan change to nanmin
-
-    # Known issue (Notes): the second argument of np.array is the dtype, so the limits are always 0 and 1
+    # NaN is not filled: it stays NaN in the result, and the argument is not modified
     actual_min = np.nanmin(numeric_value)
-    norm_min_value = np.nanmax(np.array(0, actual_min))
+    norm_min_value = actual_min
 
     actual_max = np.nanmax(numeric_value)
-    norm_max_value = np.nanmin(np.array(1, actual_max))
+    norm_max_value = actual_max
 
     # Values that look like 8-bit data (1 < max <= 255, max - min > 30, min > 0) are divided by 255; the dtype is
     # not checked
@@ -1423,15 +1420,14 @@ def scale_strict_0_to_1(numeric_value):
     if np.nanmin(numeric_value) == 0 and np.nanmax(numeric_value) == 1:
         return numeric_value
 
-    numeric_value[np.isnan(numeric_value)] = 0  # nan change to 0
-
+    # NaN is not filled: it stays NaN in the result, and the argument is not modified
     min_value = np.nanmin(numeric_value)
     max_value = np.nanmax(numeric_value)
 
     scaled = (numeric_value - min_value) / (max_value - min_value)
 
     if np.nanmin(scaled) > -0.01:
-        scaled[0 > scaled > -0.01] = 0
+        scaled[(0 > scaled) & (scaled > -0.01)] = 0
 
     return scaled
 

@@ -966,14 +966,14 @@ class BlenderCombination:
                 active = norm_image
                 background = rendered_image
 
-                # Scale images if needed
+                # Clip images to [0, 1] if needed (new array; NaN and dtype kept)
                 active_outside = _outside_0_1(active)
                 if active_outside:
-                    active = scale_0_to_1(active)
+                    active = np.clip(active, 0, 1)
                 # rendered_image is unchanged since its range test at the end of the previous layer
                 background_outside = _outside_0_1(background) if rendered_outside is None else rendered_outside
                 if background_outside:
-                    background = scale_0_to_1(background)
+                    background = np.clip(background, 0, 1)
 
                 # Blend background with active layer
                 blend_mode = self.layers[i_img].blend_mode
