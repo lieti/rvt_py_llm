@@ -14,7 +14,7 @@ Normalization (stretch to [0, 1])
     normalize_lin (linear between two values), normalize_perc and lin_cutoff_calc_from_perc (between two
     percentiles), advanced_normalization (dispatch by "value" / "perc"), normalize_image (the blender's entry point,
     adds the rescale to [0, 1] and the inversion of slope and negative openness), cut_off_normalize.
-Rescaling of arrays outside [0, 1]
+Rescaling of arrays outside [0, 1] (min-max stretch)
     scale_0_to_1 (dispatch), scale_within_0_and_1, scale_strict_0_to_1.
 Blend modes
     blend_normal, blend_screen, blend_multiply, blend_overlay, blend_soft_light, blend_luminosity (with lum,
@@ -26,12 +26,13 @@ Opacity
 Conventions
 -----------
 - Images are 2D ``(H, W)`` gray arrays or 3D ``(3, H, W)`` RGB arrays with the band axis first.
-- Blend and opacity functions expect values in [0, 1]; render_images rescales an operand outside [0, 1] first.
+- Blend and opacity functions expect values in [0, 1]; render_images clips an operand outside [0, 1] to [0, 1]
+  first (NaN stays NaN).
 - NaN marks no-data pixels; how each function treats NaN is stated in its docstring.
 - Opacity is a percentage 0-100; a value <= 1 is taken as a fraction (see apply_opacity).
 - In-place effects on arguments: normalize_lin (and everything that calls it) clips its argument to
-  [minimum, maximum] in place; blend_overlay and blend_soft_light write their result into ``background``;
-  scale_within_0_and_1 and scale_strict_0_to_1 overwrite NaN in their argument.
+  [minimum, maximum] in place; matrix_eq_min_lt_zero and matrix_eq_max_gt_one correct one channel in place. The
+  blend_* functions, render_images and the scale_* functions do not modify their arguments.
 
 Blocked evaluation (optimized paths)
 ------------------------------------
@@ -47,9 +48,10 @@ depend on the thread count (numpy only, no threads).
 
 Known issues
 ------------
-Several functions behave in ways that look unintended (bounds of scale_within_0_and_1, chained comparison in
-scale_strict_0_to_1, case-sensitive mode checks, in-place writes of overlay / soft light). They are described in
-the Notes of each function and listed in docs/KNOWN_ISSUES.md; the behaviour is kept as it is.
+Several functions behave in ways that look unintended (for example case-sensitive mode checks). They are described
+in the Notes of each function and listed in docs/KNOWN_ISSUES.md; the behaviour is kept as it is. The defects fixed
+in 0.1.1 (overlay / soft light writing into the background, the rescale before the opacity mix, the scale_*
+functions) are described in docs/FIXES_0_1_1.md.
 
 Credits:
     Žiga Kokalj (ziga.kokalj@zrc-sazu.si)
@@ -894,7 +896,7 @@ def _blend_overlay_ref(active, background):
 
 def blend_overlay(active, background):
     """
-    Blend two layers with "overlay", writing the result into ``background``.
+    Blend two layers with "overlay" into a new array.
 
     The branch is chosen by the background: where ``background > 0.5`` the result is
     ``1 - (1 - 2 * (background - 0.5)) * (1 - active)`` (screen-like), where ``background <= 0.5`` it is
@@ -905,23 +907,26 @@ def blend_overlay(active, background):
     active : numpy.ndarray
         Upper layer, values in [0, 1], same shape as ``background``. Not modified.
     background : numpy.ndarray
-        Lower layer, values in [0, 1]. **Overwritten in place with the result.**
+        Lower layer, values in [0, 1]. Not modified; read-only and strided arrays are accepted.
 
     Returns
     -------
     numpy.ndarray
-        ``background`` itself, holding the result in its own dtype. NaN in ``background`` matches neither branch
-        and stays NaN; NaN in ``active`` gives NaN.
+        New array of the shape and dtype of ``background`` holding the result. NaN in ``background`` matches
+        neither branch and stays NaN; NaN in ``active`` gives NaN.
 
     Notes
     -----
-    Known issue: because the result replaces the background, the caller's background array changes, and in
-    BlenderCombination.render_all_images the opacity of an overlay layer has no visible effect (the opacity mix
-    is computed between two arrays with the same values). See docs/KNOWN_ISSUES.md.
+    The result is computed in a copy of ``background`` by the in-place code (the formulas, their order and the
+    dtype of the assignment are those of 0.1.0), so the values are bitwise those of 0.1.0 and the caller's
+    background keeps its values. BlenderCombination.render_all_images then mixes the result with the original
+    background, so the opacity of an overlay layer takes effect. Up to 0.1.0 the result was written into
+    ``background`` itself and the opacity acted as 100 % (docs/FIXES_0_1_1.md, X1). A copy is used instead of a
+    new expression so that opacity 100 keeps the 0.1.0 bits.
 
-    Accelerated path: for plain float32 / float64 ndarrays of one shape without memory overlap, both branch
-    expressions are evaluated per row block and copied where their mask holds (``_blend_in_place_blocked``);
-    otherwise ``_blend_overlay_ref`` (the original code) runs. Results are bitwise identical.
+    Accelerated path: for plain float32 / float64 ndarrays of one shape, both branch expressions are evaluated
+    per row block and copied into the copy where their mask holds (``_blend_in_place_blocked``); otherwise
+    ``_blend_overlay_ref`` (the original code) runs on the copy. Results are bitwise identical.
     """
     # the in-place driver writes into a copy, so the result is a new array and the caller's background is unchanged
     return _blend_in_place_blocked(active, background.copy(), _overlay_masks, _overlay_branches, _blend_overlay_ref)
@@ -940,7 +945,7 @@ def _soft_light_branches(active, background):
 
 def blend_soft_light(active, background):
     """
-    Blend two layers with "soft light", writing the result into ``background``.
+    Blend two layers with "soft light" into a new array.
 
     The branch is chosen by the active layer: where ``active < 0.5`` the result is
     ``2 * background * active + background ** 2 * (1 - 2 * active)``, where ``active >= 0.5`` it is
@@ -951,19 +956,22 @@ def blend_soft_light(active, background):
     active : numpy.ndarray
         Upper layer, values in [0, 1], same shape as ``background``. Not modified.
     background : numpy.ndarray
-        Lower layer, values in [0, 1]. **Overwritten in place with the result.**
+        Lower layer, values in [0, 1]. Not modified; read-only and strided arrays are accepted.
 
     Returns
     -------
     numpy.ndarray
-        ``background`` itself, holding the result in its own dtype. NaN in ``background`` gives NaN; a negative
-        background value in the second branch gives NaN (square root, RuntimeWarning).
+        New array of the shape and dtype of ``background`` holding the result. NaN in ``background`` gives NaN; a
+        negative background value in the second branch gives NaN (square root, RuntimeWarning).
 
     Notes
     -----
-    Known issues (docs/KNOWN_ISSUES.md): NaN in ``active`` matches neither branch, so the background value is
-    kept instead of NaN. As with blend_overlay, the in-place write makes the opacity of a soft light layer
-    ineffective in BlenderCombination.render_all_images.
+    Known issue (docs/KNOWN_ISSUES.md): NaN in ``active`` matches neither branch, so the background value is
+    kept instead of NaN.
+
+    As blend_overlay, the result is computed in a copy of ``background`` by the in-place code of 0.1.0 (same
+    formulas, order and dtype, so the same bits), and the opacity of a soft light layer takes effect in
+    BlenderCombination.render_all_images (docs/FIXES_0_1_1.md, X1).
 
     Accelerated path: as blend_overlay, with ``_blend_soft_light_ref`` as the original code.
     """
@@ -1059,12 +1067,13 @@ def equation_blend(blend_mode, active, background):
     active : numpy.ndarray
         Upper layer, values in [0, 1].
     background : numpy.ndarray
-        Lower layer, values in [0, 1]. Overwritten in place by "overlay" and "soft_light".
+        Lower layer, values in [0, 1]. Not modified.
 
     Returns
     -------
     numpy.ndarray or None
-        Result of blend_screen, blend_multiply, blend_overlay or blend_soft_light; None for any other name.
+        Result of blend_screen, blend_multiply, blend_overlay or blend_soft_light (a new array); None for any
+        other name.
 
     Notes
     -----
@@ -1088,9 +1097,9 @@ def _assign_elementwise(out, func, active, background):
     The blocked path runs when both operands are plain ndarrays of ``out``'s shape (no broadcasting), ``out`` is
     not empty, the operands do not share memory and the caller's error state is not raising (``_fp_strict()``
     is not None). Because ``func`` is elementwise, ``func`` on a block gives the same values as the block of
-    ``func`` on the whole arrays, and its in-place effects on ``background`` (overlay, soft light) are the same.
-    With a raising error state the whole array is processed at once, so an exception leaves ``out`` and
-    ``background`` in the same state as the original code.
+    ``func`` on the whole arrays, and any in-place effect of ``func`` on ``background`` would be the same (the
+    blend modes and apply_opacity have none). With a raising error state the whole array is processed at once,
+    so an exception leaves ``out`` and ``background`` in the same state as the original code.
 
     Parameters
     ----------
@@ -1101,7 +1110,7 @@ def _assign_elementwise(out, func, active, background):
     active : numpy.ndarray or object
         First operand.
     background : numpy.ndarray or object
-        Second operand; may be modified in place by ``func``.
+        Second operand; modified only if ``func`` modifies it.
     """
     if (type(active) is np.ndarray and type(background) is np.ndarray and active.ndim >= 1 and out.size > 0
             and active.shape == out.shape and background.shape == out.shape and _fp_strict() is not None
@@ -1126,22 +1135,21 @@ def blend_multi_dim_images(blend_mode, active, background):
     active : numpy.ndarray
         Upper layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Not modified.
     background : numpy.ndarray
-        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Overwritten in place by "overlay" and
-        "soft_light" (for an RGB background through its band views).
+        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Not modified.
 
     Returns
     -------
     numpy.ndarray or None
         At least one RGB layer: new float64 ``(3, H, W)`` array. Two gray layers: the result of equation_blend
-        (dtype of the operands; for overlay / soft_light ``background`` itself). For an unknown mode: None for two
-        gray layers, an all-NaN float64 array otherwise (None assigned into a float array).
+        (a new array; dtype of the operands, for overlay / soft_light that of ``background``). For an unknown
+        mode: None for two gray layers, an all-NaN float64 array otherwise (None assigned into a float array).
 
     Notes
     -----
-    Known issue (docs/KNOWN_ISSUES.md): with "overlay" or "soft_light", an RGB active layer and a gray
-    background, each band writes its result into the same gray background, so band 1 is blended onto the result
-    of band 0 and band 2 onto that of band 1 (overlay of 0.25 on 0.25 gives 0.125, 0.0625, 0.03125 instead of
-    0.125 in every band).
+    Every band is blended onto the original background: an RGB active layer over a gray background gives, for
+    three equal bands, three equal result bands (overlay of 0.25 on 0.25 gives 0.125 in every band). Up to 0.1.0
+    overlay and soft light wrote into the shared gray background, so band 1 was blended onto the result of band
+    0 and band 2 onto that of band 1 (docs/FIXES_0_1_1.md, X1).
 
     Accelerated path: each band is assigned through ``_assign_elementwise`` (row blocks); bitwise identical.
     """
@@ -1182,8 +1190,7 @@ def blend_images(blend_mode, active, background, min_c=None, max_c=None):
     active : numpy.ndarray
         Upper layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1].
     background : numpy.ndarray
-        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Overwritten in place by "overlay" and
-        "soft_light".
+        Lower layer, ``(H, W)`` or ``(3, H, W)``, values in [0, 1]. Not modified.
     min_c : numpy.ndarray or None
         Only for "luminosity", passed to blend_luminosity.
     max_c : numpy.ndarray or None
@@ -1232,9 +1239,9 @@ def render_images(active, background, opacity):
     """
     Mix a blended layer with the background according to the opacity.
 
-    An operand with any non-NaN value outside [0, 1] is first rescaled with scale_0_to_1. Then
-    ``active * opacity + background * (1 - opacity)`` is computed (apply_opacity), band by band when either
-    operand is RGB.
+    An operand with any non-NaN value outside [0, 1] is first clipped to [0, 1] (``np.clip``: a new array, NaN
+    stays NaN, dtype kept). Then ``active * opacity + background * (1 - opacity)`` is computed (apply_opacity),
+    band by band when either operand is RGB.
 
     Parameters
     ----------
@@ -1253,8 +1260,12 @@ def render_images(active, background, opacity):
 
     Notes
     -----
-    The rescale can modify an operand in place (scale_0_to_1 replaces NaN; see its Notes). The values are not
-    clipped, so an opacity above 100 extrapolates beyond [0, 1].
+    The operands are not modified. Why a clip and not a rescale: the clip changes only the pixels outside [0, 1]
+    and keeps NaN, while a min-max stretch (scale_0_to_1) changes every pixel of an image of which a few pixels
+    leave [0, 1]. Up to 0.1.0 the operand went through scale_0_to_1, which filled NaN with the minimum in the
+    caller's array and returned the values unchanged, divided them by 255 or raised ValueError
+    (docs/FIXES_0_1_1.md, X3). The result is not clipped, so an opacity above 100 (accepted by apply_opacity,
+    rejected by BlenderLayer.check_data) extrapolates beyond [0, 1].
 
     Accelerated path: RGB bands are assigned through ``_assign_elementwise`` (row blocks); bitwise identical.
     """
@@ -1330,35 +1341,36 @@ def _render_images(active, background, opacity, active_outside=None, background_
 
 def scale_within_0_and_1(numeric_value):
     """
-    Rescale an array with a value range wider than 0.3 for blending (intended: into [0, 1]).
+    Rescale an array with a value range wider than 0.3 into [0, 1] for blending.
 
-    Steps as implemented:
+    Steps (``min`` and ``max`` are those of the non-NaN values):
 
     1. If all non-NaN values lie in [0, 1], return the argument unchanged (same object).
-    2. Replace NaN by the minimum, **in the caller's array**.
-    3. If ``1 < max <= 255``, ``max - min > 30`` and ``min > 0`` (data that look like 8-bit), return
+    2. If ``1 < max <= 255``, ``max - min > 30`` and ``min > 0`` (data that look like 8-bit), return
        ``numeric_value / 255``.
-    4. Otherwise return ``(numeric_value - lo) / (hi - lo)`` with ``lo = 0`` and ``hi = 1`` (see Notes), and set
-       values in (-0.01, 0) to 0 when no value is below -0.01.
+    3. Otherwise return the min-max stretch ``(numeric_value - min) / (max - min)``, and set values in (-0.01, 0)
+       to 0 when no value is below -0.01.
+
+    NaN stays NaN in every step.
 
     Parameters
     ----------
     numeric_value : numpy.ndarray
-        Array of any shape. NaN is overwritten in place (step 2).
+        Array of any shape. Not modified.
 
     Returns
     -------
     numpy.ndarray
-        ``numeric_value`` itself (step 1) or a new array of its shape and float dtype (steps 3, 4).
+        ``numeric_value`` itself (step 1) or a new array of its shape and float dtype (steps 2, 3), NaN where the
+        argument is NaN.
 
     Notes
     -----
-    Known issues (docs/KNOWN_ISSUES.md):
-
-    - ``np.array(0, actual_min)`` and ``np.array(1, actual_max)`` pass the minimum / maximum as the *dtype*
-      argument (a numpy scalar is accepted as its dtype), so the stretch limits are always 0 and 1 and step 4
-      returns the values unchanged instead of stretching them to [0, 1].
-    - The NaN mask is lost: NaN pixels come back as the minimum, and the argument is modified.
+    Up to 0.1.0 the stretch limits were always 0 and 1 (``np.array(0, actual_min)`` passed the minimum as the
+    *dtype* argument), so step 3 returned the values unchanged, and NaN was replaced by the minimum in the
+    caller's array (docs/FIXES_0_1_1.md, X3). The actual minimum and maximum are used now, as this function was
+    documented to do. The 8-bit branch and the snapping of values in (-0.01, 0) are kept as they were; after the
+    min-max stretch no value is below 0, so the snapping has no effect there.
     """
     if np.nanmin(numeric_value) >= 0 and np.nanmax(numeric_value) <= 1:
         return numeric_value
@@ -1389,33 +1401,28 @@ def scale_strict_0_to_1(numeric_value):
     """
     Stretch an array min-max to [0, 1] (intended for arrays with a value range up to 0.3).
 
-    If the minimum is 0 and the maximum 1, the argument is returned unchanged. Otherwise NaN is replaced by 0
-    **in the caller's array**, the array is stretched with ``(x - min) / (max - min)``, and values in (-0.01, 0)
-    are meant to be set to 0.
+    If the minimum is 0 and the maximum 1, the argument is returned unchanged. Otherwise the array is stretched
+    with ``(x - min) / (max - min)`` (minimum and maximum of the non-NaN values), and values in (-0.01, 0) are
+    set to 0 (elementwise). NaN stays NaN.
 
     Parameters
     ----------
     numeric_value : numpy.ndarray
-        Array of any shape. NaN is overwritten with 0 in place.
+        Array of any shape. Not modified.
 
     Returns
     -------
     numpy.ndarray
-        ``numeric_value`` itself (minimum 0 and maximum 1), or, for a constant array (including any one-element
-        array), a new all-NaN array (0 / 0, RuntimeWarning).
-
-    Raises
-    ------
-    ValueError
-        For every non-constant array with more than one element, see Notes.
+        ``numeric_value`` itself (minimum 0 and maximum 1), or a new array of its shape and float dtype with NaN
+        where the argument is NaN; for a constant array (including any one-element array) an all-NaN array
+        (0 / 0, RuntimeWarning).
 
     Notes
     -----
-    Known issue: ``scaled[0 > scaled > -0.01] = 0`` is a chained comparison, evaluated as
-    ``(0 > scaled) and (scaled > -0.01)``; ``and`` needs the truth value of an array, which raises ValueError for
-    arrays with more than one element. After the stretch the minimum is 0, so the comparison is always reached
-    for non-constant input; NaN has already been replaced by 0 in the argument at that point. See
-    docs/KNOWN_ISSUES.md.
+    Up to 0.1.0 the snapping line was the chained comparison ``scaled[0 > scaled > -0.01] = 0``, evaluated as
+    ``(0 > scaled) and (scaled > -0.01)``, which raises ValueError for every non-constant array with more than
+    one element, and NaN was first replaced by 0 in the caller's array (docs/FIXES_0_1_1.md, X3). The comparison
+    is elementwise (``&``) now and NaN is not filled.
     """
     if np.nanmin(numeric_value) == 0 and np.nanmax(numeric_value) == 1:
         return numeric_value
@@ -1434,7 +1441,7 @@ def scale_strict_0_to_1(numeric_value):
 
 def scale_0_to_1(numeric_value):
     """
-    Rescale an array for blending (intended: into [0, 1]); dispatch to the two scaling functions.
+    Rescale an array into [0, 1] for blending; dispatch to the two scaling functions.
 
     - Maximum in (0.9, 1] and minimum 0: return the argument unchanged.
     - Range ``max - min > 0.3``: scale_within_0_and_1.
@@ -1443,23 +1450,21 @@ def scale_0_to_1(numeric_value):
     Parameters
     ----------
     numeric_value : numpy.ndarray
-        Array of any shape; NaN may be overwritten in place by the called function.
+        Array of any shape. Not modified.
 
     Returns
     -------
     numpy.ndarray
-        The argument itself or a new array, see the called functions.
-
-    Raises
-    ------
-    ValueError
-        From scale_strict_0_to_1, for non-constant arrays with a range up to 0.3.
+        The argument itself or a new array, see the called functions; NaN stays NaN.
 
     Notes
     -----
-    Known issue: through the issues of the two called functions, an array outside [0, 1] with a range above 0.3
-    is returned with unchanged values (except the 8-bit case, divided by 255), and a non-constant array with a
-    range up to 0.3 raises ValueError. See docs/KNOWN_ISSUES.md.
+    Up to 0.1.0, through the defects of the two called functions, an array outside [0, 1] with a range above 0.3
+    was returned with unchanged values (except the 8-bit case, divided by 255), a non-constant array with a range
+    up to 0.3 raised ValueError, and NaN was filled in the argument (docs/FIXES_0_1_1.md, X3). Since 0.1.1 the
+    result of either called function is the min-max stretch (or the 8-bit division) with NaN kept.
+    render_images no longer calls this function (it clips); normalize_image calls it only in branches that the
+    existing normalizations do not reach.
     """
     if 1 >= np.nanmax(numeric_value) > 0.9 and np.nanmin(numeric_value) == 0:
         return numeric_value
