@@ -1,6 +1,6 @@
 # Changes compared to upstream rvt_py
 
-rvt_py_llm 0.1.0 is the upstream Relief Visualization Toolbox Python library (rvt_py,
+rvt_py_llm 0.1.1 is the upstream Relief Visualization Toolbox Python library (rvt_py,
 https://github.com/EarthObservation/RVT_py, by Žiga Kokalj et al.) at master commit `bab109c` (tag `baseline`,
 `setup.py` version 2.2.3), plus:
 
@@ -8,10 +8,13 @@ https://github.com/EarthObservation/RVT_py, by Žiga Kokalj et al.) at master co
 2. eleven performance commits and one test commit (`21284eb` .. `8413d3e`, tag `start`; the branch `opt/perf` of
    the optimization run);
 3. the 0.1.0 pass: documentation, characterization tests, exception message corrections, three behaviour-neutral
-   readability refactors proven bitwise identical, and packaging (`start..main`).
+   readability refactors proven bitwise identical, and packaging (`start..v0.1.0`);
+4. the 0.1.1 fixes: five defects of the blend path fixed on purpose (`v0.1.0..v0.1.1`, section "The 0.1.1 fixes"
+   below and [FIXES_0_1_1.md](FIXES_0_1_1.md)).
 
 The import name stays `rvt`; the public API (names, signatures, defaults, `DefaultValues` attributes, settings files,
-return shapes and dtypes, exception types) is unchanged.
+return shapes and dtypes, exception types) is unchanged. In 0.1.1 `BlenderLayer.check_data` raises for an opacity
+outside [0, 100], which it accepted before.
 
 ## What a user notices
 
@@ -28,19 +31,22 @@ return shapes and dtypes, exception types) is unchanged.
   ([bench_final_1t_20261023-170737_32096.json](release_evidence/0.1.0/bench_final_1t_20261023-170737_32096.json))
   has the same ratios with absolute times about 2.4 times longer, e.g. local dominance 80.51 s -> 1.014 s (x79.4),
   pipeline x11.41 [11.32-11.43]; [TESTING.md](TESTING.md) section 6 explains the difference.
-- **Same pictures.** Every output is bitwise identical to the fixed baseline (`baseline-fixed`) on all evaluation
-  sets, with and without numba, for 1, 2 and the default number of threads.
+- **Same pictures, except CRIM, e3MSTP and e4MSTP from 0.1.1.** Up to 0.1.0 every output is bitwise identical to
+  the fixed baseline (`baseline-fixed`) on all evaluation sets, with and without numba, for 1, 2 and the default
+  number of threads. 0.1.1 changes CRIM, e3MSTP and e4MSTP on purpose (section "The 0.1.1 fixes"); every other
+  output stays bitwise identical.
 - **MSTP, e3MSTP and e4MSTP differ from raw upstream**, because of the precision fix. Upstream squares the padded DEM
   in float32 before the integral images of the local variance E[x²] - E[x]²; at real elevations this loses most of
   the precision, so MSTP depended on the absolute elevation: the same terrain shifted by +17.3 m changed the 8-bit
   e3MSTP/e4MSTP output by up to 207-210 DN (99.9th percentile 150 DN) on a 512 x 512 px synthetic DEM at 300 m. With
-  float64 squares the difference is at most 1 DN. All other visualizations are bitwise identical to raw upstream.
+  float64 squares the difference is at most 1 DN. Up to 0.1.0 all other visualizations are bitwise identical to raw
+  upstream; 0.1.1 also changes CRIM, e3MSTP and e4MSTP (the fixes).
 - **numba is optional.** With numba installed, four inner loops run compiled (five kernels: sky illumination has
   two); without it, or with
   `RVT_NO_ACCEL=1`, the numpy code runs and gives the same bits. numba costs about 0.2 s to import and 0.24-0.40 s to
   compile per kernel, once per process.
 - **Documentation and tests.** Every public function has a numpy-style docstring with units, dtypes, edges and NaN
-  handling; the repository has architecture, testing and known-issue documents; 1093 tests.
+  handling; the repository has architecture, testing and known-issue documents; 1093 tests in 0.1.0, 1194 in 0.1.1.
 - **Exception texts.** 40 messages were corrected (module name `rvt.vis` instead of `rvt.visualization`, wrong
   function or bound named, typos); exception types are unchanged. The list is at the end of this file.
 
@@ -302,3 +308,35 @@ are unchanged; no warning text changed. 39 of the 41 messages raised in `rvt/vis
 | `rvt/vis.py:2264` | mstp | `rvt.visualization.mstp: ve_factor must be between -10000 and 10000!` | `rvt.vis.mstp: ve_factor must be between -1000 and 10000!` |
 | `rvt/vis.py:2383` | fill_where_nan | `rvt.visualization.fill_where_nan: Wrong method!` | `rvt.vis.fill_where_nan: Wrong method!` |
 | `rvt/blend_func.py:107` | gray_scale_to_color_ramp | `rvt.blend_func.gray_scale_to_color_ramp: min_colormap_cut can't be smaller than max_colormap_cut!` | `rvt.blend_func.gray_scale_to_color_ramp: min_colormap_cut has to be smaller than max_colormap_cut!` |
+
+## The 0.1.1 fixes (`v0.1.0..v0.1.1`)
+
+Five defects of the blend path, fixed as their docstrings and the upstream documentation state; the readings and
+the questions to the upstream authors are in [FIXES_0_1_1.md](FIXES_0_1_1.md). Commits, in order:
+
+| commit | class | content |
+|---|---|---|
+| `7aa8b03` | `test:` | 101 tests of the fixes, written first (75 fail on `v0.1.0`) |
+| `8f569ca` | `retire:` | 66 frozen 0.1.0 nodes that pinned the old behaviour assert the fixed one (`# 0.1.1: fixed, KI-nn`) |
+| `65ef5e8`, `abe40a5` | `tool:` | astcheck classes `fix:`, `retire:`, `tool:`; mutants m24-m28 |
+| `a37ab44` | `fix:` | X5: `BlenderLayer.check_data` rejects an opacity outside [0, 100] (KI-36) |
+| `c72646c` | `fix:` | X4: `color_relief_image_map` works on a deep copy of `default` (KI-45) |
+| `33a2bd5` | `fix:` | X2: e4MSTP slope layer in degrees (KI-47) |
+| `c2456b1` | `fix:` | X1: overlay and soft light blend into a new array; opacity applies; no band chaining (KI-33, KI-34) |
+| `d09e45d` | `fix:` | X3: blend operands clipped to [0, 1]; `scale_*` as documented (KI-19, KI-20, KI-21) |
+| `b40f39b`, `7161e4a` | `docs:` | docstrings of the changed functions |
+| `6d8b75f`, `4c591b4`, `5b5cbad` | `meta:` | KNOWN_ISSUES status lines, ARCHITECTURE, CONVENTIONS 3.1 |
+| `81e50b1` and later | `meta:` | new freeze of the test set, version 0.1.1, documents, release evidence |
+
+Changed outputs, 0.1.0 -> 0.1.1, on the three test DEMs (10 000 x 8 000 px at 0.25 m/px, cropped by 512 px = 128 m
+per side; DN of the 8-bit display, maximum over R, G, B):
+
+| visualization | DEM low / medium / high: p99.9 DN | max DN | pixels > 5 DN |
+|---|---|---|---|
+| e3MSTP (X1) | 16 / 24 / 31 | 42 / 42 / 42 | 75 / 93 / 98 % |
+| e4MSTP (X1, X2) | 66 / 125 / 206 | 255 / 252 / 255 | 73 / 88 / 94 % |
+
+Every other public function returns the same bits as `v0.1.0` on the frozen tests (record comparison, TESTING.md
+section 7) and on the evaluation sets (eval check `dev`, with and without numba). Time per call: e3MSTP 0.87 times,
+e4MSTP 1.03 times the 0.1.0 time (medium 2048 x 2048 px window, 1 thread); on the full DEMs e3MSTP 55-58 s against
+62-67 s, e4MSTP 79-96 s against 79-94 s.

@@ -5,38 +5,47 @@ co-authors (ZRC SAZU and University of Ljubljana, https://github.com/EarthObserv
 visualizations of digital elevation models (slope, hillshade, sky-view factor, openness, local dominance, sky
 illumination, SLRM, MSRM, MSTP) and blends them into composites (VAT, e3MSTP, e4MSTP). The import name is still
 `rvt`, the API is unchanged, and the outputs are bitwise identical to the upstream code with one precision fix
-(tag `baseline-fixed`); against raw upstream only MSTP, e3MSTP and e4MSTP differ. The code is faster, every function
-is documented, and 1093 tests guard the behaviour. The upstream README is kept in
+(tag `baseline-fixed`), except CRIM, e3MSTP and e4MSTP, which 0.1.1 changes on purpose by fixing five defects of the
+blend path ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)); against raw upstream MSTP differs as well. The code is
+faster, every function is documented, and 1194 tests guard the behaviour. The upstream README is kept in
 [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 
 ## TL;DR (English)
 
 - What: upstream rvt_py (master `bab109c`, version 2.2.3) + one MSTP precision fix + 11 performance commits +
-  documentation and tests. Package `rvt_py_llm` 0.1.0, import `rvt`.
+  documentation and tests (0.1.0) + five fixes of the blend path (0.1.1). Package `rvt_py_llm` 0.1.1, import `rvt`.
+- 0.1.1: overlay and soft light honour their opacity, e4MSTP slope in degrees, blend operands clipped to [0, 1] with
+  NaN kept, CRIM no longer changes the caller's `DefaultValues`, opacity outside 0..100 raises. CRIM, e3MSTP and
+  e4MSTP change (e3MSTP up to 42 DN, e4MSTP p99.9 66-206 DN on the test DEMs); see docs/FIXES_0_1_1.md.
 - Drop-in: same functions, signatures, defaults, settings files and output dtypes; existing scripts keep working.
 - Speed: the 11 visualizations of a tiling pipeline together run x11.44 [95 % interval 11.35-11.46] faster than the
   fixed baseline on `bench_final` (three 2048 x 2048 px windows at 0.25 m/px), 1 thread per process.
 - Outputs: bitwise identical to the fixed baseline (tag `baseline-fixed` = upstream + the precision fix) on all
-  evaluation sets, with and without numba, for any thread count. Compared with raw upstream (tag `baseline`), every
-  output is identical except MSTP, e3MSTP and e4MSTP, which change because of the precision fix (see "One precision
+  evaluation sets, with and without numba, for any thread count, except CRIM, e3MSTP and e4MSTP (0.1.1 fixes).
+  Compared with raw upstream (tag `baseline`), MSTP also differs, because of the precision fix (see "One precision
   fix" below).
 - numba is optional: if it is missing or fails, the numpy code runs with the same results; `RVT_NO_ACCEL=1` turns it off.
 - Proof: frozen tests, AST check per commit, bitwise comparison of every public call against tag `start`, mutants;
   the tools are in `tools/proof/`.
-- Read next: docs/CHANGES_VS_UPSTREAM.md, docs/ARCHITECTURE.md, docs/KNOWN_ISSUES.md, docs/TESTING.md.
+- Read next: docs/FIXES_0_1_1.md, docs/CHANGES_VS_UPSTREAM.md, docs/ARCHITECTURE.md, docs/KNOWN_ISSUES.md,
+  docs/TESTING.md.
 
 ## TL;DR (slovensky)
 
 - Čo: pôvodná knižnica rvt_py (master `bab109c`, verzia 2.2.3) + oprava presnosti MSTP + 11 zrýchlení + dokumentácia
-  a testy. Balík `rvt_py_llm` 0.1.0, import `rvt`.
+  a testy (0.1.0) + päť opráv blendovania (0.1.1). Balík `rvt_py_llm` 0.1.1, import `rvt`.
+- 0.1.1: overlay a soft light rešpektujú opacity, sklon v e4MSTP v stupňoch, vstupy blendu orezané do [0, 1] s
+  NaN, CRIM nemení `DefaultValues` volajúceho, opacity mimo 0..100 vyvolá výnimku. Menia sa CRIM, e3MSTP a e4MSTP;
+  podrobnosti v `docs/FIXES_0_1_1.md`.
 - Náhrada 1:1: rovnaké funkcie, parametre, predvolené hodnoty a výstupy; existujúce skripty fungujú bez zmeny.
 - Rýchlosť: 11 vizualizácií spolu ×11,44 [11,35–11,46] oproti opravenej baseline na `bench_final`
   (2048 × 2048 px, 0,25 m/px), 1 vlákno.
 - Výstupy: bitovo zhodné s opravenou baseline (tag `baseline-fixed`), s numbou aj bez nej, pri ľubovoľnom počte
-  vlákien. Oproti pôvodnému upstreamu (tag `baseline`) sa líšia len MSTP, e3MSTP a e4MSTP (oprava presnosti).
+  vlákien, okrem CRIM, e3MSTP a e4MSTP (opravy 0.1.1). Oproti pôvodnému upstreamu (tag `baseline`) sa líši aj MSTP
+  (oprava presnosti).
 - Numba je voliteľná: bez nej beží numpy s rovnakým výsledkom; `RVT_NO_ACCEL=1` ju vypne.
 - Dôkaz: zmrazené testy, AST kontrola commitov, bitové porovnanie každého volania voči tagu `start`, mutačné testy.
-- Ďalej čítaj: `docs/CHANGES_VS_UPSTREAM.md`, `docs/ARCHITECTURE.md`, `docs/KNOWN_ISSUES.md`.
+- Ďalej čítaj: `docs/FIXES_0_1_1.md`, `docs/CHANGES_VS_UPSTREAM.md`, `docs/ARCHITECTURE.md`, `docs/KNOWN_ISSUES.md`.
 
 ## What changed compared to the original rvt_py, in plain words
 
@@ -54,18 +63,24 @@ is documented, and 1093 tests guard the behaviour. The upstream README is kept i
   depended on the absolute elevation: the same terrain 17.3 m higher changed the 8-bit e3MSTP/e4MSTP by up to
   207-210 DN (99.9th percentile 150 DN; 512 x 512 px synthetic DEM at 300 m, measurement in the message of commit
   `03702f4`). The fix squares in 64-bit floats; the difference is then at most 1 DN. These three outputs therefore
-  differ from raw upstream; everything else is identical to raw upstream.
+  differ from raw upstream; up to 0.1.0 everything else is identical to raw upstream.
+- **Five blend fixes (0.1.1).** Overlay and soft light wrote their result into the background, so the documented
+  opacities (CRIM 50 %, e3MSTP 70 %, e4MSTP 90 %) acted as 100 %; e4MSTP normalized a slope in radians as degrees
+  0..55; the rescale of blend inputs outside [0, 1] was broken and filled no-data holes; CRIM changed the caller's
+  `svf_r_max`; the opacity range check could never fail. All five are fixed as their docstrings state; CRIM, e3MSTP
+  and e4MSTP change, everything else is bitwise identical to 0.1.0 ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)).
 - **numba optional.** No new required dependency. numba costs about 0.2 s to import and 0.24-0.40 s to compile per
   kernel, once per process.
 - **Documentation.** Every public module, class and function has a numpy-style docstring (units, dtypes, edges,
   NaN, in-place effects); new documents describe the architecture, the tests, the known issues and the changes.
 - **Tests.** 223 equivalence tests of the optimized code and 866 tests that pin the current behaviour of every
-  public function (859 characterization tests and 7 API-snapshot tests), frozen at tag `tests-frozen` (1089); plus 4
-  order-sensitive tests of `_box_sum` added after the release audit; 1093 in total.
+  public function (859 characterization tests and 7 API-snapshot tests), frozen at 0.1.0 (1089, tag
+  `tests-frozen-0.1.0`); 4 order-sensitive tests of `_box_sum` added after the release audit; 101 tests of the 0.1.1
+  fixes, written before the fixes; 1194 in total, frozen at tag `tests-frozen`.
 - **Messages.** 40 exception texts were corrected (they named the old module `rvt.visualization`, a wrong function or
   a wrong bound). Exception types are unchanged.
-- **Not changed.** API, defaults, settings files, file names and outputs (except the precision fix). Behaviour that
-  looks wrong is documented in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), not fixed.
+- **Not changed.** API, defaults, settings files, file names and outputs (except the precision fix and the 0.1.1
+  fixes). Other behaviour that looks wrong is documented in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), not fixed.
 
 ## Install
 
@@ -124,12 +139,12 @@ From the repository root (always pass the `tests` path; the upstream scripts `te
 at the root are not part of the suite):
 
 ```
-python -m pytest tests -q                                   # 1093 passed
-RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1093 passed
+python -m pytest tests -q                                   # 1194 passed
+RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1194 passed
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-With `RVT_NO_ACCEL=1` all 1093 tests also pass and none is skipped: the tests that compare the numba path with the
+With `RVT_NO_ACCEL=1` all 1194 tests also pass and none is skipped: the tests that compare the numba path with the
 numpy path switch the accelerators on themselves. They are skipped only when numba is not installed.
 
 The proof tools (AST check, bitwise record comparison, frozen check, mutants, docstring lint) are in
@@ -143,7 +158,8 @@ The proof tools (AST check, bitwise record comparison, frozen check, mutants, do
 |---|---|
 | [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md) | every change against upstream: precision fix, each performance commit with its equivalence argument and measured gain, the 0.1.0 pass, all changed exception texts |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | module map, call graphs, data flow, accelerated paths, where to change what |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 76 documented, unchanged issues with repros; tile buffers |
+| [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md) | the five 0.1.1 fixes: defect, file:line, reading and question, evidence, patch, risk; open questions |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 76 documented issues with repros (8 fixed in 0.1.1); tile buffers |
 | [docs/TESTING.md](docs/TESTING.md) | test suites, frozen-test rule, proof chain, commands, release evidence |
 | [tools/proof/README.md](tools/proof/README.md) | the proof tools: what each proves, commands, expected last lines |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | units, dtypes, NaN, edges; docstring and writing standard |

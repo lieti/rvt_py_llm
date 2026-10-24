@@ -3,6 +3,36 @@
 All notable changes of rvt_py_llm. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). Details and evidence: [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md).
 
+## [0.1.1] - 2026-10-24
+
+Five fixes of the blend path. The outputs of CRIM, e3MSTP and e4MSTP change on purpose; every other public function
+returns the same bits as 0.1.0, with and without numba. Details, evidence and open questions:
+[docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md).
+
+### Fixed
+- X1 (KI-33, KI-34): `blend_overlay` and `blend_soft_light` return a new array instead of writing into the
+  background, so the opacity of overlay and soft light layers applies (CRIM 50 %, e3MSTP 70 %, e4MSTP 90 %) and an
+  RGB layer over a gray background no longer chains its bands (`c2456b1`). e3MSTP on the three 10 000 x 8 000 px
+  test DEMs at 0.25 m/px: p99.9 16-31 DN, max 42 DN against 0.1.0.
+- X2 (KI-47): e4MSTP computes its slope layer in degrees, as the 0..55 normalization expects (`33a2bd5`). e4MSTP
+  (X1 and X2) on the same DEMs: p99.9 66-206 DN.
+- X3 (KI-19, KI-20, KI-21): blend operands outside [0, 1] are clipped, NaN kept, instead of passing through
+  `scale_0_to_1`; `scale_within_0_and_1`, `scale_strict_0_to_1` and `scale_0_to_1` use the actual minimum and
+  maximum, keep NaN, leave the argument unchanged and no longer raise (`d09e45d`).
+- X4 (KI-45): `color_relief_image_map` (and through it `e3mstp`) no longer sets `svf_r_max = 10` on the caller's
+  `DefaultValues` (`c72646c`).
+- X5 (KI-36): `BlenderLayer.check_data` raises for an opacity outside [0, 100] (`a37ab44`).
+
+### Changed
+- e3MSTP 0.87 times and e4MSTP 1.03 times the 0.1.0 time (medium 2048 x 2048 px window, 1 thread, median of 3).
+
+### Added
+- 101 tests written before the fixes (`tests/test_fix_0_1_1_*.py`); 66 frozen 0.1.0 tests that pinned the old
+  behaviour now assert the fixed one, each marked `# 0.1.1: fixed, KI-nn`. Tag `tests-frozen` moved to the 0.1.1
+  test set (1194 tests); the 0.1.0 freeze is tag `tests-frozen-0.1.0`.
+- `astcheck.py` commit classes `fix:`, `retire:`, `tool:`; mutants m24-m28 on the fixed code.
+- `docs/FIXES_0_1_1.md`, `docs/repro/fixes_0_1_1.py`, `docs/release_evidence/0.1.1/`.
+
 ## [0.1.0] - 2026-10-23
 
 First release of rvt_py_llm, a drop-in of rvt_py (import name `rvt`). Outputs are bitwise identical to tag `start`,
