@@ -71,14 +71,16 @@ def _render(layers):
             rendered = norm
             continue
         active, background = norm, rendered
+        # 0.1.1: fixed, KI-19: an operand outside [0, 1] is clipped to [0, 1] (NaN stays NaN), not rescaled
         if _outside_0_1(active):
-            active = bf.scale_0_to_1(active)
+            active = np.clip(active, 0, 1)
         if _outside_0_1(background):
-            background = bf.scale_0_to_1(background)
-        top = bf.blend_images(lay["mode"], active, background)
-        # pins current behaviour, KNOWN_ISSUES candidate: blend_overlay and blend_soft_light write their result into
-        # `background` (also into the band views of an RGB background), so for these two modes top and background
-        # hold the same values here and the opacity has no visible effect (see test_recipe_sensitivity).
+            background = np.clip(background, 0, 1)
+        # 0.1.1: fixed, KI-33: the blend gets a copy, so `background` keeps the original values and the opacity mix
+        # o * blend(a, b) + (1 - o) * b below uses them (these recipes have no RGB layer over a gray background, KI-34)
+        top = bf.blend_images(lay["mode"], active, np.array(background, copy=True))
+        if _outside_0_1(top):
+            top = np.clip(top, 0, 1)
         rendered = bf.render_images(top, background, lay["opacity"])
     return rendered
 
@@ -154,9 +156,9 @@ def _e4_images(dem, resolution, d):
         "opns_diff": svf_opns["opns"].squeeze() - neg_opns.squeeze(),
         "svf_flat": _svf(dem, resolution, d2, True, False, r_max=int(10 / resolution), noise=3)["svf"].squeeze(),
         "mstp": _mstp(dem, d),
-        # pins current behaviour, KNOWN_ISSUES candidate: the slope is in radians (the slope_aspect default), but the
-        # layer is normalized over 0..55 as the docstring's degrees, so the inverted layer stays within ~0.97..1.
-        "slope": rvt.vis.slope_aspect(dem=dem, resolution_x=resolution, resolution_y=resolution)["slope"],
+        # 0.1.1: fixed, KI-47: the slope is in degrees, normalized over 0..55 degrees
+        "slope": rvt.vis.slope_aspect(dem=dem, resolution_x=resolution, resolution_y=resolution,
+                                      output_units="degree")["slope"],
     }
 
 
@@ -322,9 +324,8 @@ def test_recipe_sensitivity(recipe_images, func, comb, i, field):
         # the bottom layer is the start image of the composition: its opacity and blend mode are not used
         assert max_diff == 0.0
     elif field == "opacity" and (comb, i) in (("crim", 0), ("e3", 1), ("e4", 0)):
-        # pins current behaviour, KNOWN_ISSUES candidate: the opacity of an overlay / soft light layer has no visible
-        # effect (see _render); the exact comparison above may still see float64 rounding differences
-        assert max_diff < 1e-6
+        # 0.1.1: fixed, KI-33: the opacity of an overlay / soft light layer has a visible effect
+        assert max_diff > 1e-4
     else:
         # a visible change: well above the rounding level of the exact comparison
         assert max_diff > 1e-4

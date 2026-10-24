@@ -366,21 +366,20 @@ def test_scale_within_inside_range_returns_same_object(dtype):
 def test_scale_within_bounds_are_always_0_and_1(dtype):
     img = np.array([[-1.0, 0.5], [2.0, 3.0]], dtype=dtype)
     out = bf.scale_within_0_and_1(img.copy())
-    # pins current behaviour, KNOWN_ISSUES candidate: np.array(0, actual_min) passes the minimum as the *dtype*
-    # argument, so norm_min_value is always 0 and norm_max_value is always 1; (x - 0) / (1 - 0) leaves the values
-    # unchanged instead of stretching them to 0..1.
+    # 0.1.1: fixed, KI-19: the stretch uses the actual minimum (-1) and maximum (3): (x + 1) / 4, exact in both dtypes
     assert out.dtype == dtype
-    assert_same(out, img)
-    assert out is not img  # a new array, the argument is only touched by the NaN fill
+    assert_same(out, np.array([[0.0, 0.375], [0.75, 1.0]], dtype=dtype))
+    assert out is not img
 
 
 def test_scale_within_snaps_small_negative_values_to_zero():
     img = np.array([[-0.005, 0.5], [1.5, 0.25]])
     out = bf.scale_within_0_and_1(img.copy())
-    # values in (-0.01, 0) become 0 (the stretch itself is the identity, see above)
-    assert_same(out, np.array([[0.0, 0.5], [1.5, 0.25]]))
+    # 0.1.1: fixed, KI-19: min-max stretch (x - min) / (max - min); the minimum maps to 0, nothing is left to snap
+    assert_same(out, (img - (-0.005)) / (1.5 - (-0.005)))
+    assert out[0, 0] == 0.0
     out = bf.scale_within_0_and_1(np.array([[-0.02, 0.5], [1.5, 0.25]]))
-    assert out[0, 0] == -0.02  # below -0.01 the whole snapping step is skipped
+    assert out[0, 0] == 0.0  # 0.1.1: fixed, KI-19
 
 
 def test_scale_within_divides_by_255_for_byte_like_data():
@@ -391,21 +390,21 @@ def test_scale_within_divides_by_255_for_byte_like_data():
     out32 = bf.scale_within_0_and_1(img.astype(np.float32))
     assert out32.dtype == np.float32
     np.testing.assert_allclose(out32, img / 255.0, rtol=1e-6, atol=0)
-    # not applied when min == 0 or when the span is at most 30: the identity stretch is used
-    assert_same(bf.scale_within_0_and_1(np.array([[0.0, 100.0]])), np.array([[0.0, 100.0]]))
-    assert_same(bf.scale_within_0_and_1(np.array([[10.0, 40.0]])), np.array([[10.0, 40.0]]))
+    # not applied when min == 0 or when the span is at most 30: the min-max stretch is used
+    # 0.1.1: fixed, KI-19
+    assert_same(bf.scale_within_0_and_1(np.array([[0.0, 100.0]])), np.array([[0.0, 1.0]]))
+    assert_same(bf.scale_within_0_and_1(np.array([[10.0, 40.0]])), np.array([[0.0, 1.0]]))
     assert_same(bf.scale_within_0_and_1(np.array([[10.0, 41.0]])), np.array([[10.0, 41.0]]) / 255.0)
-    # max above 255: not divided
-    assert_same(bf.scale_within_0_and_1(np.array([[40.0, 300.0]])), np.array([[40.0, 300.0]]))
+    # max above 255: not divided, stretched (0.1.1: fixed, KI-19)
+    assert_same(bf.scale_within_0_and_1(np.array([[40.0, 300.0]])), np.array([[0.0, 1.0]]))
 
 
 def test_scale_within_fills_nan_with_minimum_in_the_argument():
     img = np.array([[-1.0, np.nan], [2.0, 0.5]])
     out = bf.scale_within_0_and_1(img)
-    # pins current behaviour, KNOWN_ISSUES candidate: NaN pixels are overwritten with the minimum *in the caller's
-    # array* and the NaN mask of the output is lost.
-    assert_same(img, np.array([[-1.0, -1.0], [2.0, 0.5]]))
-    assert_same(out, np.array([[-1.0, -1.0], [2.0, 0.5]]))
+    # 0.1.1: fixed, KI-20: the caller's array is not modified and NaN stays NaN; (x + 1) / 3 is exact here
+    assert_same(img, np.array([[-1.0, np.nan], [2.0, 0.5]]))
+    assert_same(out, np.array([[0.0, np.nan], [1.0, 0.5]]))
 
 
 def test_scale_strict_early_return_for_0_to_1():
@@ -415,12 +414,10 @@ def test_scale_strict_early_return_for_0_to_1():
 
 def test_scale_strict_raises_value_error_for_arrays():
     img = np.array([[1.0, 2.0], [3.0, np.nan]])
-    # pins current behaviour, KNOWN_ISSUES candidate: `scaled[0 > scaled > -0.01] = 0` is a chained comparison; for
-    # an array with more than one element it raises ValueError after the NaN fill, so the function never returns
-    # for such input. NaN was already replaced by 0 in the caller's array.
-    with pytest.raises(ValueError, match="truth value"):
-        bf.scale_strict_0_to_1(img)
-    assert_same(img, np.array([[1.0, 2.0], [3.0, 0.0]]))
+    # 0.1.1: fixed, KI-21: elementwise comparison, no exception; (x - 1) / 2 with NaN kept; the argument is unchanged
+    out = bf.scale_strict_0_to_1(img)
+    assert_same(out, np.array([[0.0, 0.5], [1.0, np.nan]]))
+    assert_same(img, np.array([[1.0, 2.0], [3.0, np.nan]]))
 
 
 def test_scale_strict_constant_input_gives_all_nan():
@@ -448,19 +445,17 @@ def test_scale_0_to_1_wide_range_goes_to_scale_within():
     # values already inside 0..1 but with a span above 0.3: unchanged
     img = np.array([[0.1, 0.9]])
     assert bf.scale_0_to_1(img) is img
-    # out of range, span above 0.3: identity (the stretch bounds of scale_within_0_and_1 are always 0 and 1)
-    # pins current behaviour, KNOWN_ISSUES candidate
+    # out of range, span above 0.3: min-max stretch to 0..1
+    # 0.1.1: fixed, KI-19
     img = np.array([[-2.0, 3.0]])
-    assert_same(bf.scale_0_to_1(img.copy()), img)
+    assert_same(bf.scale_0_to_1(img.copy()), np.array([[0.0, 1.0]]))
 
 
 def test_scale_0_to_1_narrow_range_goes_to_scale_strict():
-    # span <= 0.3 and not the 0..1 case: scale_strict_0_to_1 is used and raises for arrays
-    # pins current behaviour, KNOWN_ISSUES candidate
-    with pytest.raises(ValueError, match="truth value"):
-        bf.scale_0_to_1(np.array([[0.2, 0.3], [0.25, 0.4]]))
-    with pytest.raises(ValueError, match="truth value"):
-        bf.scale_0_to_1(np.array([[1.2, 1.3], [1.25, 1.4]]))
+    # span <= 0.3 and not the 0..1 case: scale_strict_0_to_1 is used, a min-max stretch (x - min) / (max - min)
+    # 0.1.1: fixed, KI-21
+    for img in (np.array([[0.2, 0.3], [0.25, 0.4]]), np.array([[1.2, 1.3], [1.25, 1.4]])):
+        assert_same(bf.scale_0_to_1(img.copy()), (img - img.min()) / (img.max() - img.min()))
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -825,7 +820,9 @@ def test_blend_overlay_analytic_and_in_place(dtype):
     b = BAC.astype(dtype)
     expected = _overlay(ACT, BAC).astype(dtype)  # dyadic values: exact in both dtypes
     out = bf.blend_overlay(a, b)
-    assert out is b  # the result is the background array, modified in place
+    # 0.1.1: fixed, KI-33: a new array in the dtype of the background; the background is not touched
+    assert out is not b and not np.shares_memory(out, b)
+    assert_same(b, BAC.astype(dtype))
     assert_same(out, expected)
     assert_same(a, ACT.astype(dtype))  # the active image is not touched
     # edge values: background 0 -> 0, background 1 -> 1, background 0.5 -> active
@@ -849,7 +846,9 @@ def test_blend_soft_light_analytic_and_in_place(dtype):
     # sqrt of the dyadic values is not exact: reference in float64, tolerance one float32 ulp at 1
     expected = _soft_light(ACT, BAC)
     out = bf.blend_soft_light(a, b)
-    assert out is b
+    # 0.1.1: fixed, KI-33: a new array in the dtype of the background; the background is not touched
+    assert out is not b and not np.shares_memory(out, b)
+    assert_same(b, BAC.astype(dtype))
     assert out.dtype == dtype
     np.testing.assert_allclose(out, expected, atol=1e-7 if dtype == np.float32 else 1e-15, rtol=0)
     # edges: active 0 -> background squared; active 1 -> sqrt(background); active 0.5 -> background; background 0 -> 0
@@ -919,10 +918,9 @@ def test_blend_multi_dim_images_overlay_modifies_the_background():
     a = np.full((3, 4, 4), 0.25)
     b = np.full((3, 4, 4), 0.25)
     out = bf.blend_multi_dim_images("overlay", a, b)
-    # pins current behaviour, KNOWN_ISSUES candidate: overlay and soft_light write into the background array; for an
-    # RGB background the per-band views are written, so the caller's background changes (0.25 -> 2 * 0.25 * 0.25).
+    # 0.1.1: fixed, KI-33: the result is 2 * 0.25 * 0.25 in a new array; the caller's background is not changed
     assert_same(out, np.full((3, 4, 4), 0.125))
-    assert_same(b, np.full((3, 4, 4), 0.125))
+    assert_same(b, np.full((3, 4, 4), 0.25))
     assert_same(a, np.full((3, 4, 4), 0.25))
 
 
@@ -1032,8 +1030,10 @@ def test_render_images_rgb_shapes_and_nan():
 
 
 def test_render_images_scales_inputs_outside_0_1():
-    # an input with values outside 0..1 goes through scale_0_to_1 first (here the byte-like branch: / 255)
+    # an input with values outside 0..1 is clipped to 0..1 first
     a = np.array([[40.0, 255.0]])
     b = np.array([[0.0, 1.0]])
     out = bf.render_images(a, b, 100)
-    np.testing.assert_allclose(out, a / 255.0, atol=1e-15)
+    # 0.1.1: fixed, KI-19: clipped (both values become 1), not rescaled; 1 * 1.0 + b * 0.0
+    assert_same(out, np.array([[1.0, 1.0]]))
+    assert_same(a, np.array([[40.0, 255.0]]))

@@ -315,10 +315,16 @@ def test_blend_modes_2d(mode, dtype):
     background = _images(SHAPE, 3, dtype=dtype)
     background[100:102, :] = 0.5  # the branch boundary of overlay
     active[:, 50:52] = 0.5  # the branch boundary of soft light
-    _same_call(lambda a, b: bf.blend_images(mode, a, b), lambda a, b: ref_blend_images(mode, a, b),
+    if mode in ("overlay", "soft_light"):
+        # 0.1.1: fixed, KI-33: the in-place reference on a copy of the background (result in a new array of the
+        # background dtype, the caller's background unchanged)
+        ref = lambda a, b: ref_blend_images(mode, a, np.array(b, copy=True))  # noqa: E731
+    else:
+        ref = lambda a, b: ref_blend_images(mode, a, b)  # noqa: E731
+    _same_call(lambda a, b: bf.blend_images(mode, a, b), ref,
                active, background)
     # mixed dtypes and values outside 0..1 (soft light takes sqrt of negative values: invalid -> NaN + warning)
-    _same_call(lambda a, b: bf.blend_images(mode, a, b), lambda a, b: ref_blend_images(mode, a, b),
+    _same_call(lambda a, b: bf.blend_images(mode, a, b), ref,
                _images(SHAPE, 4, -0.5, 1.5, dtype=np.float32), _images(SHAPE, 5, -0.5, 1.5))
 
 
@@ -327,7 +333,14 @@ def test_blend_modes_2d(mode, dtype):
 def test_blend_modes_rgb(mode, dims):
     active = _images((3,) + SHAPE if dims[0] == 3 else SHAPE, 6)
     background = _images((3,) + SHAPE if dims[1] == 3 else SHAPE, 7)
-    _same_call(lambda a, b: bf.blend_images(mode, a, b), lambda a, b: ref_blend_images(mode, a, b),
+    if mode in ("overlay", "soft_light"):
+        # 0.1.1: fixed, KI-33, KI-34: the in-place reference on a copy of the background broadcast to the result
+        # shape, so every band is blended onto the original (gray) background and the caller's arrays are unchanged
+        ref = lambda a, b: ref_blend_images(  # noqa: E731
+            mode, a, np.broadcast_to(b, np.broadcast_shapes(a.shape, b.shape)).copy())
+    else:
+        ref = lambda a, b: ref_blend_images(mode, a, b)  # noqa: E731
+    _same_call(lambda a, b: bf.blend_images(mode, a, b), ref,
                active, background)
 
 
@@ -342,11 +355,13 @@ def test_blend_luminosity_clipping():
 
 @pytest.mark.parametrize("mode", ["overlay", "soft_light"])
 def test_blend_modes_raise_errstate(mode):
-    # under a raising numpy error state both versions raise; background is modified the same way before the raise
+    # under a raising numpy error state both versions raise
+    # 0.1.1: fixed, KI-33: the reference writes into a copy, so the caller's background stays unchanged
     active = _images(SHAPE, 10, 0.0, 1.0, nan=False)
     background = _images(SHAPE, 11, -1.0, 1.0, nan=False)
     with np.errstate(invalid="raise"):
-        _same_call(lambda a, b: bf.blend_images(mode, a, b), lambda a, b: ref_blend_images(mode, a, b),
+        _same_call(lambda a, b: bf.blend_images(mode, a, b),
+                   lambda a, b: ref_blend_images(mode, a, np.array(b, copy=True)),
                    active, background)
 
 
@@ -354,9 +369,17 @@ def test_blend_modes_raise_errstate(mode):
 @pytest.mark.parametrize("dims", [(2, 2), (3, 3), (3, 2), (2, 3)])
 def test_render_images(opacity, dims):
     active = _images((3,) + SHAPE if dims[0] == 3 else SHAPE, 12)
-    background = _images((3,) + SHAPE if dims[1] == 3 else SHAPE, 13, -2.0, 3.0)  # scaled first
-    _same_call(bf.render_images, ref_render_images, active, background, opacity)
-    _same_call(bf.render_images, ref_render_images, background, active, opacity)
+    background = _images((3,) + SHAPE if dims[1] == 3 else SHAPE, 13, -2.0, 3.0)  # clipped first
+
+    def clip(x):
+        # 0.1.1: fixed, KI-19: an operand outside [0, 1] is clipped to [0, 1] (NaN stays NaN), not rescaled
+        return np.clip(x, 0, 1) if (np.nanmin(x) < 0 or np.nanmax(x) > 1) else x
+
+    def ref(a, b, o):
+        return ref_render_images(clip(a), clip(b), o)
+
+    _same_call(bf.render_images, ref, active, background, opacity)
+    _same_call(bf.render_images, ref, background, active, opacity)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -410,7 +433,46 @@ def test_render_all_images_matches_reference(name):
             comb.add_layer(layer)
         return comb.render_all_images()
 
-    out = _same_call(run_rvt, ref_render_layers, layers)
+    if name == "distorted":
+        # 0.1.1: fixed, KI-36: opacities of 130-160 % are rejected by check_data (the type of its other checks)
+        with pytest.raises(Exception, match="opacity") as info:
+            run_rvt(layers)
+        assert info.type is Exception
+        return
+
+    def clip(x):
+        # 0.1.1: fixed, KI-19: an operand outside [0, 1] is clipped to [0, 1] (NaN stays NaN), not rescaled
+        return np.clip(x, 0, 1) if (np.nanmin(x) < 0 or np.nanmax(x) > 1) else x
+
+    def ref_fixed(layer_list):
+        # ref_render_layers with the 0.1.1 fixes: clipped operands (KI-19), the in-place overlay / soft light
+        # reference on a copy of the background broadcast to the result shape (KI-33, KI-34), so that the opacity
+        # mix uses the original background
+        rendered_image = None
+        for layer in reversed(layer_list):
+            image = layer.image
+            norm_image = ref_normalize_image(layer.vis, image, layer.min, layer.max, layer.normalization)
+            if layer.colormap is not None and len(image.shape) < 3:
+                norm_image = bf.gray_scale_to_color_ramp(gray_scale=norm_image, colormap=layer.colormap,
+                                                         output_8bit=False, min_colormap_cut=layer.min_colormap_cut,
+                                                         max_colormap_cut=layer.max_colormap_cut)
+            if rendered_image is None:
+                rendered_image = norm_image
+                continue
+            active = clip(norm_image)
+            background = clip(rendered_image)
+            if layer.blend_mode.lower() in ("overlay", "soft_light"):
+                blend_background = np.broadcast_to(background, np.broadcast_shapes(active.shape,
+                                                                                   background.shape)).copy()
+            else:
+                blend_background = background
+            top = ref_blend_images(layer.blend_mode, active, blend_background)
+            rendered_image = ref_render_images(clip(top), background, layer.opacity)
+            if np.nanmin(rendered_image) < 0 or np.nanmax(rendered_image) > 1:
+                warnings.warn("rvt.blend.BlenderCombination.render_all_images: Rendered image scale distorted")
+        return rendered_image
+
+    out = _same_call(run_rvt, ref_render_layers if name == "comb_svf" else ref_fixed, layers)
     assert np.isfinite(out).any()
 
 

@@ -154,10 +154,11 @@ def test_check_data_errors():
 
 
 def test_check_data_accepted_but_questionable_values():
-    # pins current behaviour, KNOWN_ISSUES candidate: `0 > opacity > 100` can never be true, so opacity outside
-    # 0..100 passes the check (and render_images extrapolates).
-    _valid_layer(opacity=150).check_data()
-    _valid_layer(opacity=-5).check_data()
+    # 0.1.1: fixed, KI-36: opacity outside 0..100 raises, with the exception type of the neighbouring checks
+    for opacity in (150, -5):
+        with pytest.raises(Exception, match="opacity") as info:
+            _valid_layer(opacity=opacity).check_data()
+        assert info.type is Exception
     # pins current behaviour, KNOWN_ISSUES candidate: min == max is accepted for "value" (only min > max raises);
     # the division by zero then happens in normalize_lin.
     _valid_layer(minimum=1, maximum=1).check_data()
@@ -1183,9 +1184,8 @@ def test_color_relief_image_map_side_effects():
     default.svf_r_max = 25
     rb.color_relief_image_map(dem, 1.0, default=default)
     assert_same(dem, dem_before)  # without no_data the DEM is not modified
-    # pins current behaviour, KNOWN_ISSUES candidate: the function sets svf_r_max = 10 on the DefaultValues instance
-    # it receives (and the default argument is one shared instance created at import time)
-    assert default.svf_r_max == 10
+    # 0.1.1: fixed, KI-45: the function works on a copy; the caller's DefaultValues keeps svf_r_max = 25
+    assert default.svf_r_max == 25
 
 
 def test_color_relief_image_map_no_data():
@@ -1262,9 +1262,9 @@ def test_e4mstp_does_not_change_the_default_object_and_ignores_it_for_flat_terra
     before = copy.deepcopy(vars(default))
     rb.e4mstp(dem.copy(), 1.0, default=default)
     assert vars(default) == before
-    # e3mstp goes through color_relief_image_map, which sets svf_r_max = 10 on the object
+    # e3mstp goes through color_relief_image_map, which sets svf_r_max = 10 on a copy of the object
     rb.e3mstp(dem.copy(), 1.0, default=default)
-    assert default.svf_r_max == 10
+    assert vars(default) == before  # 0.1.1: fixed, KI-45
 
 
 def test_pipelines_equal_manual_layer_stack_for_crim():
