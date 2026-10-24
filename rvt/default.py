@@ -58,6 +58,24 @@ import datetime
 import time
 
 
+def _kernel_shape_suffix(kernel_shape):
+    """
+    Return the file-name suffix of a window shape: ``"_disk"`` for "disk", ``"_diskea"`` for "disk_equal_area",
+    ``""`` for "square" (and for any other value, which ``rvt.vis`` rejects when computing).
+    """
+    return {"disk": "_disk", "disk_equal_area": "_diskea"}.get(kernel_shape, "")
+
+
+def _json_kernel_shape(group, key):
+    """
+    Return ``group[key]["value"]`` as str, or "square" when the key is missing: settings files written before 0.2.0
+    have no ``*_kernel_shape`` keys and keep loading with the default window shape.
+    """
+    if key not in group:
+        return "square"
+    return str(group[key]["value"])
+
+
 class RVTVisualization(Enum):
     """
     Identify one visualization; the value is the short name used as attribute prefix in ``DefaultValues``.
@@ -161,7 +179,6 @@ class DefaultValues:
     slrm_rad_cell : int
         Default 20 (px). Radius of the trend (mean) filter; ``rvt.vis.slrm`` accepts 10..50 px. Example:
         r = 20 px = 10 m at 0.5 m/px.
-
     [Sky-view factor (svf_), anisotropic SVF (asvf_), positive (pos_opns_) and negative (neg_opns_) openness;
     the svf_ search parameters apply to all four]
     svf_compute : int
@@ -222,7 +239,6 @@ class DefaultValues:
         detect.
     msrm_scaling_factor : int
         Default 2. Exponent of the filter-radius sequence of ``rvt.vis.msrm``.
-
     [Multi-scale topographic position, prefix mstp_]
     mstp_compute : int
         Default 0 (0/1). Compute in ``save_visualizations``.
@@ -234,7 +250,6 @@ class DefaultValues:
         Default (50, 500, 50) (px). Same for the broad scale.
     mstp_lightness : float
         Default 0.9. Lightness of the RGB result.
-
     [Outputs: float32 GeoTIFF (no-data NaN) and 8-bit GeoTIFF; the svf_ flags also apply to asvf and positive
     openness, which have no flags of their own]
     slp_save_float : int
@@ -306,6 +321,14 @@ class DefaultValues:
     mstp_bytscl : tuple(str, float, float)
         Default ("value", 0, 1).
 
+    [Window shapes (0.2.0): ``kernel_shape`` of ``rvt.vis.slrm``, ``rvt.vis.msrm`` and ``rvt.vis.mstp``]
+    slrm_kernel_shape, msrm_kernel_shape, mstp_kernel_shape : str
+        Default "square" each; also "disk" or "disk_equal_area" (docs/DISK_WINDOWS.md). Windows of radius >= 8 px
+        become disks (MSRM: all its windows when its largest radius is >= 8 px); ``mstp_kernel_shape`` also applies
+        to ``rvt.blend.e3mstp`` and ``e4mstp`` through ``get_mstp``. A disk shape adds ``_disk`` or ``_diskea`` to
+        the file name of the visualization. Written to and read from the json settings file (missing keys read as
+        "square") and read from txt files under the attribute names.
+
     [Tiling; not written to or read from settings files (known issue, see ``save_default_to_file``)]
     tile_size_limit : int
         Default 10000 * 10000 (px). A ``save_<vis>`` call processes the DEM tile by tile (``rvt.tile``) when its
@@ -332,6 +355,7 @@ class DefaultValues:
         # simple local relief model
         self.slrm_compute = 0
         self.slrm_rad_cell = 20
+        self.slrm_kernel_shape = "square"
         # sky view factor
         self.svf_compute = 0
         self.svf_n_dir = 16
@@ -365,12 +389,14 @@ class DefaultValues:
         self.msrm_feature_min = 0
         self.msrm_feature_max = 20
         self.msrm_scaling_factor = 2
+        self.msrm_kernel_shape = "square"
         # multi-scale topographic position
         self.mstp_compute = 0
         self.mstp_local_scale = (1, 5, 1)
         self.mstp_meso_scale = (5, 50, 5)
         self.mstp_broad_scale = (50, 500, 50)
         self.mstp_lightness = 0.9
+        self.mstp_kernel_shape = "square"
         # save float
         self.slp_save_float = 1
         self.hs_save_float = 1
@@ -512,6 +538,11 @@ class DefaultValues:
                                                 "Parameter for GUIs."},
                 "slrm_rad_cell": {"value": self.slrm_rad_cell,
                                   "description": "Radius for trend assessment in pixels."},
+                "slrm_kernel_shape": {"value": self.slrm_kernel_shape,
+                                      "description": "Window shape of the trend filter: square (default), "
+                                                     "disk (pixels with dx^2 + dy^2 <= r^2) or disk_equal_area "
+                                                     "(disk with the area of the square, r_w = (2r + 1) / sqrt(pi)); "
+                                                     "disk shapes apply to windows of radius >= 8 px."},
                 "slrm_save_float": {"value": self.slrm_save_float,
                                     "description": "If 1 it saves float raster, if 0 it doesn't."},
                 "slrm_save_8bit": {"value": self.slrm_save_8bit,
@@ -531,6 +562,12 @@ class DefaultValues:
                                      "description": "Maximum size of the feature you want to detect in meters."},
                 "msrm_scaling_factor": {"value": self.msrm_scaling_factor,
                                         "description": "Scaling factor."},
+                "msrm_kernel_shape": {"value": self.msrm_kernel_shape,
+                                      "description": "Window shape of the mean filters: square (default), "
+                                                     "disk (pixels with dx^2 + dy^2 <= r^2) or disk_equal_area "
+                                                     "(disk with the area of the square, r_w = (2r + 1) / sqrt(pi)); "
+                                                     "one shape for all radii, a disk shape applies when the "
+                                                     "largest radius is >= 8 px."},
                 "msrm_save_float": {"value": self.msrm_save_float,
                                     "description": "If 1 it saves float raster, if 0 it doesn't."},
                 "msrm_save_8bit": {"value": self.msrm_save_8bit,
@@ -672,6 +709,11 @@ class DefaultValues:
                                                     " All have to be integers!"},
                 "mstp_lightness": {"value": self.mstp_lightness,
                                    "description": "Lightness factor to adjust MSTP visibility."},
+                "mstp_kernel_shape": {"value": self.mstp_kernel_shape,
+                                      "description": "Window shape of the deviation windows: square (default), "
+                                                     "disk (pixels with dx^2 + dy^2 <= r^2) or disk_equal_area "
+                                                     "(disk with the area of the square, r_w = (2r + 1) / sqrt(pi)); "
+                                                     "disk shapes apply to windows of radius >= 8 px."},
                 "mstp_save_float": {"value": self.mstp_save_float,
                                   "description": "If 1 it saves float raster, if 0 it doesn't."},
                 "mstp_save_8bit": {"value": self.mstp_save_8bit,
@@ -708,8 +750,13 @@ class DefaultValues:
         multiple_hillshading, hillshade_directions, simple_local_relief, trend_radius, sky_view_factor,
         svf_directions, search_radius, remove_noise, noise_removal (low/medium/high), anisotropic_svf,
         anisotropy_direction, anisotropy_level (low/high), positive_openness, negative_openness,
-        sky_illumination, sky_model, max_shadow_dist, local_dominance, min_radius, max_radius. Other names are
-        ignored; a line without exactly one ``=`` gives a warning.
+        sky_illumination, sky_model, max_shadow_dist, local_dominance, min_radius, max_radius, and (0.2.0) the
+        attribute names slrm_kernel_shape, msrm_kernel_shape, mstp_kernel_shape (value square, disk or
+        disk_equal_area, stored as text). Other names are ignored; a line without exactly one ``=`` gives a
+        warning.
+
+        The json keys ``slrm_kernel_shape``, ``msrm_kernel_shape`` and ``mstp_kernel_shape`` (0.2.0) are optional:
+        a file without them (every file written before 0.2.0) sets them to "square".
 
         Parameters
         ----------
@@ -829,6 +876,12 @@ class DefaultValues:
                         self.ld_min_rad = int(parameter_value)
                     elif parameter_name == "max_radius":
                         self.ld_max_rad = int(parameter_value)
+                    elif parameter_name == "slrm_kernel_shape":
+                        self.slrm_kernel_shape = parameter_value
+                    elif parameter_name == "msrm_kernel_shape":
+                        self.msrm_kernel_shape = parameter_value
+                    elif parameter_name == "mstp_kernel_shape":
+                        self.mstp_kernel_shape = parameter_value
                     # else:
                     #     warnings.warn("rvt.default.read_default_from_file: Line '{}' not used.".format(line))
                 else:
@@ -871,6 +924,7 @@ class DefaultValues:
             # Simple local relief model
             self.slrm_compute = int(default_data["Simple local relief model"]["slrm_compute"]["value"])
             self.slrm_rad_cell = int(default_data["Simple local relief model"]["slrm_rad_cell"]["value"])
+            self.slrm_kernel_shape = _json_kernel_shape(default_data["Simple local relief model"], "slrm_kernel_shape")
             self.slrm_save_float = int(default_data["Simple local relief model"]["slrm_save_float"]["value"])
             self.slrm_save_8bit = int(default_data["Simple local relief model"]["slrm_save_8bit"]["value"])
             self.slrm_bytscl = (str(default_data["Simple local relief model"]["slrm_bytscl"]["mode"]),
@@ -881,6 +935,7 @@ class DefaultValues:
             self.msrm_feature_min = float(default_data["Multi-scale relief model"]["msrm_feature_min"]["value"])
             self.msrm_feature_max = float(default_data["Multi-scale relief model"]["msrm_feature_max"]["value"])
             self.msrm_scaling_factor = int(default_data["Multi-scale relief model"]["msrm_scaling_factor"]["value"])
+            self.msrm_kernel_shape = _json_kernel_shape(default_data["Multi-scale relief model"], "msrm_kernel_shape")
             self.msrm_save_float = int(default_data["Multi-scale relief model"]["msrm_save_float"]["value"])
             self.msrm_save_8bit = int(default_data["Multi-scale relief model"]["msrm_save_8bit"]["value"])
             self.msrm_bytscl = (str(default_data["Multi-scale relief model"]["msrm_bytscl"]["mode"]),
@@ -952,6 +1007,8 @@ class DefaultValues:
                                      int(default_data["Multi-scale topographic position"]["mstp_broad_scale"]["max"]),
                                      int(default_data["Multi-scale topographic position"]["mstp_broad_scale"]["step"]))
             self.mstp_lightness = float(default_data["Multi-scale topographic position"]["mstp_lightness"]["value"])
+            self.mstp_kernel_shape = _json_kernel_shape(default_data["Multi-scale topographic position"],
+                                                        "mstp_kernel_shape")
             self.mstp_save_float = int(default_data["Multi-scale topographic position"]["mstp_save_float"]["value"])
             self.mstp_save_8bit = int(default_data["Multi-scale topographic position"]["mstp_save_8bit"]["value"])
             self.mstp_bytscl = (str(default_data["Multi-scale topographic position"]["mstp_bytscl"]["mode"]),
@@ -1137,7 +1194,8 @@ class DefaultValues:
         """
         Return the file name of the simple local relief model raster.
 
-        Pattern: ``<dem>_SLRM_R<slrm_rad_cell>[_8bit].tif``.
+        Pattern: ``<dem>_SLRM_R<slrm_rad_cell>[_disk|_diskea][_8bit].tif``; ``_disk`` for ``slrm_kernel_shape``
+        "disk", ``_diskea`` for "disk_equal_area", nothing for "square".
 
         Parameters
         ----------
@@ -1154,9 +1212,11 @@ class DefaultValues:
         """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
-            return "{}_SLRM_R{}_8bit.tif".format(dem_name, self.slrm_rad_cell)
+            return "{}_SLRM_R{}{}_8bit.tif".format(dem_name, self.slrm_rad_cell,
+                                                   _kernel_shape_suffix(self.slrm_kernel_shape))
         else:
-            return "{}_SLRM_R{}.tif".format(dem_name, self.slrm_rad_cell)
+            return "{}_SLRM_R{}{}.tif".format(dem_name, self.slrm_rad_cell,
+                                              _kernel_shape_suffix(self.slrm_kernel_shape))
 
     def get_slrm_path(self, dem_path, bit8=False):
         """
@@ -1499,8 +1559,9 @@ class DefaultValues:
         """
         Return the file name of the multi-scale relief model raster.
 
-        Pattern: ``<dem>_MSRM_F_M<msrm_feature_min>-<msrm_feature_max>_S<msrm_scaling_factor>[_8bit].tif``.
-        Numbers are formatted with ``str``, so an int 20 gives ``20`` and a float 20.0 gives ``20.0``.
+        Pattern: ``<dem>_MSRM_F_M<msrm_feature_min>-<msrm_feature_max>_S<msrm_scaling_factor>[<shape>][_8bit].tif``
+        with ``<shape>`` = ``_disk`` for ``msrm_kernel_shape`` "disk", ``_diskea`` for "disk_equal_area", nothing for
+        "square". Numbers are formatted with ``str``, so an int 20 gives ``20`` and a float 20.0 gives ``20.0``.
 
         Parameters
         ----------
@@ -1517,11 +1578,13 @@ class DefaultValues:
         """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
         if bit8:
-            return "{}_MSRM_F_M{}-{}_S{}_8bit.tif".format(dem_name, self.msrm_feature_min, self.msrm_feature_max,
-                                                          self.msrm_scaling_factor)
+            return "{}_MSRM_F_M{}-{}_S{}{}_8bit.tif".format(dem_name, self.msrm_feature_min, self.msrm_feature_max,
+                                                            self.msrm_scaling_factor,
+                                                            _kernel_shape_suffix(self.msrm_kernel_shape))
         else:
-            return "{}_MSRM_F_M{}-{}_S{}.tif".format(dem_name, self.msrm_feature_min, self.msrm_feature_max,
-                                                     self.msrm_scaling_factor)
+            return "{}_MSRM_F_M{}-{}_S{}{}.tif".format(dem_name, self.msrm_feature_min, self.msrm_feature_max,
+                                                       self.msrm_scaling_factor,
+                                                       _kernel_shape_suffix(self.msrm_kernel_shape))
 
     def get_msrm_path(self, dem_path, bit8=False):
         """
@@ -1547,9 +1610,10 @@ class DefaultValues:
         """
         Return the file name of the multi-scale topographic position raster.
 
-        Pattern: ``<dem>_MSTP_<local>_<meso>_<broad>_L<mstp_lightness>[_8bit].tif`` with ``<local>`` =
-        ``mstp_local_scale[1]``, ``<meso>`` = ``mstp_meso_scale[1]``, ``<broad>`` = ``mstp_broad_scale[1]``: only
-        the maximum radius (px) of each scale is part of the name.
+        Pattern: ``<dem>_MSTP_<local>_<meso>_<broad>_L<mstp_lightness>[_disk|_diskea][_8bit].tif`` with ``<local>``
+        = ``mstp_local_scale[1]``, ``<meso>`` = ``mstp_meso_scale[1]``, ``<broad>`` = ``mstp_broad_scale[1]``: only
+        the maximum radius (px) of each scale is part of the name. ``_disk`` for ``mstp_kernel_shape`` "disk",
+        ``_diskea`` for "disk_equal_area", nothing for "square".
 
         Parameters
         ----------
@@ -1566,12 +1630,13 @@ class DefaultValues:
         """
         dem_name = os.path.basename(dem_path).split(".")[0]  # base name without extension
 
-        mstp_file_name = "{}_MSTP_{}_{}_{}_L{}.tif".format(
+        mstp_file_name = "{}_MSTP_{}_{}_{}_L{}{}.tif".format(
             dem_name,
             self.mstp_local_scale[1],
             self.mstp_meso_scale[1],
             self.mstp_broad_scale[1],
-            self.mstp_lightness
+            self.mstp_lightness,
+            _kernel_shape_suffix(self.mstp_kernel_shape)
         )
 
         if bit8:
@@ -2443,7 +2508,7 @@ class DefaultValues:
         """
         Compute the simple local relief model with ``rvt.vis.slrm`` and the stored parameters.
 
-        Trend radius ``slrm_rad_cell`` (px), ``ve_factor``.
+        Trend radius ``slrm_rad_cell`` (px), ``ve_factor``, window shape ``slrm_kernel_shape``.
 
         Parameters
         ----------
@@ -2469,7 +2534,8 @@ class DefaultValues:
         float32, so a float ``dem_arr`` is modified in place when ``no_data`` is given; an integer
         ``dem_arr`` with ``no_data`` raises ValueError (known issue, see docs/KNOWN_ISSUES.md).
         """
-        slrm_arr = rvt.vis.slrm(dem=dem_arr, radius_cell=self.slrm_rad_cell, ve_factor=self.ve_factor, no_data=no_data)
+        slrm_arr = rvt.vis.slrm(dem=dem_arr, radius_cell=self.slrm_rad_cell, ve_factor=self.ve_factor, no_data=no_data,
+                                kernel_shape=self.slrm_kernel_shape)
         return slrm_arr
 
     def save_slrm(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
@@ -3350,7 +3416,7 @@ class DefaultValues:
         """
         msrm_arr = rvt.vis.msrm(dem=dem_arr, resolution=resolution, feature_min=self.msrm_feature_min,
                                 feature_max=self.msrm_feature_max, scaling_factor=self.msrm_scaling_factor,
-                                ve_factor=self.ve_factor, no_data=no_data)
+                                ve_factor=self.ve_factor, no_data=no_data, kernel_shape=self.msrm_kernel_shape)
         return msrm_arr
 
     def save_msrm(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):
@@ -3505,7 +3571,8 @@ class DefaultValues:
         other ``get_<vis>``. See docs/KNOWN_ISSUES.md.
         """
         mstp_arr = rvt.vis.mstp(dem=dem_arr, local_scale=self.mstp_local_scale, meso_scale=self.mstp_meso_scale,
-                                broad_scale=self.mstp_broad_scale, lightness=self.mstp_lightness, no_data=no_data)
+                                broad_scale=self.mstp_broad_scale, lightness=self.mstp_lightness, no_data=no_data,
+                                kernel_shape=self.mstp_kernel_shape)
         return mstp_arr
 
     def save_mstp(self, dem_path, custom_dir=None, save_float=None, save_8bit=None):

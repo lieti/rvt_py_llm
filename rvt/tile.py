@@ -45,6 +45,7 @@ from typing import Callable, Dict, Any, Optional, Union, Tuple
 import numpy as np
 from osgeo import gdal
 import rvt.default
+import rvt.vis
 
 
 def _create_blank_raster(
@@ -369,6 +370,17 @@ def _create_rvt_visualization_blank_raster(
             e_type=1)
 
 
+def _window_overlap(radius, kernel_shape):
+    """
+    Return the overlap in px that a window of ``radius`` px needs: floor(r_w) with r_w = (2r + 1) / sqrt(pi) for
+    "disk_equal_area" when the window is a disk (``radius >= rvt.vis.DISK_MIN_RADIUS_PX``), else ``radius`` (the
+    square and the "disk" window reach ``radius`` px).
+    """
+    if kernel_shape == "disk_equal_area" and radius >= rvt.vis.DISK_MIN_RADIUS_PX:
+        return int(np.floor(rvt.vis._window_radius(radius, kernel_shape)))
+    return radius
+
+
 def _get_rvt_visualization_overlap(
         rvt_visualization: "rvt.default.RVTVisualization", rvt_default: "rvt.default.DefaultValues"
 ) -> int:
@@ -383,13 +395,13 @@ def _get_rvt_visualization_overlap(
     ============================================  ==========================  =================================
     SLOPE, HILLSHADE, MULTI_HILLSHADE             1 px (3 x 3 stencil)        1 px
     SHADOW                                        1 px                        1 px (too small, see Notes)
-    SIMPLE_LOCAL_RELIEF_MODEL                     ``slrm_rad_cell`` px        20 px
+    SIMPLE_LOCAL_RELIEF_MODEL                     ``slrm_rad_cell`` px        20 px (see Notes for disks)
     SKY_VIEW_FACTOR, ANISOTROPIC_SKY_VIEW_FACTOR,
     POSITIVE_OPENNESS, NEGATIVE_OPENNESS          ``svf_r_max`` px            10 px
     SKY_ILLUMINATION                              ``sim_shadow_dist`` px      100 px
     LOCAL_DOMINANCE                               ``ld_max_rad`` px           20 px
     MULTI_SCALE_RELIEF_MODEL                      ``int(msrm_feature_max)``   20 (a value in m, see Notes)
-    MULTI_SCALE_TOPOGRAPHIC_POSITION              ``mstp_broad_scale[1]`` px  500 px
+    MULTI_SCALE_TOPOGRAPHIC_POSITION              ``mstp_broad_scale[1]`` px  500 px (see Notes for disks)
     ============================================  ==========================  =================================
 
     For example the default SVF overlap is r = 10 px = 2.5 m at 0.25 m/px, and the default MSTP overlap is
@@ -409,6 +421,11 @@ def _get_rvt_visualization_overlap(
 
     Notes
     -----
+    Disk windows (``slrm_kernel_shape``, ``mstp_kernel_shape``): "disk" has the radius of the square window, so the
+    overlap is the same; "disk_equal_area" reaches floor((2r + 1) / sqrt(pi)) px for a window of radius r >= 8 px
+    (``_window_overlap``), e.g. 564 px = 141 m at 0.25 m/px for the default MSTP broad scale (500 px = 125 m) and
+    23 px for the default SLRM radius 20 px. MULTI_SCALE_RELIEF_MODEL keeps its overlap (see the known issue).
+
     Known issue: MULTI_SCALE_RELIEF_MODEL uses ``msrm_feature_max``, which is a feature size in m, as a pixel
     count. The largest mean-filter radius of ``rvt.vis.msrm`` is ``n ** scaling_factor`` px with
     ``n = ceil(((feature_max - res) / (2 * res)) ** (1 / scaling_factor))``; for the defaults (20 m, factor 2)
@@ -433,7 +450,7 @@ def _get_rvt_visualization_overlap(
     elif rvt_visualization == rvt.default.RVTVisualization.MULTI_HILLSHADE:
         return 1
     elif rvt_visualization == rvt.default.RVTVisualization.SIMPLE_LOCAL_RELIEF_MODEL:
-        return int(rvt_default.slrm_rad_cell)
+        return _window_overlap(int(rvt_default.slrm_rad_cell), rvt_default.slrm_kernel_shape)
     elif rvt_visualization == rvt.default.RVTVisualization.SKY_VIEW_FACTOR:
         return int(rvt_default.svf_r_max)
     elif rvt_visualization == rvt.default.RVTVisualization.ANISOTROPIC_SKY_VIEW_FACTOR:
@@ -449,7 +466,7 @@ def _get_rvt_visualization_overlap(
     elif rvt_visualization == rvt.default.RVTVisualization.MULTI_SCALE_RELIEF_MODEL:
         return int(rvt_default.msrm_feature_max)
     elif rvt_visualization == rvt.default.RVTVisualization.MULTI_SCALE_TOPOGRAPHIC_POSITION:
-        return int(rvt_default.mstp_broad_scale[1])
+        return _window_overlap(int(rvt_default.mstp_broad_scale[1]), rvt_default.mstp_kernel_shape)
 
 
 def save_rvt_visualization_tile_by_tile(

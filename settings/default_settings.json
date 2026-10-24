@@ -101,6 +101,10 @@
                 "value": 20,
                 "description": "Radius for trend assessment in pixels."
             },
+            "slrm_kernel_shape": {
+                "value": "square",
+                "description": "Window shape of the trend filter: square (default), disk (pixels with dx^2 + dy^2 <= r^2) or disk_equal_area (disk with the area of the square, r_w = (2r + 1) / sqrt(pi)); disk shapes apply to windows of radius >= 8 px."
+            },
             "slrm_save_float": {
                 "value": 1,
                 "description": "If 1 it saves float raster, if 0 it doesn't."
@@ -132,6 +136,10 @@
             "msrm_scaling_factor": {
                 "value": 2,
                 "description": "Scaling factor."
+            },
+            "msrm_kernel_shape": {
+                "value": "square",
+                "description": "Window shape of the mean filters: square (default), disk (pixels with dx^2 + dy^2 <= r^2) or disk_equal_area (disk with the area of the square, r_w = (2r + 1) / sqrt(pi)); one shape for all radii, a disk shape applies when the largest radius is >= 8 px."
             },
             "msrm_save_float": {
                 "value": 1,
@@ -342,6 +350,10 @@
             "mstp_lightness": {
                 "value": 0.9,
                 "description": "Lightness factor to adjust MSTP visibility."
+            },
+            "mstp_kernel_shape": {
+                "value": "square",
+                "description": "Window shape of the deviation windows: square (default), disk (pixels with dx^2 + dy^2 <= r^2) or disk_equal_area (disk with the area of the square, r_w = (2r + 1) / sqrt(pi)); disk shapes apply to windows of radius >= 8 px."
             },
             "mstp_save_float": {
                 "value": 1,
