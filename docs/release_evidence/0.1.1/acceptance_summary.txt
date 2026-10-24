@@ -1,0 +1,86 @@
+﻿acc-1 a37ab44 0.1.1-X5
+pytest_accel       exit 1: 133 failed, 1061 passed, 3 warnings in 12.49s
+pytest_noaccel     exit 1: 133 failed, 1061 passed, 3 warnings in 12.76s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 0: CHECK dev PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261024-103852_31988.json
+check_dev_noaccel  exit 0: CHECK dev_noaccel PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261024-104133_11772.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261024-104336_23180.json
+affected           exit 0: AFFECTED e3mstp,e4mstp
+preview            exit 0: PREVIEW 0.1.1-X5 done: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\out\fix_preview\0.1.1-X5
+attrib_low         exit 0: hillshade/hillshade              bitwise True  >0DN   0.000 % >5DN   0.000 % p99.9   0.0 max     0
+acc-2 c72646c 0.1.1-X4
+pytest_accel       exit 1: 126 failed, 1068 passed, 3 warnings in 14.00s
+pytest_noaccel     exit 1: 126 failed, 1068 passed, 3 warnings in 12.25s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 0: CHECK dev PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261024-105309_7152.json
+check_dev_noaccel  exit 0: CHECK dev_noaccel PASS  (exact)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261024-105551_31428.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261024-105752_27324.json
+affected           exit 0: AFFECTED sky_illumination,e3mstp,e4mstp
+preview            exit 0: PREVIEW 0.1.1-X4 done: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\out\fix_preview\0.1.1-X4
+attrib_low         exit 0: hillshade/hillshade              bitwise True  >0DN   0.000 % >5DN   0.000 % p99.9   0.0 max     0
+acc-3 33a2bd5 0.1.1-X2
+pytest_accel       exit 1: 120 failed, 1074 passed, 3 warnings in 11.90s
+pytest_noaccel     exit 1: 120 failed, 1074 passed, 3 warnings in 13.21s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261024-110713_22212.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261024-110959_10752.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261024-111204_4676.json
+affected           exit 0: AFFECTED sky_illumination,e3mstp,e4mstp
+preview            exit 0: PREVIEW 0.1.1-X2 done: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\out\fix_preview\0.1.1-X2
+attrib_low         exit 0: hillshade/hillshade              bitwise True  >0DN   0.000 % >5DN   0.000 % p99.9   0.0 max     0
+acc-4 c2456b1 0.1.1-X1
+pytest_accel       exit 1: 52 failed, 1142 passed, 3 warnings in 12.08s
+pytest_noaccel     exit 1: 52 failed, 1142 passed, 3 warnings in 12.08s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261024-112118_7736.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261024-112408_18808.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261024-112609_10120.json
+affected           exit 0: AFFECTED sky_illumination,e3mstp,e4mstp
+preview            exit 0: PREVIEW 0.1.1-X1 done: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\out\fix_preview\0.1.1-X1
+attrib_low         exit 0: hillshade/hillshade              bitwise True  >0DN   0.000 % >5DN   0.000 % p99.9   0.0 max     0
+acc-5 d09e45d 0.1.1-X3
+pytest_accel       exit 0: 1194 passed, 3 warnings in 10.48s
+pytest_noaccel     exit 0: 1194 passed, 3 warnings in 10.74s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261024-113528_12924.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261024-113806_19244.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261024-114005_30452.json
+affected           exit 0: AFFECTED sky_illumination,e3mstp,e4mstp
+preview            exit 0: PREVIEW 0.1.1-X3 done: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\out\fix_preview\0.1.1-X3
+attrib_low         exit 0: hillshade/hillshade              bitwise True  >0DN   0.000 % >5DN   0.000 % p99.9   0.0 max     0
+acc-6 b40f39b 0.1.1-docs1
+pytest_accel       exit 0: 1194 passed, 3 warnings in 12.33s
+pytest_noaccel     exit 0: 1194 passed, 3 warnings in 12.02s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+acc-7 7161e4a 0.1.1-docs2
+pytest_accel       exit 0: 1194 passed, 3 warnings in 13.00s
+pytest_noaccel     exit 0: 1194 passed, 3 warnings in 13.06s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+acc-8 6d8b75f 0.1.1-meta1
+pytest_accel       exit 0: 1194 passed, 3 warnings in 14.59s
+pytest_noaccel     exit 0: 1194 passed, 3 warnings in 13.50s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+acc-9 4c591b4 0.1.1-meta2
+pytest_accel       exit 0: 1194 passed, 3 warnings in 17.80s
+pytest_noaccel     exit 0: 1194 passed, 3 warnings in 13.05s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+acc-10 5b5cbad 0.1.1-final-vs-X3
+pytest_accel       exit 0: 1194 passed, 3 warnings in 13.46s
+pytest_noaccel     exit 0: 1194 passed, 3 warnings in 12.56s
+astcheck           exit 0: ASTCHECK PASS
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261024-120634_19552.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261024-120916_3168.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261024-121122_16772.json
+affected           exit 0: AFFECTED sky_illumination,e3mstp,e4mstp
+preview            exit 0: PREVIEW 0.1.1-final-vs-X3 done: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\out\fix_preview\0.1.1-final-vs-X3
+attrib_low         exit 0: hillshade/hillshade              bitwise True  >0DN   0.000 % >5DN   0.000 % p99.9   0.0 max     0

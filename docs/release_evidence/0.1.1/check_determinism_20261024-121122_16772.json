@@ -1,0 +1,119 @@
+{
+  "check": "determinism",
+  "cand": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\wt\\acc-10",
+  "cand_hash": "d2c63ead54f8",
+  "cand_git": {
+    "commit": "5b5cbad4a01e3625f53b5bd6ebe6bd11a9f70c82",
+    "tree": "3e1ab8c3688ee09167f2e3dfbff3e97fe748b711",
+    "dirty": false,
+    "branch": "HEAD"
+  },
+  "ref": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\ref",
+  "ref_hash": "7c26b0d7ba47",
+  "targets": [
+    "local_dominance",
+    "svf_asvf_opns",
+    "neg_opns",
+    "sky_illumination",
+    "msrm",
+    "mstp",
+    "e3mstp",
+    "e4mstp",
+    "slrm",
+    "slope",
+    "hillshade"
+  ],
+  "tolerance": {
+    "_meaning": "Per output, in DN of the 8-bit visualization defined by `display`. 5 DN = 2 % of 255.",
+    "dn_p999_max": 5,
+    "dn_max_max": 13,
+    "dn_mean_max": 0.5,
+    "dn_local_mean_max": 1.5,
+    "local_window_px": 31,
+    "nan_mismatch_px_max": 0,
+    "require_same_shape": true,
+    "require_same_dtype": true,
+    "exact_float_abs": 1e-05
+  },
+  "all_exact": true,
+  "passed": true,
+  "rows": [
+    {
+      "target": "local_dominance",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "svf_asvf_opns",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "neg_opns",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "sky_illumination",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "msrm",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "mstp",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "e3mstp",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "e4mstp",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "slrm",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "slope",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    },
+    {
+      "target": "hillshade",
+      "data": "real_1024_high",
+      "passed": true,
+      "failed": [],
+      "max_abs_diff": {}
+    }
+  ]
+}

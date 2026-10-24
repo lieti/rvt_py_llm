@@ -1,0 +1,7 @@
+﻿round 1: A e3mstp 4.68 s, A e4mstp 6.12 s, B e3mstp 4.08 s, B e4mstp 6.30 s
+round 2: A e3mstp 4.54 s, A e4mstp 5.64 s, B e3mstp 4.19 s, B e4mstp 6.30 s
+round 3: A e3mstp 4.78 s, A e4mstp 7.13 s, B e3mstp 4.07 s, B e4mstp 7.76 s
+e3mstp: median A 4.68 s, B 4.08 s, ratio B/A 0.872 (limit 1.05)
+e4mstp: median A 6.12 s, B 6.30 s, ratio B/A 1.030 (limit 1.05)
+data eval/data/bench_final/real_2048_medium.npz, 1 thread, 3 rounds; A = wt/cmp-010, B = wt/acc-10
+TIMING OK

@@ -1,0 +1,16 @@
+﻿7aa8b034 ok          test: 0.1.1 tests first for the fixes X1-X5 and the composite recipes
+8f569ca9 needs-retire_check retire: frozen nodes that pin the v0.1.0 behaviour of X1-X5
+65ef5e84 needs-selftest tool: astcheck classes fix:, retire:, tool: with an extended self-test
+abe40a55 needs-selftest tool: mutants m24-m28 on the code of the 0.1.1 fixes X1-X4
+a37ab440 needs-tests+equiv_diff fix: X5 BlenderLayer.check_data rejects an opacity outside [0, 100]
+c72646cf needs-tests+equiv_diff fix: X4 color_relief_image_map works on a deep copy of default
+33a2bd5d needs-tests+equiv_diff fix: X2 e4mstp computes the slope layer in degrees
+c2456b11 needs-tests+equiv_diff fix: X1 overlay and soft light blend into a new array
+d09e45db needs-tests+equiv_diff fix: X3 clip blend operands to [0, 1]; scale_* as documented
+b40f39b3 ok          docs: blend_func docstrings describe the 0.1.1 fixes X1 and X3
+7161e4a3 ok          docs: blend docstrings describe the 0.1.1 fixes X1-X5
+6d8b75f2 ok          meta: KNOWN_ISSUES marks KI-19-21, 33, 34, 36, 45, 47 fixed in 0.1.1
+4c591b4f ok          meta: ARCHITECTURE describes the 0.1.1 blend and e4mstp behaviour
+5b5cbad4 ok          meta: CONVENTIONS 3.1 in-place effects after the 0.1.1 fixes
+81e50b1d ok          meta: freeze the 0.1.1 test set
+ASTCHECK PASS

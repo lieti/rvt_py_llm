@@ -1,0 +1,14 @@
+﻿A = rvt_py_llm@v0.1.0; B = rvt_py_llm; tests from c341ec8b
+[accel] A: 1089 passed, 3 warnings in 23.09s | B: 64 failed, 1025 passed, 3 warnings in 27.18s | allowed 14, propagated 12, unexplained 0
+[t1] A: 1089 passed, 3 warnings in 21.24s | B: 64 failed, 1025 passed, 3 warnings in 26.14s | allowed 14, propagated 12, unexplained 0
+[noaccel] A: 1089 passed, 3 warnings in 21.97s | B: 64 failed, 1025 passed, 3 warnings in 25.35s | allowed 14, propagated 12, unexplained 0
+differing functions, allowed: rvt.blend.BlenderCombination.render_all_images, rvt.blend.BlenderLayer.check_data, rvt.blend.color_relief_image_map, rvt.blend.e3mstp, rvt.blend.e4mstp, rvt.blend_func.blend_images, rvt.blend_func.blend_multi_dim_images, rvt.blend_func.blend_overlay, rvt.blend_func.blend_soft_light, rvt.blend_func.equation_blend, rvt.blend_func.render_images, rvt.blend_func.scale_0_to_1, rvt.blend_func.scale_strict_0_to_1, rvt.blend_func.scale_within_0_and_1
+differing functions, propagated: rvt.blend.BlenderCombination.create_layer, rvt.blend.BlenderLayer.__init__, rvt.blend_func.advanced_normalization, rvt.blend_func.apply_opacity, rvt.blend_func.blend_multiply, rvt.blend_func.blend_normal, rvt.blend_func.blend_screen, rvt.blend_func.gray_scale_to_color_ramp, rvt.blend_func.normalize_image, rvt.blend_func.normalize_lin, rvt.default.DefaultValues.__init__, rvt.vis.slope_aspect
+differing functions, UNEXPLAINED: -
+[self accel] 1194 passed, 3 warnings in 23.72s
+[self t1] 1194 passed, 3 warnings in 21.85s
+[self noaccel] 1194 passed, 3 warnings in 23.22s
+[self accel vs t1] differing nodes: 0
+[self accel vs noaccel] differing nodes: 0
+log: work/fix/logs/equiv_diff_rvt_py_llm_20261024-123206.log (33063 lines)
+EQUIV_DIFF OK
