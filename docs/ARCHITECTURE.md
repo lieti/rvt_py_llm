@@ -10,7 +10,12 @@ without breaking it. Units and conventions are in [CONVENTIONS.md](CONVENTIONS.m
 qualified name (`vis.sky_illumination` is `rvt.vis.sky_illumination`, `DefaultValues.get_mstp` is
 `rvt.default.DefaultValues.get_mstp`); `vis.py:2048` means `rvt/vis.py` line 2048 at that commit. Lines given for a
 function are the line of its `def`; lines given for a call are the line of the call. Every name below exists at
-that commit.
+that commit, except the names of the 0.2.0 disk windows.
+
+Two exceptions, marked where they occur: the SLRM, MSRM and MSTP entries of section 2, which include the disk
+windows of 0.2.0 ([DISK_WINDOWS.md](DISK_WINDOWS.md)), give lines at commit `b04fee4` (branch `feat/0.2.0`); the
+`blend.color_relief_image_map`, `blend.e3mstp` and `blend.e4mstp` entries give lines at tag `v0.1.1` (0.2.0 does
+not change `rvt/blend.py` code; at `234b156` the three functions start at `blend.py:1876`, `:1968`, `:2040`).
 
 History of the private names: three behaviour-neutral refactor commits of 0.1.0 renamed or merged private helpers
 of tag `start` (`8413d3e`). Older documents, commit messages and the `start` line numbers in KNOWN_ISSUES.md use
@@ -34,13 +39,14 @@ module `rvt._accel`.
 | `rvt/default.py` | `DefaultValues`: the default parameters of every visualization, settings files (json, legacy txt), `get_<vis>` (compute from an array), `save_<vis>` (read a GeoTIFF, compute, write GeoTIFFs), 8-bit stretch (`float_to_8bit`), log file; GDAL raster helpers; `RVTVisualization` enum | `rvt.vis`, `rvt.blend_func`, `rvt.tile`, osgeo.gdal, numpy | `DefaultValues`, `RVTVisualization`, `get_raster_arr`, `get_raster_size`, `save_raster` |
 | `rvt/blend_func.py` | per-array blending operations: normalization, the blend modes, opacity, color ramps | numpy, matplotlib, `rvt._blocking` | `normalize_image`, `blend_images`, `render_images`, `gray_scale_to_color_ramp`, ... |
 | `rvt/blend.py` | the layer model (`BlenderLayer`, `BlenderCombination`, `BlenderCombinations`), JSON combination and terrain files, the composite recipes `color_relief_image_map`, `e3mstp`, `e4mstp` | `rvt.default`, `rvt.vis`, `rvt.blend_func` | `BlenderCombination.render_all_images`, `e3mstp`, `e4mstp`, `color_relief_image_map`, `TerrainSettings`, ... |
-| `rvt/tile.py` | tile-by-tile processing of rasters larger than memory, with an overlap per visualization | `rvt.default`, osgeo.gdal, numpy | `save_visualization_tile_by_tile`, `save_rvt_visualization_tile_by_tile` |
+| `rvt/tile.py` | tile-by-tile processing of rasters larger than memory, with an overlap per visualization | `rvt.default`, `rvt.vis` (0.2.0: radius of the equal-area disk for the overlap), osgeo.gdal, numpy | `save_visualization_tile_by_tile`, `save_rvt_visualization_tile_by_tile` |
 | `rvt/_accel.py` | private: optional numba kernels with a numpy fallback, the `RVT_NO_ACCEL` switch and thread-count control | `threading`, `os`; numba lazily | none (private) |
 | `rvt/_blocking.py` | private, new in 0.1.0 (69525a0): `BLOCK_ELEMS = 32768`, the block size of every row-blocked loop, and why | none | none (private) |
 
-Dependency direction: `vis` depends only on numpy, scipy, `_accel` and `_blocking`; `blend_func` only on numpy,
-matplotlib and `_blocking`; `default` on `vis`, `blend_func`, `tile`; `tile` on `default` (imported at module
-level, `rvt/tile.py`); `blend` on `default`, `vis`, `blend_func`. Nothing imports `blend`.
+Dependency direction: `vis` depends only on numpy, scipy, `_accel` and `_blocking` (`scipy.fft` is imported inside
+the disk path only, `vis._disk_window_sums`); `blend_func` only on numpy, matplotlib and `_blocking`; `default` on
+`vis`, `blend_func`, `tile`; `tile` on `default` and, since 0.2.0, `vis` (imported at module level,
+`rvt/tile.py`); `blend` on `default`, `vis`, `blend_func`. Nothing imports `blend`.
 
 The settings files used by `rvt.default` and `rvt.blend` live in `settings/` at the repository root, not inside the
 package.
@@ -60,14 +66,25 @@ DefaultValues.get_hillshade             default.py:2077
   vis.hillshade                         vis.py:350
     vis.slope_aspect                    vis.py:442 (call)
 
-DefaultValues.get_slrm                  default.py:2442
-  vis.slrm                              vis.py:667
-    vis.mean_filter                     vis.py:576     integral image, box sums by slices (K-06)
-      vis._box_sum                      vis.py:557     box sum of a summed-area table on the output window
+(SLRM and MSRM: lines at b04fee4, 0.2.0 disk windows)
+DefaultValues.get_slrm                  default.py:2507   passes slrm_rad_cell, ve_factor, slrm_kernel_shape
+  vis.slrm                              vis.py:866     checks kernel_shape; mean_filter call at vis.py:929
+    vis.mean_filter                     vis.py:755     integral image, box sums by slices (K-06)
+      vis._disk_path                    vis.py:602     validation (_check_kernel_shape, vis.py:593) and the
+                                                       dispatch: disk iff shape != square and r >= 8 px
+      vis._box_sum                      vis.py:574     box sum of a summed-area table on the output window
+      vis._mean_filter_disk             vis.py:731     disk path (call at vis.py:815): edge pad floor(r_w),
+                                                       s1 / count + zbar, float32
+        vis._window_radius              vis.py:618     r_w = r or (2r + 1) / sqrt(pi)
+        vis._disk_window_sums           vis.py:645     FFT sums of z - zbar, (z - zbar)^2, valid mask
+          vis._window_footprint         vis.py:630     dx^2 + dy^2 <= r_w^2 (or the square)
 
-DefaultValues.get_msrm                  default.py:3318
-  vis.msrm                              vis.py:2542
-    vis.mean_filter (per scale)         vis.py:2631 (call)
+DefaultValues.get_msrm                  default.py:3384   passes msrm_kernel_shape
+  vis.msrm                              vis.py:2787
+    vis.mean_filter (per scale)         vis.py:2892 (call)  square path
+    vis._msrm_disk                      vis.py:2760    disk path when the largest radius >= 8 px (call at
+                                                       vis.py:2864; radii from vis._msrm_radii, vis.py:2747)
+      vis._mean_filter_disk             vis.py:2778 (call)  one set of spectra for all radii
 
 DefaultValues.get_sky_view_factor       default.py:2589   (target svf_asvf_opns: svf, asvf, opns)
 DefaultValues.get_neg_opns              default.py:2844   (same path on -1 * dem)
@@ -100,36 +117,44 @@ DefaultValues.get_sky_illumination      default.py:3001
     vis._sky_illum_resample             vis.py:2008    linear spline without refit (K-05b), call at vis.py:2347
     vis._accumulate                     vis.py:838     directional sums (vis.py:2413-2434)
 
-DefaultValues.get_mstp                  default.py:3473
-  vis.mstp                              vis.py:2967    three scales: max_elevation_deviation called three times
-                                                       (vis.py:3044, :3046, :3048)
-    vis.max_elevation_deviation         vis.py:2816    symmetric pad; float64 summed-area tables of the DEM and
-                                                       of its squares, accumulated in place (vis.py:2892-2898)
-      vis.integral_image                vis.py:2642    only for the pixel-count table when the DEM has NaN
-                                                       (call at vis.py:2884)
-      vis._mstp_dev_max_kernel          vis.py:2758    [numba] (K-08b), call at vis.py:2915
-      vis._box_sum                      vis.py:557     numpy path (K-01), calls at vis.py:2933-2937
-  (vis.topographic_dev                  vis.py:2682    public, kept, not called inside rvt: the reference
+(MSTP: lines at b04fee4, 0.2.0 disk windows)
+DefaultValues.get_mstp                  default.py:3539   passes mstp_kernel_shape (call at default.py:3573)
+  vis.mstp                              vis.py:3301    three scales: max_elevation_deviation called three times
+                                                       (vis.py:3385, :3387, :3389), each with kernel_shape
+    vis.max_elevation_deviation         vis.py:3127    symmetric pad; float64 summed-area tables of the DEM and
+                                                       of its squares, accumulated in place (vis.py:3226-3232)
+      vis.integral_image                vis.py:2903    only for the pixel-count table when the DEM has NaN
+                                                       (call at vis.py:3218)
+      vis._mstp_dev_max_kernel          vis.py:3019    [numba] (K-08b), call at vis.py:3249
+      vis._box_sum                      vis.py:574     numpy path (K-01), calls at vis.py:3267-3271
+      vis._max_elevation_deviation_disk vis.py:3077    disk path (call at vis.py:3199) when the largest radius
+                                                       is >= 8 px: one set of spectra for the call, disk from
+                                                       8 px, square below; DEV_max with the square tie rule
+        vis._disk_window_sums           vis.py:645     as above, with the sums of squares
+  (vis.topographic_dev                  vis.py:2943    public, kept, not called inside rvt: the reference
                                                        formula that the two paths above evaluate on the
                                                        output window; KNOWN_ISSUES KI-04)
 
-blend.e3mstp                            blend.py:1968
-  DefaultValues.get_slrm                blend.py:2018 (call)
-  blend.color_relief_image_map          blend.py:2019 (call) -> def blend.py:1876
-    DefaultValues.get_sky_view_factor   blend.py:1937 (call; opns of dem), blend.py:1940 (call; opns of -dem)
-    vis.slope_aspect                    blend.py:1945 (call)
-    BlenderCombination.render_all_images blend.py:1963 (call)
-  DefaultValues.get_mstp                blend.py:2021 (call)
-  BlenderCombination.render_all_images  blend.py:2036 (call)
+(e3MSTP, e4MSTP, CRIM: lines at v0.1.1, unchanged in 0.2.0; the window shapes come from DefaultValues
+slrm_kernel_shape and mstp_kernel_shape through get_slrm and get_mstp)
+blend.e3mstp                            blend.py:1980
+  DefaultValues.get_slrm                blend.py:2029 (call)
+  blend.color_relief_image_map          blend.py:2030 (call) -> def blend.py:1888; works on a deep copy of
+                                                       default (blend.py:1943)
+    DefaultValues.get_sky_view_factor   blend.py:1949 (call; opns of dem), blend.py:1952 (call; opns of -dem)
+    vis.slope_aspect                    blend.py:1957 (call)
+    BlenderCombination.render_all_images blend.py:1975 (call)
+  DefaultValues.get_mstp                blend.py:2032 (call)
+  BlenderCombination.render_all_images  blend.py:2047 (call)
 
-blend.e4mstp                            blend.py:2040
-  DefaultValues.get_local_dominance     blend.py:2102 (call)
-  DefaultValues.get_sky_view_factor     blend.py:2103 (call; svf + opns, r = 10 px)
-  DefaultValues.get_neg_opns            blend.py:2106 (call)
-  DefaultValues.get_sky_view_factor     blend.py:2112 (call; flat-terrain svf, r = int(10 / resolution) px = 10 m)
-  DefaultValues.get_mstp                blend.py:2115 (call)
-  vis.slope_aspect                      blend.py:2160 (call; degrees since 0.1.1, radians before)
-  BlenderCombination.render_all_images  blend.py:2131, 2152, 2192 (calls; three combinations)
+blend.e4mstp                            blend.py:2051
+  DefaultValues.get_local_dominance     blend.py:2113 (call)
+  DefaultValues.get_sky_view_factor     blend.py:2114 (call; svf + opns, r = 10 px)
+  DefaultValues.get_neg_opns            blend.py:2117 (call)
+  DefaultValues.get_sky_view_factor     blend.py:2123 (call; flat-terrain svf, r = int(10 / resolution) px = 10 m)
+  DefaultValues.get_mstp                blend.py:2126 (call)
+  vis.slope_aspect                      blend.py:2171 (call; degrees since 0.1.1, radians before)
+  BlenderCombination.render_all_images  blend.py:2142, 2163, 2204 (calls; three combinations)
 
 BlenderCombination.render_all_images    blend.py:616
   layer loop, bottom layer first        blend.py:740
@@ -145,7 +170,13 @@ BlenderCombination.render_all_images    blend.py:616
 `vis.topographic_dev` (`vis.py:2682`) is public and kept with its upstream behaviour, but no function in `rvt`
 calls it since K-01: `max_elevation_deviation` evaluates the same float64 expressions only on the output window,
 with `_box_sum` (numpy) or `_mstp_dev_max_kernel` (numba). A change to `topographic_dev` therefore does not change
-MSTP; a change to the MSTP numerics has to be made in `max_elevation_deviation` and its kernel.
+MSTP; a change to the MSTP numerics has to be made in `max_elevation_deviation` and its kernel, and for the disk
+windows in `_max_elevation_deviation_disk`.
+
+The disk path of 0.2.0 (`kernel_shape="disk"` or `"disk_equal_area"`) is new code next to the square path: each
+public window function validates `kernel_shape` after its existing checks and dispatches in one statement
+(`_disk_path`); the square bodies are the 0.1.1 code, so the default stays bitwise identical. The disk path has no
+numba kernel and no threads (`scipy.fft` with `workers=1`).
 
 Where the time goes after the optimization (1024² medium window, 1 thread, sum about 3.9 s over the eleven entry
 points; optimization report §4): sky illumination 1.33 s (numpy arctan/cos/sin/power per direction 57 %, numba search
@@ -300,17 +331,18 @@ The suite has 1194 tests and runs in about 12 s on one process; every file liste
 
 | you need to change | look at | keep in mind |
 |---|---|---|
-| a default parameter | `DefaultValues.__init__` (`default.py:317`), `DefaultValues.save_default_to_file` (`default.py:413`), `DefaultValues.read_default_from_file` (`default.py:697`), `settings/default_settings.json` | the API snapshot test fails on purpose; file names encode parameters (`get_*_file_name`) |
+| a default parameter | `DefaultValues.__init__` (`default.py:317`), `DefaultValues.save_default_to_file` (`default.py:413`), `DefaultValues.read_default_from_file` (`default.py:697`), `settings/default_settings.json` | the API snapshot test fails on purpose; file names encode parameters (`get_*_file_name`); the json reader of 0.2.0 treats the `*_kernel_shape` keys as optional (`default._json_kernel_shape`), every older key is still required |
+| the window shape or the disk path (0.2.0) | `vis.DISK_MIN_RADIUS_PX`, `vis._disk_path`, `vis._window_radius`, `vis._window_footprint`, `vis._disk_window_sums`, `vis._mean_filter_disk`, `vis._msrm_disk`, `vis._max_elevation_deviation_disk` (lines in section 2); `default._kernel_shape_suffix` (file names); `tile._window_overlap` (overlap); [DISK_WINDOWS.md](DISK_WINDOWS.md) | keep the square bodies untouched (dispatch only); `tests/test_disk_*.py` hold the brute-force reference; mutants m29-m33 of `tools/proof/mutants.py` match the private names and expressions of this path by regular expression |
 | a visualization algorithm | the function in `rvt/vis.py`, its private helpers and kernel (section 2) | if it has an accelerated path, the numpy reference path, the sliced path and the kernel must stay bitwise equal; the per-function equivalence test compares them |
 | a numba kernel | the kernel docstring (equivalence contract), its call site and guard (section 4, "Where the numba / numpy decision is taken"), `rvt/_accel.py` | no fastmath, no parallel, no on-disk cache; keep the guard that sends unsupported inputs to numpy; run with and without `RVT_NO_ACCEL=1` |
 | the numba switch or thread count | `_accel.enabled` (`_accel.py:49`), `_accel.num_threads` (`_accel.py:86`), `_accel.call` (`_accel.py:174`) | `RVT_NO_ACCEL` values and `RVT_NUM_THREADS` order are tested in `tests/test_accel.py` and `tests/test_char_accel.py` |
 | the block size of the blocked loops | `BLOCK_ELEMS` (`_blocking.py:19`) | speed only; sky illumination also rounds its block to a multiple of 16 rows (`vis._sky_illum_block_rows`, `vis.py:1835`) |
 | a blend mode | the mode's function in `rvt/blend_func.py` (table "Blend modes" in section 2) and, for overlay and soft light, its `_blend_*_ref` function | blocked and reference paths must give the same bits and the same in-place effects and warnings |
 | a normalization | `blend_func.normalize_image` (`blend_func.py:1504`), `advanced_normalization` (`:420`), `normalize_lin` (`:278`), `normalize_perc` (`:387`) | `normalize_lin` has a blocked path (`_row_slices`); the percent stretch is per image |
-| a composite recipe (CRIM, e3MSTP, e4MSTP) | `blend.color_relief_image_map` (`blend.py:1876`), `blend.e3mstp` (`blend.py:1968`), `blend.e4mstp` (`blend.py:2040`) | `tests/test_char_e3e4_recipe.py` rebuilds the recipes layer by layer; CRIM works on a deep copy of `default` (0.1.1) |
+| a composite recipe (CRIM, e3MSTP, e4MSTP) | `blend.color_relief_image_map` (`blend.py:1888` at v0.1.1), `blend.e3mstp` (`blend.py:1980` at v0.1.1), `blend.e4mstp` (`blend.py:2051` at v0.1.1) | `tests/test_char_e3e4_recipe.py` rebuilds the recipes layer by layer; CRIM works on a deep copy of `default` (0.1.1) |
 | layer rendering | `BlenderCombination.render_all_images` (`blend.py:616`) | range tests are reused between layers (K-11); operands outside [0, 1] are clipped (0.1.1); the background range test is recomputed after overlay and soft light (conservative since 0.1.1, when they stopped writing into the background) |
 | reading or writing rasters | `default.get_raster_arr`, `default.save_raster` (`default.py:4125`, `:4194`), `rvt/tile.py` | GDAL only inside `rvt.default` and `rvt.tile` |
-| tiling overlaps | `tile._get_rvt_visualization_overlap` (`tile.py:372`) | measured minimum buffers are in KNOWN_ISSUES, section "Tiling facts" |
+| tiling overlaps | `tile._get_rvt_visualization_overlap` (`tile.py:372`; `tile.py:384` at b04fee4, with `tile._window_overlap` at `:373`) | measured minimum buffers are in KNOWN_ISSUES, section "Tiling facts"; `disk_equal_area` windows of SLRM and MSTP reach floor((2r + 1) / sqrt(pi)) px (0.2.0) |
 | an exception message | the `raise` line | only in a `msg:` commit; exception types must not change |
 | behaviour that looks wrong | KNOWN_ISSUES.md and the docstring Notes | do not fix it in this repository; document it and pin it with a test |
 
@@ -321,6 +353,10 @@ The suite has 1194 tests and runs in about 12 s on one process; every file liste
   the absolute elevation: the same terrain shifted by +17.3 m changed the 8-bit e3MSTP/e4MSTP output by up to
   207-210 DN (99.9th percentile 150 DN) on a 512 x 512 px synthetic DEM at 300 m, and by at most 1 DN after the fix
   (measurement stated in the message of commit 03702f4).
+- Mean removal on the disk path (0.2.0): the FFT window sums are taken of `z - zbar` and `(z - zbar)^2`, with
+  `zbar` the float64 mean of the tile, so the FFT rounding scales with the relief and not with the elevation
+  (tests: DEV at +2 500 m within 1e-7 of the result at 0 m). Pixel counts from the FFT of the valid mask are
+  rounded to integers (`np.rint`).
 - `dem * 0` as the start of accumulators keeps NaN and -0.0 where upstream had them.
 - Ties in `max` and the sign of zero: kernels reproduce numpy's NaN rule of `fmax`/`maximum` explicitly; the
   sky illumination kernel also reproduces numpy 2.4's choice of operand on +0/-0 ties. No output depends on the sign
