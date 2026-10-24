@@ -277,7 +277,7 @@ class BlenderLayer:
                     self.blend_mode.lower() != "overlay" and self.blend_mode.lower() != "luminosity" and \
                     self.blend_mode.lower() != "screen" and self.blend_mode.lower() != "soft_light":
                 raise Exception("rvt.blend.BlenderLayer.check_data: blend_mode incorrect!")
-            if 0 > self.opacity > 100:
+            if not 0 <= self.opacity <= 100:
                 raise Exception("rvt.blend.BlenderLayer.check_data: opacity incorrect [0-100]!")
             if self.colormap is None and (self.min_colormap_cut is not None or self.max_colormap_cut is not None):
                 raise Exception("rvt.blend.BlenderLayer.check_data: colormap not defined but min_colormap_cut or "
