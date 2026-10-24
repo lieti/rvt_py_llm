@@ -2159,7 +2159,8 @@ def e4mstp(dem, resolution, default: rvt.default.DefaultValues=rvt.default.Defau
     comb_opns_ld_arr = comb_opns_ld_arr.astype("float32")
 
     # 4) Coloured slope
-    slope_arr = rvt.vis.slope_aspect(dem=dem, resolution_x=resolution, resolution_y=resolution)["slope"]
+    slope_arr = rvt.vis.slope_aspect(dem=dem, resolution_x=resolution, resolution_y=resolution,
+                                     output_units="degree")["slope"]
     # ------------------------------------------------------------------------------------------------------------------
 
     # Prepare layers for blending
