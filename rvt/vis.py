@@ -851,7 +851,8 @@ def mean_filter(dem, kernel_radius, kernel_shape="square"):
 def slrm(dem,
          radius_cell=20,
          ve_factor=1,
-         no_data=None
+         no_data=None,
+         kernel_shape="square"
          ):
     """
     Compute the simple local relief model (SLRM): the DEM minus its mean-filtered trend.
@@ -870,6 +871,10 @@ def slrm(dem,
     no_data : int or float or None
         Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
         Default None.
+    kernel_shape : str
+        Window of the trend filter, passed to ``mean_filter``: "square" (default), "disk" (dx^2 + dy^2 <= r^2) or
+        "disk_equal_area" (r_w = (2r + 1) / sqrt(pi), e.g. 23.13 px = 5.78 m at 0.25 m/px for r = 20 px). The
+        radii of SLRM (10..50 px) are all >= ``DISK_MIN_RADIUS_PX``, so a disk shape always applies.
 
     Returns
     -------
@@ -879,8 +884,8 @@ def slrm(dem,
     Raises
     ------
     Exception
-        If ``dem`` is not 2D, ``radius_cell`` is outside [10, 50], or ``ve_factor`` is outside
-        [-10000, 10000].
+        If ``dem`` is not 2D, ``radius_cell`` is outside [10, 50], ``ve_factor`` is outside
+        [-10000, 10000], or ``kernel_shape`` is not "square", "disk" or "disk_equal_area".
 
     Notes
     -----
@@ -896,6 +901,7 @@ def slrm(dem,
         raise Exception("rvt.vis.slrm: Radius for trend assessment needs to be in interval 10-50 pixels!")
     if not (10000 >= ve_factor >= -10000):
         raise Exception("rvt.vis.slrm: ve_factor must be between -10000 and 10000!")
+    _check_kernel_shape(kernel_shape, "rvt.vis.slrm", Exception)
 
     # change no_data to np.nan
     if no_data is not None:
@@ -905,7 +911,7 @@ def slrm(dem,
     dem = dem * ve_factor
 
     # mean filter
-    dem_mean_filter = mean_filter(dem=dem, kernel_radius=radius_cell)
+    dem_mean_filter = mean_filter(dem=dem, kernel_radius=radius_cell, kernel_shape=kernel_shape)
     slrm_out = dem - dem_mean_filter
 
     return slrm_out
@@ -2723,13 +2729,54 @@ def shadow_horizon(dem,
                             no_data=no_data)
 
 
+def _msrm_radii(resolution, feature_min, feature_max, scaling_factor):
+    """
+    Return the mean-filter radii (px) of ``msrm``, ``k ** scaling_factor`` for k = i .. n, with i and n computed
+    by the same expressions as in ``msrm`` (feature sizes in m, ``feature_min`` raised to ``resolution``).
+    """
+    if feature_min < resolution:
+        feature_min = resolution
+    scaling_factor = int(scaling_factor)
+    i = int(np.floor(((feature_min - resolution) / (2 * resolution)) ** (1 / scaling_factor)))
+    n = int(np.ceil(((feature_max - resolution) / (2 * resolution)) ** (1 / scaling_factor)))
+    return [ndx ** scaling_factor for ndx in range(i, n + 1, 1)]
+
+
+def _msrm_disk(dem, radii, ve_factor, no_data, kernel_shape):
+    """
+    Return ``msrm`` with disk windows at every radius in ``radii`` (px), float64 (H, W).
+
+    The steps of ``msrm`` (no_data -> NaN in the caller's array, float32, ``ve_factor``; the mean of the float32
+    differences of consecutive surfaces, summed in float64), with the surfaces of ``_mean_filter_disk``: one set of
+    FFT spectra of the DEM for all radii. With one radius the sum is divided by 0 (NaN), as in ``msrm``.
+    """
+    # change no_data to np.nan
+    if no_data is not None:
+        dem[dem == no_data] = np.nan
+
+    dem = dem.astype(np.float32)
+    dem = dem * ve_factor
+
+    relief_models_sum = np.zeros(dem.shape)  # sum of the differences of consecutive surfaces
+    nr_relief_models = 0
+    last_lpf_surface = None
+    for lpf_surface in _mean_filter_disk(dem, radii, kernel_shape):
+        if last_lpf_surface is not None:
+            relief_models_sum += (last_lpf_surface - lpf_surface)
+            nr_relief_models += 1
+        last_lpf_surface = lpf_surface
+
+    return relief_models_sum / nr_relief_models
+
+
 def msrm(dem,
          resolution,
          feature_min,
          feature_max,
          scaling_factor,
          ve_factor=1,
-         no_data=None
+         no_data=None,
+         kernel_shape="square"
          ):
     """
     Compute the multi-scale relief model (MSRM).
@@ -2758,6 +2805,12 @@ def msrm(dem,
     no_data : int or float or None
         Pixels equal to it are set to NaN **in the caller's array**, before the float32 conversion.
         Default None.
+    kernel_shape : str
+        Window of the mean filters: "square" (default), "disk" or "disk_equal_area" (see ``mean_filter``). One
+        shape for all radii, because consecutive surfaces are subtracted: when the largest radius k^s is >= 8 px
+        (``DISK_MIN_RADIUS_PX``) every surface uses the disk, also those below 8 px; otherwise the square code runs
+        unchanged (bitwise the default result). With the defaults of ``DefaultValues`` (0-20 m, factor 2) at
+        0.25 m/px the radii are 0, 1, 4, ..., 49 px, so a disk shape applies to all of them.
 
     Returns
     -------
@@ -2767,7 +2820,8 @@ def msrm(dem,
     Raises
     ------
     Exception
-        If ``ve_factor`` is outside [-10000, 10000] or ``resolution`` is negative.
+        If ``ve_factor`` is outside [-10000, 10000], ``resolution`` is negative, or ``kernel_shape`` is not
+        "square", "disk" or "disk_equal_area".
 
     Notes
     -----
@@ -2778,6 +2832,10 @@ def msrm(dem,
     or any equal pair that gives an integer power) there is no
     difference to average and the sum is divided by 0: every pixel is NaN (RuntimeWarning).
 
+    Disk windows (``_msrm_disk``): the surfaces come from ``_mean_filter_disk``, which computes the FFT spectra of
+    the DEM once for all radii (edge padding by floor(r_w) of the largest radius). The result is therefore not
+    bitwise the composition of ``mean_filter`` calls, but within float32 rounding of it.
+
     See Also
     --------
     mean_filter, slrm
@@ -2786,6 +2844,10 @@ def msrm(dem,
         raise Exception("rvt.vis.msrm: ve_factor must be between -10000 and 10000!")
     if resolution < 0:
         raise Exception("rvt.vis.msrm: resolution must be a positive number!")
+    if _disk_path(kernel_shape, lambda: _msrm_radii(resolution, feature_min, feature_max, scaling_factor),
+                  "rvt.vis.msrm", Exception):
+        return _msrm_disk(dem, _msrm_radii(resolution, feature_min, feature_max, scaling_factor), ve_factor,
+                          no_data, kernel_shape)
 
     # change no_data to np.nan
     if no_data is not None:
