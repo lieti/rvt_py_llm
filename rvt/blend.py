@@ -51,15 +51,18 @@ Optimized path
 --------------
 render_all_images evaluates the range test "any value outside [0, 1]" (``rvt.blend_func._outside_0_1``) once per
 array and passes the result on instead of recomputing it on the same, unchanged array (commit 8e81581, "K-11").
-The test is a pure function of the array values, so reusing it is exact; where the array may have changed (overlay
-and soft_light write into the background, a rescaled operand) the test is recomputed. The blend and opacity kernels
-themselves are evaluated in row blocks in `rvt.blend_func`; outputs are bitwise identical to the original code.
+The test is a pure function of the array values, so reusing it is exact; where the array may have changed (a
+clipped operand) the test is recomputed, and it is also recomputed for overlay and soft_light layers (a conservative
+choice kept from 0.1.0, when they wrote into the background). The blend and opacity kernels themselves are evaluated
+in row blocks in `rvt.blend_func`; outputs are bitwise identical to the original code.
 
 Known issues
 ------------
-Latent bugs (unused opacity of the bottom layer, no visible effect of the opacity of overlay / soft_light layers,
-slope units of e4mstp, copy-paste errors in TerrainSettings.read_from_json, ...) are described in the Notes of the
-affected functions and listed in docs/KNOWN_ISSUES.md; the behaviour is kept as it is.
+Latent bugs (unused opacity of the bottom layer, copy-paste errors in TerrainSettings.read_from_json, ...) are
+described in the Notes of the affected functions and listed in docs/KNOWN_ISSUES.md; the behaviour is kept as it is.
+The defects fixed in 0.1.1 (the opacity of overlay / soft_light layers, the rescale of operands outside [0, 1], the
+opacity check of BlenderLayer, the slope unit of e4mstp, the DefaultValues changed by color_relief_image_map) are
+described in docs/FIXES_0_1_1.md.
 
 Credits:
     Žiga Kokalj (ziga.kokalj@zrc-sazu.si)
@@ -237,11 +240,12 @@ class BlenderLayer:
         ------
         Exception
             If the normalization is not "value" / "perc" (case-insensitive); for "perc" if ``min + max >= 100``;
-            for "value" if ``min > max``; if the blend mode is unknown; if a colormap cut is set without a
-            colormap; if neither ``image`` nor ``image_path`` is set and ``vis`` is not one of: slope gradient,
-            hillshade, shadow, multiple directions hillshade, simple local relief model, sky-view factor,
-            anisotropic sky-view factor, openness - positive, openness - negative, sky illumination, local
-            dominance, multi-scale relief model, multi-scale topographic position (case-insensitive).
+            for "value" if ``min > max``; if the blend mode is unknown; if the opacity is not in [0, 100] (NaN
+            included); if a colormap cut is set without a colormap; if neither ``image`` nor ``image_path`` is set
+            and ``vis`` is not one of: slope gradient, hillshade, shadow, multiple directions hillshade, simple
+            local relief model, sky-view factor, anisotropic sky-view factor, openness - positive, openness -
+            negative, sky illumination, local dominance, multi-scale relief model, multi-scale topographic position
+            (case-insensitive).
         AttributeError
             If ``normalization`` or ``blend_mode`` is None while ``vis`` is set.
         TypeError
@@ -249,9 +253,11 @@ class BlenderLayer:
 
         Notes
         -----
-        Known issues (docs/KNOWN_ISSUES.md): the opacity check ``0 > self.opacity > 100`` can never be true, so
-        any opacity is accepted (values above 100 extrapolate in rendering); ``min == max`` is accepted for
-        "value" (advanced_normalization then raises for "value", or gives all NaN for "Value").
+        Up to 0.1.0 the opacity check was the chained comparison ``0 > self.opacity > 100``, which is never true,
+        so any opacity was accepted and values above 100 extrapolated in rendering (docs/FIXES_0_1_1.md, X5).
+
+        Known issue (docs/KNOWN_ISSUES.md): ``min == max`` is accepted for "value" (advanced_normalization then
+        raises for "value", or gives all NaN for "Value").
         """
         if self.normalization == "percent":
             self.normalization = "perc"
@@ -625,7 +631,8 @@ class BlenderCombination:
         (``save_visualizations=True``). Each image is normalized with rvt.blend_func.normalize_image and, if the
         layer has a colormap and the image is gray, colored. The bottom layer is the start image; every layer
         above is blended onto the result (rvt.blend_func.blend_images) and mixed with it according to its
-        opacity (rvt.blend_func.render_images).
+        opacity (rvt.blend_func.render_images). An operand with values outside [0, 1] is clipped to [0, 1]
+        before blending (NaN stays NaN).
 
         Parameters
         ----------
@@ -682,11 +689,14 @@ class BlenderCombination:
         test of the next layer, and _render_images gets range tests already evaluated on the same unchanged
         arrays; see the module docstring.
 
+        Fixed in 0.1.1 (docs/FIXES_0_1_1.md): overlay and soft_light return a new array, so the opacity of such a
+        layer mixes the blend result with the unchanged rendered image (X1; up to 0.1.0 it acted as 100 %); an
+        operand outside [0, 1] is clipped instead of going through rvt.blend_func.scale_0_to_1, which filled NaN
+        and did not rescale (X3: a clip changes only the pixels outside [0, 1], a min-max stretch every pixel).
+
         Known issues (docs/KNOWN_ISSUES.md):
 
         - the blend mode and the opacity of the bottom layer are never used (it is the start image as it is);
-        - overlay and soft_light write into the background, so the opacity of such a layer has no visible effect
-          (``top`` and ``background`` hold the same values when the opacity is applied);
         - a colormap is applied only ``if len(image.shape) < 3`` with ``image`` the layer array, which is None
           for layers read from ``image_path`` or saved with ``save_visualizations=True``: AttributeError;
         - with ``save_visualizations=True`` the visualizations are saved into the directory of
@@ -703,7 +713,7 @@ class BlenderCombination:
         #         (in memory with default.get_*, or saved with default.save_* and read back);
         #      c. apply the colormap to a gray image;
         #      d. bottom layer: becomes the rendered image (no blending, no opacity);
-        #         other layers: rescale operands outside [0, 1], blend_images, _render_images with the opacity,
+        #         other layers: clip operands outside [0, 1], blend_images, _render_images with the opacity,
         #         range test of the result (warning if outside [0, 1]);
         #   3. save the float and / or 8-bit render; return the rendered image.
 
@@ -980,7 +990,8 @@ class BlenderCombination:
                 top = blend_images(blend_mode, active, background)
 
                 # Apply opacity. Range tests already evaluated on the same unchanged arrays are passed on: top is the
-                # (unscaled) active itself for normal blending, and only overlay / soft_light modify the background.
+                # (unclipped) active itself for normal blending. The background test is recomputed after a clip and,
+                # conservatively, for overlay / soft_light (they wrote into the background up to 0.1.0).
                 opacity = self.layers[i_img].opacity
                 rendered_image = _render_images(
                     top, background, opacity,
@@ -1901,8 +1912,8 @@ def color_relief_image_map(dem, resolution, default: rvt.default.DefaultValues =
     resolution : float
         Pixel size in m/px (x and y).
     default : rvt.default.DefaultValues
-        Visualization parameters. **Its svf_r_max is set to 10 in place.** The default is one instance created at
-        import time and shared by all calls.
+        Visualization parameters. Not modified: a deep copy with ``svf_r_max = 10`` is used. The default is one
+        instance created at import time and shared by all calls.
     colormap : str
         matplotlib colormap name for the slope layer (default "OrRd").
     min_colormap_cut : float or None
@@ -1919,14 +1930,13 @@ def color_relief_image_map(dem, resolution, default: rvt.default.DefaultValues =
 
     Notes
     -----
-    Known issues (docs/KNOWN_ISSUES.md):
+    ``default`` is deep-copied before ``svf_r_max`` is set, so the caller's object and the shared default instance
+    keep their radius; up to 0.1.0 the radius was set on the caller's object, and a later use of it computed SVF /
+    openness with r = 10 px (docs/FIXES_0_1_1.md, X4). A copy keeps the signature (no ``default=None``). The
+    overlay layer is mixed at 50 % opacity; up to 0.1.0 it acted as 100 % (X1).
 
-    - ``default.svf_r_max = 10`` changes the caller's DefaultValues object (and the shared default instance), so
-      a later use of the same object computes SVF / openness with r = 10 px;
-    - the opacity of the overlay layer has no visible effect (the overlay result replaces the background before
-      the opacity mix);
-    - with a gray colormap (R = G = B) the luminosity layer can give NaN at pixels where the DEM is finite
-      (rvt.blend_func.clip_color divides 0 by 0).
+    Known issue (docs/KNOWN_ISSUES.md): with a gray colormap (R = G = B) the luminosity layer can give NaN at
+    pixels where the DEM is finite (rvt.blend_func.clip_color divides 0 by 0).
     """
     slope_norm = ("value", 0, 0.8)  # radians: 0..0.8 rad = 0..45.8 deg
     op_on_norm = ("value", -28, 28)
@@ -1992,8 +2002,8 @@ def e3mstp(dem, resolution, default: rvt.default.DefaultValues = rvt.default.Def
     resolution : float
         Pixel size in m/px (x and y).
     default : rvt.default.DefaultValues
-        Visualization parameters. **Its svf_r_max is set to 10 in place** (through color_relief_image_map). The
-        default is one instance created at import time and shared by all calls.
+        Visualization parameters; not modified (color_relief_image_map works on a copy). The default is one
+        instance created at import time and shared by all calls.
     no_data : float or None
         No-data value of ``dem``; None means the DEM has no such value (NaN is no-data anyway).
 
@@ -2008,12 +2018,11 @@ def e3mstp(dem, resolution, default: rvt.default.DefaultValues = rvt.default.Def
     Discrepancy: the earlier docstring described layer 2 as a CRIM colored with "Reds_r(0.5-1)"; the code uses
     "OrRd" with cuts 0..1 (this docstring describes the code). See docs/KNOWN_ISSUES.md.
 
-    Known issues (docs/KNOWN_ISSUES.md):
+    The soft_light layer is mixed at 70 % opacity; up to 0.1.0 it acted as 100 % (docs/FIXES_0_1_1.md, X1). An
+    intermediate image outside [0, 1] is clipped (X3).
 
-    - the opacity of the soft_light layer has no visible effect (70 % and 65 % give results that differ by
-      less than 1e-6): the soft light result replaces the background before the opacity mix;
-    - ``default.ve_factor`` is not applied to the MSTP layer nor to the slope inside the CRIM;
-    - ``default.svf_r_max`` is set to 10 on the caller's object (see color_relief_image_map).
+    Known issue (docs/KNOWN_ISSUES.md): ``default.ve_factor`` is not applied to the MSTP layer nor to the slope
+    inside the CRIM.
     """
     if no_data is not None:
         dem[dem == no_data] = np.nan
@@ -2051,7 +2060,7 @@ def e4mstp(dem, resolution, default: rvt.default.DefaultValues=rvt.default.Defau
     1   MSTP (DefaultValues.get_mstp), RGB           value 0..1       overlay     90 %
     2   combined SVF (below), float32                value -0.5..0.5  multiply    25 %
     3   combined openness / LD (below), float32      value 0..1       multiply    100 %
-    4   slope in radians, inverted, "Reds_r" 0..1    value 0..55      (bottom)    --
+    4   slope in degrees, inverted, "Reds_r" 0..1    value 0..55      (bottom)    --
     ==  ===========================================  ===============  ==========  =======
 
     Combined SVF, a two-layer combination rendered first: SVF with ``default`` (value 0.7..1, normal 50 %) over
@@ -2086,13 +2095,13 @@ def e4mstp(dem, resolution, default: rvt.default.DefaultValues=rvt.default.Defau
 
     Notes
     -----
-    Known issues (docs/KNOWN_ISSUES.md):
+    The slope comes from rvt.vis.slope_aspect with ``output_units="degree"``, the unit of the limits 0..55; up to
+    0.1.0 it was in radians (about 0..1.5) normalized over 0..55, so the inverted slope layer stayed within about
+    0.97..1 (docs/FIXES_0_1_1.md, X2). The MSTP overlay layer is mixed at 90 % opacity; up to 0.1.0 it acted as
+    100 % (X1). An intermediate image outside [0, 1] is clipped (X3).
 
-    - the slope comes from rvt.vis.slope_aspect with its default unit, radians (about 0..1.5), but is normalized
-      over 0..55 as if in degrees, so the inverted slope layer stays within about 0.97..1;
-    - the opacity of the MSTP overlay layer has no visible effect (the overlay result replaces the background
-      before the opacity mix);
-    - ``default.ve_factor`` is not applied to the MSTP layer, the slope layer and the flat terrain SVF.
+    Known issue (docs/KNOWN_ISSUES.md): ``default.ve_factor`` is not applied to the MSTP layer, the slope layer
+    and the flat terrain SVF.
     """
 
     # Nodata check
