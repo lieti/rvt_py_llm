@@ -18,7 +18,8 @@ the same bits as 0.1.1, with and without numba, for any thread count. Details, m
 - `DefaultValues.slrm_kernel_shape`, `msrm_kernel_shape`, `mstp_kernel_shape` = `"square"`, json keys in the three
   groups (files without them load as `"square"`), txt names equal to the attribute names; output file names get
   `_disk` / `_diskea`; the tile overlap of SLRM and MSTP grows to floor(r_w) for `disk_equal_area` (`2ee3ecf`).
-- 234 tests written before the feature (`tests/test_disk_*.py`, brute-force float64 disk reference); 4 frozen
+- 234 tests of the disk windows (`tests/test_disk_*.py`, brute-force float64 disk reference): 219 written before
+  the feature, 15 added after a mutant run exposed an untested MSRM scale count (`685c920`); 4 frozen
   0.1.1 nodes that pinned the API (signatures, attribute set, settings keys) list the 0.2.0 additions. Tag
   `tests-frozen` moved to the 0.2.0 test set (1428 tests); the 0.1.1 freeze is tag `tests-frozen-0.1.1`.
 - `astcheck.py` commit class `feat:`; mutants m29-m34 on the disk path; m13 scoped to `msrm`.
@@ -28,7 +29,8 @@ the same bits as 0.1.1, with and without numba, for any thread count. Details, m
 ### Changed
 - Nothing for default calls. Disk-path cost on the 10 000 x 8 000 px test DEMs, 1 thread: `get_mstp` 110-114 s
   against 16-19 s, peak 9.4 GB against 3.8 GB; `e3mstp` 150-153 s against 54-57 s; `e4mstp` 173-176 s against
-  80-83 s. 2048 x 2048 px tile: MSTP 7.5-7.8 s against 1.5 s.
+  80-83 s. 2112 x 2112 px tile (0.25 m/px): MSTP 7.6-7.8 s against 0.96 s, peak 0.9 GB against 0.5 GB
+  (`docs/release_evidence/0.2.0/cost2048.log`).
 
 ## [0.1.1] - 2026-10-24
 

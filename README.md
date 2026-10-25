@@ -19,7 +19,7 @@ the default stays the square window with unchanged outputs. The code is faster, 
 - 0.2.0: `kernel_shape="disk"` or `"disk_equal_area"` on `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
   `mean_filter` (and the `*_kernel_shape` attributes of `DefaultValues`) makes windows of r >= 8 px round, which
   removes the 15-19 % weaker DEV response of the square to diagonal features; default calls are bitwise unchanged.
-  Cost at one thread: MSTP about 7.5 s instead of 1.5 s per 2048 x 2048 px tile. See docs/DISK_WINDOWS.md.
+  Cost at one thread: MSTP about 7.6 s instead of 1.0 s per 2112 x 2112 px tile. See docs/DISK_WINDOWS.md.
 - 0.1.1: overlay and soft light honour their opacity, e4MSTP slope in degrees, blend operands clipped to [0, 1] with
   NaN kept, CRIM no longer changes the caller's `DefaultValues`, opacity outside 0..100 raises. CRIM, e3MSTP and
   e4MSTP change (e3MSTP up to 42 DN, e4MSTP p99.9 66-206 DN on the test DEMs); see docs/FIXES_0_1_1.md.
@@ -43,7 +43,7 @@ the default stays the square window with unchanged outputs. The code is faster, 
   import `rvt`.
 - 0.2.0: `kernel_shape="disk"` alebo `"disk_equal_area"` v `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
   `mean_filter` (a atribúty `*_kernel_shape` v `DefaultValues`) urobí okná s r >= 8 px kruhové; predvolené volania
-  sú bitovo nezmenené. MSTP s kruhom trvá asi 7,5 s namiesto 1,5 s na dlaždicu 2048 × 2048 px; `docs/DISK_WINDOWS.md`.
+  sú bitovo nezmenené. MSTP s kruhom trvá asi 7,6 s namiesto 1,0 s na dlaždicu 2112 × 2112 px; `docs/DISK_WINDOWS.md`.
 - 0.1.1: overlay a soft light rešpektujú opacity, sklon v e4MSTP v stupňoch, vstupy blendu orezané do [0, 1] s
   NaN, CRIM nemení `DefaultValues` volajúceho, opacity mimo 0..100 vyvolá výnimku. Menia sa CRIM, e3MSTP a e4MSTP;
   podrobnosti v `docs/FIXES_0_1_1.md`.
@@ -90,7 +90,8 @@ the default stays the square window with unchanged outputs. The code is faster, 
 - **Tests.** 223 equivalence tests of the optimized code and 866 tests that pin the current behaviour of every
   public function (859 characterization tests and 7 API-snapshot tests), frozen at 0.1.0 (1089, tag
   `tests-frozen-0.1.0`); 4 order-sensitive tests of `_box_sum` added after the release audit; 101 tests of the 0.1.1
-  fixes, written before the fixes; 234 tests of the 0.2.0 disk windows, written before the feature; 1428 in total,
+  fixes, written before the fixes; 234 tests of the 0.2.0 disk windows (219 written before the feature, 15 after a
+  mutant run); 1428 in total,
   frozen at tag `tests-frozen`.
 - **Messages.** 40 exception texts were corrected (they named the old module `rvt.visualization`, a wrong function or
   a wrong bound). Exception types are unchanged.

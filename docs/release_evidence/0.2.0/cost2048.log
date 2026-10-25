@@ -1,0 +1,11 @@
+﻿{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\wt\\cmp-011", "product": "mstp", "shape": "square", "t_s": 0.93, "peak_gb": 0.47, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "mstp", "shape": "square", "t_s": 0.96, "peak_gb": 0.47, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "mstp", "shape": "disk", "t_s": 7.56, "peak_gb": 0.91, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "mstp", "shape": "disk_equal_area", "t_s": 7.8, "peak_gb": 0.95, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "e3mstp", "shape": "square", "t_s": 3.01, "peak_gb": 0.83, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "e3mstp", "shape": "disk", "t_s": 9.75, "peak_gb": 1.04, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "e3mstp", "shape": "disk_equal_area", "t_s": 9.99, "peak_gb": 1.08, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "e4mstp", "shape": "square", "t_s": 4.39, "peak_gb": 0.94, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "e4mstp", "shape": "disk", "t_s": 11.05, "peak_gb": 1.09, "shape_px": [2112, 2112]}
+{"impl": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt_py_llm", "product": "e4mstp", "shape": "disk_equal_area", "t_s": 11.25, "peak_gb": 1.13, "shape_px": [2112, 2112]}
+COST2048 DONE

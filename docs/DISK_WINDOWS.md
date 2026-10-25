@@ -5,7 +5,7 @@
 `"disk_equal_area"`. With the default every public function returns the same bits as `v0.1.1` (proof:
 [TESTING.md](TESTING.md) section 8). SVF, openness, local dominance and sky illumination are ray or ring based and
 are not affected. The default stays square; whether a disk fits the intent of the methods is a question for the
-upstream authors (section 10).
+upstream authors (section 10). Code places: section 11.
 
 ## 1. Why: the square window is anisotropic
 
@@ -45,52 +45,41 @@ dx² + dy² <= r_w², the convention of GRASS `r.neighbors -c`, SAGA and ArcGIS.
 
 ## 3. Threshold and where the disk applies
 
-Windows with r >= `DISK_MIN_RADIUS_PX` = 8 px (2 m at 0.25 m/px) become disks; smaller windows stay square,
-because a disk of a few px is dominated by its discretisation (review C-15: disk DEV ratio 1.51 at r = 2 px).
+Windows with r >= `DISK_MIN_RADIUS_PX` = 8 px (2 m at 0.25 m/px) become disks; smaller windows stay square, because
+a disk of a few px is dominated by its discretisation (review C-15: disk DEV ratio 1.51 at r = 2 px).
 
-- `mean_filter`: disk iff r >= 8 px; r < 8 px runs the square code (bitwise the default result).
-- `max_elevation_deviation` (and the three scales of `mstp`): when the largest radius of the call is >= 8 px,
-  every radius goes through the FFT path, with the disk from 8 px and the square footprint below; when all radii
-  are < 8 px the square code runs. Defaults: local 1-5 px stays square (bitwise), meso 5-50 px has a square 5 px
-  window and disks from 10 px, broad 50-500 px is all disks.
-- `slrm`: its radius (10-50 px) is always >= 8 px.
-- `msrm`: one shape for all its radii, because consecutive surfaces are subtracted: the disk at every radius
-  (also 0-7 px) when the largest radius k^s is >= 8 px, otherwise the square code.
-- `e3mstp`, `e4mstp`: through `DefaultValues.get_slrm` / `get_mstp` (attributes below); CRIM has no window filter.
+- `mean_filter`, `slrm` (r = 10-50 px): disk iff r >= 8 px; below, the square code runs.
+- `max_elevation_deviation`, `mstp`: if the largest radius of a call is >= 8 px, all its radii use the FFT path,
+  square footprint below 8 px; otherwise the square code. Defaults: local 1-5 px square, meso 5 px square and
+  10-50 px disks, broad 50-500 px disks.
+- `msrm`: one shape for all radii, since consecutive surfaces are subtracted: the disk at every radius (also
+  0-7 px) when the largest radius k^s is >= 8 px.
+- `e3mstp`, `e4mstp`: through `get_slrm` / `get_mstp`; CRIM has no window filter.
 
 ## 4. API, settings, file names, tiling
 
-- Keyword `kernel_shape="square"`, last parameter of `mean_filter`, `max_elevation_deviation`, `slrm`, `msrm`,
-  `mstp`. Another value raises `ValueError` in `mean_filter` and `max_elevation_deviation` and `Exception` in
-  `slrm`, `msrm`, `mstp` (the type each uses for bad arguments), after the existing checks.
+- Keyword `kernel_shape="square"`, last parameter of the five functions. Another value raises `ValueError` in
+  `mean_filter` and `max_elevation_deviation`, `Exception` in `slrm`, `msrm`, `mstp` (each function's type for bad
+  arguments), after the existing checks.
 - `DefaultValues.slrm_kernel_shape`, `msrm_kernel_shape`, `mstp_kernel_shape` = `"square"`, passed by `get_slrm`,
-  `get_msrm`, `get_mstp`. json settings: one key per group ("Simple local relief model", "Multi-scale relief
-  model", "Multi-scale topographic position"); a file without the keys (written before 0.2.0) loads as
-  `"square"`. txt settings: the attribute names, e.g. `mstp_kernel_shape = disk_equal_area` (no txt example file
-  exists in the repository).
-- File names: `_disk` or `_diskea` before `.tif` / `_8bit.tif`, e.g. `dem_01_MSTP_5_50_500_L0.9_diskea.tif`;
-  square names unchanged. e3MSTP and e4MSTP have no file-name method in `DefaultValues`; their names do not change.
-- Tile overlap (`rvt.tile`): `"disk_equal_area"` reaches floor(r_w) px, so SLRM gets 23 px instead of 20 px and
-  MSTP 564 px = 141 m instead of 500 px = 125 m at the defaults; `"disk"` keeps the square overlap. MSRM keeps
-  its overlap, which is a known issue on its own (KNOWN_ISSUES KI-70).
+  `get_msrm`, `get_mstp`. json: one key per group; a file without them loads as `"square"`. txt: the attribute
+  names, e.g. `mstp_kernel_shape = disk_equal_area`.
+- File names: `_disk` or `_diskea` before `.tif` / `_8bit.tif`; square names unchanged; e3MSTP and e4MSTP have no
+  file-name method.
+- Tile overlap: `"disk_equal_area"` uses floor(r_w): SLRM 23 px instead of 20 px, MSTP 564 px = 141 m instead of
+  500 px = 125 m; `"disk"` keeps the square overlap; MSRM keeps its own (KNOWN_ISSUES KI-70).
 
 ## 5. Algorithm
 
-`rvt.vis._disk_window_sums` (contract in its docstring) takes the padded tile, removes `zbar`, the float64 mean of
-its non-NaN pixels, sets NaN to 0, and transforms `z - zbar`, its square and (only with NaN) the valid mask once
-per call with `scipy.fft.rfft2` (float64, `workers=1`). Per window the footprint is transformed once and each
-product transformed back with `irfft2`; pixel counts are rounded with `np.rint`. The FFT size is `next_fast_len`
-of the padded size; the padding of floor(r_w) of the largest window keeps the circular convolution from wrapping
-into the output window. Padding modes are those of the square path (edge for the mean filter, symmetric for DEV).
+`rvt.vis._disk_window_sums` (contract and cost in its docstring) removes `zbar`, the float64 mean of the padded
+tile, sets NaN to 0, and transforms `z - zbar`, its square and (with NaN) the valid mask once per call with
+`scipy.fft.rfft2` (float64, `workers=1`); per window it multiplies by the footprint spectrum and transforms back;
+counts are rounded with `np.rint`. The padding (mode of the square path, width floor(r_w) of the largest window)
+keeps the circular convolution off the output window. DEV and the mean filter use the square path's expressions
+shifted by `zbar`, its tie rule and its float32 rounding.
 
-The mean filter is `s1 / count + zbar`; DEV uses the square path's expressions shifted by `zbar`
-(`var = s2 / n - mean²`, `std = sqrt(|var|) + 1e-6`), its tie rule and its final float32 rounding.
-
-Why mean removal: sums of z and z² at real elevations carry the rounding of the large values into the small
-within-window variance (E[z²] - E[z]² cancels). Sums of z - zbar are exact translations of the same statistics;
-the tests require DEV at +2 500 m within 1e-7 and the mean within 1e-9 m of the result at 0 m. On the full test
-DEMs, MSTP with disks changes by 0 DN in the broad and meso bands (at most 1 DN) when the DEM is shifted by its mean;
-the square path does not have this property (section 8.3, KI-77).
+Why mean removal: sums of raw z and z² cancel in E[z²] - E[z]² at real elevations; sums of z - zbar give the same
+statistics without that loss. Tests: DEV at +2 500 m within 1e-7, mean within 1e-9 m of the result at 0 m.
 
 ## 6. Reproducibility
 
@@ -103,9 +92,18 @@ operating systems or scipy builds is not promised for FFT results (last-bit diff
 ## 7. Cost
 
 One fresh process per call, every thread variable 1, Windows 11 (Intel i9-14900K, 192 GB), Python 3.11.17, numpy
-2.4.6, scipy 1.17.1. Times of the call; peak = peak working set of the process, including the input DEM.
+2.4.6, scipy 1.17.1; time of the call; peak = peak working set of the process, input included.
 
-Full test DEMs (10 000 x 8 000 px at 0.25 m/px; range over DEM_low, DEM_medium, DEM_high):
+One 2112 x 2112 px tile (`bench_final/real_2048_medium` of the optimization harness, 0.25 m/px; log
+`release_evidence/0.2.0/cost2048.log`), 0.2.0:
+
+| call | square | disk | disk_equal_area |
+|---|---|---|---|
+| `mstp` | 0.96 s, 0.47 GB (v0.1.1: 0.93 s) | 7.56 s, 0.91 GB | 7.80 s, 0.95 GB |
+| `e3mstp` | 3.01 s, 0.83 GB | 9.75 s, 1.04 GB | 9.99 s, 1.08 GB |
+| `e4mstp` | 4.39 s, 0.94 GB | 11.05 s, 1.09 GB | 11.25 s, 1.13 GB |
+
+Full test DEMs (10 000 x 8 000 px; range over DEM_low, DEM_medium, DEM_high; `release_evidence/0.2.0/compare_full.md`):
 
 | call | square (v0.1.1) | disk | disk_equal_area |
 |---|---|---|---|
@@ -115,15 +113,9 @@ Full test DEMs (10 000 x 8 000 px at 0.25 m/px; range over DEM_low, DEM_medium, 
 | `e3mstp` | 54.1-57.1 s, 11.71 GB | 150.1-151.7 s, 11.71 GB | 150.3-153.4 s, 11.73 GB |
 | `e4mstp` | 80.2-82.8 s, 13.63 GB | 173.3-175.8 s, 13.63 GB | 173.1-176.1 s, 13.63 GB |
 
-One 2048 x 2048 px tile = 512 m cut from DEM_medium (measured during development, commit `2ee3ecf`): `mstp` 1.46 s /
-0.38 GB square, 7.51 s / 0.78 GB disk, 7.82 s / 0.82 GB equal-area disk, below the soft target of 10 s per tile.
-1024 x 1024 px tiles of `dev` (real_1024_medium, real_1024_high): `get_mstp` 0.23 s square, 2.20-2.28 s disk,
-2.46-2.48 s equal-area disk. The square path itself is not slower: e3MSTP 2.99 s against 3.00 s, e4MSTP 4.39 s
-against 4.38 s (v0.1.1 against 0.2.0, medium 2048 x 2048 px window, 1 thread, median of 5).
-
-The MSTP broad scale (10 windows on a tile padded by 500-564 px) holds most of the time: per window one forward and
-two (three with NaN) inverse transforms of the padded tile. Memory: about four float64 / complex128 arrays of the
-FFT size at a time.
+MSTP with disks stays below the soft target of 10 s per 2048² tile. The broad scale (10 windows on a tile padded by
+500-564 px) holds most of the time. The square path is not slower: e3MSTP x1.002, e4MSTP x0.997 against v0.1.1
+(medium 2048 x 2048 px window, median of 5; `release_evidence/0.2.0/timing.log`).
 
 ## 8. Effect on real terrain
 
@@ -148,8 +140,10 @@ bitwise equal to v0.1.1.
 
 ### 8.2 Full test DEMs
 
-Crop 512 px = 128 m per side (8 976 x 6 976 px); p99.9 DN / pixels above 5 DN against the square result of v0.1.1,
-all bands:
+Crop 512 px = 128 m per side (8 976 x 6 976 px); p99.9 DN / pixels above 5 DN against the square result of v0.1.1.
+The p99.9 is taken over the values of all bands together (`eval/common.py compare_one`); for MSTP, whose local band
+does not change, per band: broad 44 / 30 / 27 DN and meso 26 / 19 / 21 DN (disk; low / medium / high), broad
+29 / 13 / 13 DN and meso 19 / 12 / 12 DN (equal area).
 
 | product | low: disk | low: equal area | medium: disk | medium: equal area | high: disk | high: equal area |
 |---|---|---|---|---|---|---|
@@ -159,22 +153,20 @@ all bands:
 | e3MSTP | 27 / 42.0 % | 18 / 21.4 % | 21 / 31.8 % | 11 / 5.0 % | 23 / 34.1 % | 11 / 6.5 % |
 | e4MSTP | 25 / 38.0 % | 17 / 18.8 % | 17 / 22.1 % | 9 / 3.0 % | 17 / 17.0 % | 8 / 2.8 % |
 
-Overview and zoom: [MSTP DEM_medium](figures/disk_windows/mstp_medium_overview.png),
+Figures: [MSTP DEM_medium](figures/disk_windows/mstp_medium_overview.png),
 [MSTP DEM_high](figures/disk_windows/mstp_high_overview.png), [MSTP DEM_high, 100 m zoom at the largest
 difference](figures/disk_windows/mstp_high_zoom1.png), [SLRM DEM_high](figures/disk_windows/slrm_high_overview.png).
 The equal-area disk changes about half as much as the same-r disk, at the same isotropy.
 
 ### 8.3 The largest differences are errors of the square path
 
-MSTP pixels that differ by more than 50 DN are at most 0.06 % (DEM_low broad band, same-r disk). At 114 pixels
-(up to 10 per DEM, shape and band: a random sample of the broad-band pixels above 50 DN and the 10 largest meso
-differences) a brute-force float64 window computation agrees
-with the disk output within 1e-7 (same DN everywhere). The square output agrees in the broad band (within 1.6e-5) but
-not at the largest meso differences of DEM_medium and DEM_high: there it is wrong by up to 0.66 (169 DN), in flat
-spots (std of the 11 x 11 px neighbourhood below 1 cm). The cause is KNOWN_ISSUES KI-77: the square path computes the
-variance from sums of raw elevations over the whole tile, so its result depends on the elevation; shifting the DEM
-by its mean changes the local band by up to 250 DN (p99.9 137 DN on DEM_medium). The local band stays square in
-0.2.0 in every shape, so it keeps this dependence.
+MSTP pixels that differ by more than 50 DN are at most 0.06 % (DEM_low broad band, same-r disk). At 114 of them (up
+to 10 per DEM, shape and band) a brute-force float64 window computation agrees with the disk output within 8e-7
+(111 within 1e-7), with the same DN at all 114. The square output agrees in the broad band (within 1.6e-5), but at
+the largest meso differences of DEM_medium and DEM_high it is wrong by up to 0.66 (169 DN), in flat spots. Cause:
+KNOWN_ISSUES KI-77, the square path's variance from sums of raw elevations over the whole tile. Shifting the DEM by
+its mean changes the square local band by up to 250 DN (p99.9 137 DN, DEM_medium) and the disk's broad and meso
+bands by at most 1 DN. The local band stays square in every shape and keeps this dependence.
 
 ## 9. Rejected alternatives
 
@@ -199,5 +191,17 @@ by its mean changes the local band by up to 250 DN (p99.9 137 DN on DEM_medium).
    `disk_equal_area` (KI-70 first).
 7. Was the SLRM "radius" of Hesse 2010 / RVT ever meant as a circle?
 8. KI-77: should the square path of MSTP also remove the tile mean before its sums? It would make MSTP independent
-   of the absolute elevation (the change of the local band on DEM_medium is up to 250 DN) and would change MSTP,
-   e3MSTP and e4MSTP outputs, so it belongs to a separate fix release.
+   of the absolute elevation and would change MSTP, e3MSTP and e4MSTP outputs, so it belongs to a separate release.
+
+## 11. Where in the code (`v0.2.0`)
+
+| what | place |
+|---|---|
+| threshold | `rvt/vis.py:95` `DISK_MIN_RADIUS_PX` |
+| radius mapping, footprint | `rvt/vis.py:618` `_window_radius`, `:630` `_window_footprint` |
+| FFT window sums | `rvt/vis.py:645` `_disk_window_sums` |
+| disk paths | `rvt/vis.py:731` `_mean_filter_disk`, `:2747` `_msrm_radii`, `:2760` `_msrm_disk`, `:3077` `_max_elevation_deviation_disk` |
+| dispatch in the public functions | `rvt/vis.py:814` `mean_filter`, `:919` `slrm`, `:2862` `msrm`, `:3202` `max_elevation_deviation`, `:3386` `mstp` |
+| settings and file names | `rvt/default.py:61` `_kernel_shape_suffix`, `:69` `_json_kernel_shape` |
+| tile overlap | `rvt/tile.py:373` `_window_overlap` |
+| square-path variance (KI-77) | `rvt/vis.py:3231-3237`, `:3278` (`v0.1.1`: `:2892-2898`, `:2939`) |

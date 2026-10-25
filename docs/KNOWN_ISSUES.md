@@ -1184,8 +1184,8 @@ Found in 0.2.0 (module `rvt.vis`; numbered after KI-76 because the list was alre
 - Where: `rvt/vis.py:2146` at `start` (`max_elevation_deviation`: summed-area tables of z and z² in float64 over the
   whole padded tile, then `var = S2/n - (S1/n)²`); the precision fix `03702f4` made the squares float64 but kept
   the sums of raw elevations.
-- Now: `max_elevation_deviation` (`rvt/vis.py:3229`, `:3273` at `v0.2.0`), the numba kernel
-  `_mstp_dev_max_kernel` evaluates the same expressions.
+- Now: `max_elevation_deviation` (tables `rvt/vis.py:3231-3237`, variance `:3278` at `v0.2.0`; `:2892-2898`,
+  `:2939` at `v0.1.1`), the numba kernel `_mstp_dev_max_kernel` evaluates the same expressions.
 - Description: the table of z² reaches about n_px · z², e.g. 4.2 Mpx · 600² m² ≈ 1.5e12 m² on a 2048 x 2048 px tile at
   600 m, where one float64 rounding step is about 2e-4 m²; a small window in flat terrain has a variance of that
   order or less (std 1 cm: 1e-4 m²). The subtraction cancels, std becomes noise, and DEV = (z0 - mean) / (std +
@@ -1195,7 +1195,7 @@ Found in 0.2.0 (module `rvt.vis`; numbered after KI-76 because the list was alre
   band (r = 1-5 px = 0.25-1.25 m) p99.9 15 / 137 / 68 DN, max 185 / 250 / 251 DN, more than 5 DN on 1.0 / 19.8 /
   1.8 % of the pixels for DEM_low (111 m) / DEM_medium (585 m) / DEM_high (930 m); meso band max 2 / 155 / 169 DN;
   broad band <= 1 DN. A brute-force float64 reference at the pixels with the largest meso difference agrees with
-  the disk path of 0.2.0 and differs from the square output by up to 0.66 (169 DN). The disk path removes the tile
+  the disk path of 0.2.0 (within 8e-7, same DN) and differs from the square output by up to 0.66 (169 DN). The disk path removes the tile
   mean before its sums and does not show the effect (broad and meso 0-1 DN in the same test); the local band stays
   square in every shape (DISK_WINDOWS.md section 3).
 - Repro (2048 x 2048 px synthetic terrain with 5 cm of relief on a 1/256 m grid):
