@@ -25,7 +25,8 @@ Conventions of this list:
   connect the two lists.
 
 Entries are grouped by the module that holds the cause: `rvt.vis` (KI-01 to KI-18), `rvt.blend_func` (KI-19 to
-KI-34), `rvt.blend` (KI-35 to KI-50), `rvt.default` (KI-51 to KI-69), `rvt.tile` (KI-70 to KI-76). A last section
+KI-34), `rvt.blend` (KI-35 to KI-50), `rvt.default` (KI-51 to KI-69), `rvt.tile` (KI-70 to KI-76); KI-77
+(`rvt.vis`, found in 0.2.0) follows at the end. A last section
 lists tiling facts that are not defects but matter for tiled processing.
 
 ## Preamble used by the repros
@@ -1177,6 +1178,38 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   ```
 - Pinned: `tests/test_char_tile.py::test_tiled_mstp_float_raster_has_one_band_for_a_three_band_result`.
 - Status: documented, not changed in 0.1.0.
+
+### KI-77 MSTP (square windows) depends on the absolute elevation in flat terrain and on large tiles
+Found in 0.2.0 (module `rvt.vis`; numbered after KI-76 because the list was already published).
+- Where: `rvt/vis.py:2146` at `start` (`max_elevation_deviation`: summed-area tables of z and z² in float64 over the
+  whole padded tile, then `var = S2/n - (S1/n)²`); the precision fix `03702f4` made the squares float64 but kept
+  the sums of raw elevations.
+- Now: `max_elevation_deviation` (`rvt/vis.py:3229`, `:3273` at `v0.2.0`), the numba kernel
+  `_mstp_dev_max_kernel` evaluates the same expressions.
+- Description: the table of z² reaches about n_px · z², e.g. 4.2 Mpx · 600² m² ≈ 1.5e12 m² on a 2048 x 2048 px tile at
+  600 m, where one float64 rounding step is about 2e-4 m²; a small window in flat terrain has a variance of that
+  order or less (std 1 cm: 1e-4 m²). The subtraction cancels, std becomes noise, and DEV = (z0 - mean) / (std +
+  1e-6) can take any value. A constant elevation offset changes the result although DEV is offset-invariant.
+- Impact (measured in 0.2.0 on the three full test DEMs, 10 000 x 8 000 px at 0.25 m/px, cropped 512 px = 128 m;
+  MSTP of the DEM against MSTP of the DEM minus its mean rounded to whole metres; DN of the 8-bit display): local
+  band (r = 1-5 px = 0.25-1.25 m) p99.9 15 / 137 / 68 DN, max 185 / 250 / 251 DN, more than 5 DN on 1.0 / 19.8 /
+  1.8 % of the pixels for DEM_low (111 m) / DEM_medium (585 m) / DEM_high (930 m); meso band max 2 / 155 / 169 DN;
+  broad band <= 1 DN. A brute-force float64 reference at the pixels with the largest meso difference agrees with
+  the disk path of 0.2.0 and differs from the square output by up to 0.66 (169 DN). The disk path removes the tile
+  mean before its sums and does not show the effect (broad and meso 0-1 DN in the same test); the local band stays
+  square in every shape (DISK_WINDOWS.md section 3).
+- Repro (2048 x 2048 px synthetic terrain with 5 cm of relief on a 1/256 m grid):
+  ```python
+  rng = np.random.default_rng(0)
+  z = (np.round(rng.random((2048, 2048)) * 0.05 * 256) / 256).astype(np.float32)
+  d0 = v.max_elevation_deviation(z, 1, 5, 1); d1 = v.max_elevation_deviation(z + np.float32(600), 1, 5, 1)
+  np.abs(d1.astype(np.float64) - d0).max(), (np.abs(d1.astype(np.float64) - d0) > 0.1).mean()
+  # -> (14320.9..., 0.0141)   (512 x 512 px: max 0.044, share 0)
+  ```
+- Pinned: not pinned (a fix would change MSTP, e3MSTP and e4MSTP outputs).
+- Status: documented in 0.2.0, not changed (rule 4 of AGENTS.md). A fix would subtract the tile mean before the
+  summed-area tables (exact in exact arithmetic, as on the disk path); question 8 of
+  [DISK_WINDOWS.md](DISK_WINDOWS.md).
 
 ## Tiling facts (not defects)
 
