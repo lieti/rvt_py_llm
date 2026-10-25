@@ -17,11 +17,13 @@ docs/TESTING.md section 7) and apply only to a tree that contains them. Each is 
 function or method (``scope``), so that it does not depend on the exact layout of the fixed lines; an edit that
 matches nothing stops the run with an error naming the scope.
 
-The mutants m29-m33 (``MUTANTS_0_2_0``) target the disk path of 0.2.0 (``kernel_shape="disk"``,
+The mutants m29-m34 (``MUTANTS_0_2_0``) target the disk path of 0.2.0 (``kernel_shape="disk"``,
 docs/DISK_WINDOWS.md) in the same form; their scopes are the private names of that path in ``rvt/vis.py``
-(``_window_footprint``, ``_disk_window_sums``, ``_mean_filter_disk``, and the module-level assignment of
-``DISK_MIN_RADIUS_PX``), so they apply only to a tree that contains it: window radius off by one, mean removal
-dropped, FFT pixel counts not rounded, square window at r = 8 px, ``zbar`` not added back by the mean filter.
+(``_window_footprint``, ``_disk_window_sums``, ``_mean_filter_disk``, ``_msrm_radii``, and the module-level
+assignment of ``DISK_MIN_RADIUS_PX``), so they apply only to a tree that contains it: window radius off by one, mean
+removal dropped, FFT pixel counts not rounded, square window at r = 8 px, ``zbar`` not added back by the mean filter,
+number of scales of ``msrm`` with floor for ceil. m13 (the same floor-for-ceil edit) is scoped to ``msrm``
+(``MUTANTS_SCOPED``): since 0.2.0 the expression also occurs in ``_msrm_radii``, before ``msrm``.
 The unrounded counts change the outputs only at the rounding level (bits of DEV where a window holds one valid
 pixel), below every tolerance of the tests, so that mutant is expected to be killed by equiv only.
 
@@ -73,9 +75,7 @@ MUTANTS = [
      "opns_out = np.rad2deg(0.5 * np.pi - (opns_win / (num_directions + 1)))", 1, "openness divisor"),
     ("m12", "vis.py", "byte_data[np.isnan(byte_data)] = 255", "byte_data[np.isnan(byte_data)] = 0", 1,
      "byte_scale no-data value"),
-    ("m13", "vis.py", "n = int(np.ceil(((feature_max - resolution) / (2 * resolution)) ** (1 / scaling_factor)))",
-     "n = int(np.floor(((feature_max - resolution) / (2 * resolution)) ** (1 / scaling_factor)))", 1,
-     "msrm number of scales"),
+    # m13 (msrm number of scales) is a scoped edit, see MUTANTS_SCOPED
     ("m14", "blend_func.py", "return 1 - (1 - active) * (1 - background)",
      "return 1 - (1 - active) * (1 - background) * 0.999", 1, "screen blend"),
     ("m15", "blend_func.py", "opacity = opacity / 100", "opacity = opacity / 101", 1, "opacity scale"),
@@ -99,9 +99,18 @@ MUTANTS = [
     # still apply to the fixed code; no mutant of m01-m23 had to be retired for 0.1.1.
 ]
 
-# 0.1.1 fixes: (id, [(file, scope, pattern, replacement), ...], description). `scope` is a top-level function or
+# Scoped edits: (id, [(file, scope, pattern, replacement), ...], description). `scope` is a top-level function or
 # "Class.method"; the pattern is applied (all matches) to the source lines of that scope only. The replacement is a
 # re.sub replacement string or a function of the match.
+_CEIL_N = r"(\bn\s*=\s*int\(\s*np\.)ceil(\()"  # n = int(np.ceil(...)): the number of scales of msrm
+
+# m13 of the 0.1.0 set, scoped since 0.2.0: the expression of n also occurs in the disk helper _msrm_radii (m34),
+# which precedes msrm in vis.py, so the first-occurrence snippet no longer reached the square path.
+MUTANTS_SCOPED = [
+    ("m13", [("vis.py", "msrm", _CEIL_N, r"\1floor\2")], "msrm number of scales (square path)"),
+]
+
+# 0.1.1 fixes, scoped edits as above.
 _CLIP = r"np\.clip\(\s*(\w+)\s*,\s*0(?:\.0*)?\s*,\s*1(?:\.0*)?\s*\)|\b_clip\w*\(\s*(\w+)\s*\)"  # clip to [0, 1]
 
 
@@ -150,6 +159,8 @@ MUTANTS_0_2_0 = [
     ("m33", [("vis.py", "_mean_filter_disk",
               r"\+=\s*z_?bar\b|\s*\+\s*z_?bar\b|\bz_?bar\s*\+(?!=)\s*|(np\.add\([^,]+,\s*)z_?bar\b", _drop_zbar)],
      "disk path: mean filter does not add zbar back"),
+    ("m34", [("vis.py", "_msrm_radii", _CEIL_N, r"\1floor\2")],
+     "disk path: msrm number of scales (_msrm_radii)"),
 ]
 
 CONTROLS = [
@@ -230,7 +241,8 @@ def main():
     plan = [("mutant", mid, desc, lambda root, e=(file, old, new, occ): apply(root, *e))
             for mid, file, old, new, occ, desc in MUTANTS]
     plan += [("mutant", mid, desc, lambda root, e=edits: apply_scoped(root, e))
-             for mid, edits, desc in MUTANTS_0_1_1 + MUTANTS_0_2_0]
+             for mid, edits, desc in MUTANTS_SCOPED + MUTANTS_0_1_1 + MUTANTS_0_2_0]
+    plan.sort(key=lambda p: p[1])  # mutants in id order (m13 is a scoped edit)
     plan += [("control", mid, desc, lambda root, e=(file, old, new, occ): apply(root, *e))
              for mid, file, old, new, occ, desc in CONTROLS]
 
