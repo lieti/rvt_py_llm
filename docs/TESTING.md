@@ -9,11 +9,14 @@ encode the contract, the tools that prove each commit keeps it, and how to run t
 [FIXES_0_1_1.md](FIXES_0_1_1.md)); every other public function stays bitwise identical to `v0.1.0`. Section 7
 describes how this was proven and how the frozen test set moved.
 
+0.2.0 adds the opt-in keyword `kernel_shape` (disk windows, [DISK_WINDOWS.md](DISK_WINDOWS.md)); with the default
+`"square"` every public function stays bitwise identical to `v0.1.1`. Section 8 describes the proof.
+
 ## 1. Test suites
 
-All tests are in `tests/` (1194 tests in 22 files, all frozen at tag `tests-frozen` since 0.1.1: the 1089 tests of
-the 0.1.0 freeze, `test_proof_box_sum.py` (4) and the 0.1.1 fix tests `test_fix_0_1_1_*.py` (101); about 12 s in one
-process on the development machine). `tests/conftest.py`
+All tests are in `tests/` (1428 tests in 28 files, all frozen at tag `tests-frozen` since 0.2.0: the 1089 tests of
+the 0.1.0 freeze, `test_proof_box_sum.py` (4), the 0.1.1 fix tests `test_fix_0_1_1_*.py` (101) and the 0.2.0
+disk-window tests `test_disk_*.py` (234); about 14 s in one process on the development machine). `tests/conftest.py`
 puts the repository root first on `sys.path` and asserts that the imported `rvt` comes from this repository, so the
 tests never run against an installed copy.
 
@@ -24,6 +27,7 @@ tests never run against an installed copy.
 | API snapshot | `test_api_snapshot.py` | 7 | 0.1.0, commit `77c245d` | the public API at `start`, generated once by `collect_api()` |
 | order-sensitive `_box_sum` tests | `test_proof_box_sum.py` | 4 | after the 0.1.0 audit, commit `422ad9f` | inputs with full 53-bit mantissas and the upstream order of the subtractions |
 | 0.1.1 fix tests | `test_fix_0_1_1_x1_blend_new_array.py`, `..._x2_e4mstp_slope_degrees.py`, `..._x3_clip_and_scale.py`, `..._x4_default_not_modified.py`, `..._x5_opacity_check.py`, `test_fix_0_1_1_recipes.py` | 101 | 0.1.1, commit `7aa8b03`, written before the fixes | the opacity formula `o * B(a, b) + (1 - o) * b` in the test, band independence, the slope layer from degrees computed with numpy, clipping with NaN kept, `DefaultValues` attributes before and after, the raised exception, e3MSTP / e4MSTP rebuilt through `BlenderCombination`; at opacity 100 a copy of the old in-place overlay / soft light gives the same bits |
+| 0.2.0 disk-window tests | `test_disk_oracle.py`, `test_disk_threshold.py`, `test_disk_anisotropy.py`, `test_disk_composition.py`, `test_disk_settings.py`, `test_disk_msrm_scales.py` | 234 | 0.2.0, commit `450d49e` (219, written before the feature) and `685c920` (15, after the mutant run of section 3.3) | a brute-force float64 disk window in the test file (two-pass variance, NaN excluded, counts from the mask, the padding mode of each function), the square result for windows below 8 px (bitwise), the review C-15 Gaussian bank, the composition of the lower-level functions, the 0.1.1 settings keys written out by hand, the e3MSTP / e4MSTP recipes rebuilt in the test |
 
 What the equivalence tests cover: each optimized function against the upstream formulation on small seeded
 synthetic DEMs (multi-block sizes, NaN patches, float32 and float64, edge radii); MSTP offset invariance at
@@ -70,11 +74,12 @@ only.
 The tests are the contract, so they may not move while the code moves.
 
 - Tag `tests-frozen` marks the test set: an annotated tag on commit `c341ec8` for 0.1.0 (now also tag
-  `tests-frozen-0.1.0`), moved to `5b5cbad` in 0.1.1 (section 7). After it, files that existed under
+  `tests-frozen-0.1.0`), moved to `5b5cbad` in 0.1.1 (section 7; now also tag `tests-frozen-0.1.1`) and to
+  `b691587` in 0.2.0 (section 8). After it, files that existed under
   `tests/` at the tag may not be modified, renamed or deleted, and no `conftest.py`, `pytest.ini`, `tox.ini`,
   `pyproject.toml` or `setup.cfg` may skip, deselect or xfail them. New tests go into new files.
 - A manifest holds the SHA-256 of every frozen file (0.1.0: 16 files, 1089 test nodes; 0.1.1: 23 files, 1194 test
-  nodes).
+  nodes; 0.2.0: 29 files, 1428 test nodes).
 - `frozen_check.py` proves for a commit that (1) `git diff tests-frozen..<commit> -- tests` lists only added
   `test_*.py` files and no pytest configuration changed in a line that mentions pytest; (2) every frozen file
   matches its hash; (3) every frozen test node reports PASSED (no skip, xfail, deselect or error), with accelerators
@@ -106,6 +111,7 @@ in pinning the pytest root directory of a scratch tree, so that node ids do not 
 | `fix:` (0.1.1) | only existing `rvt/**/*.py` files change and the AST without docstrings of at least one differs; a function whose code is unchanged keeps its docstring and source text, module and class docstrings are unchanged; listed as needing the full tests and the record comparison of section 7 |
 | `retire:` (0.1.1) | only files of the frozen test set change, none is added or deleted, no pytest configuration changes; listed as needing the retire check of section 7 |
 | `tool:` (0.1.1) | only files under `tools/proof/` change; listed as needing the tool's self-test |
+| `feat:` (0.2.0) | only existing files under `rvt/` (Python) and `settings/` change, none added or deleted, with a code change; docstrings and comments change only in functions whose code changes, a class docstring only with a change of that class, module docstrings not at all; listed as needing the full tests, the record comparison and the determinism check of section 8 |
 
 `--range start..main` checks every commit; merge commits are skipped. Last line `ASTCHECK PASS` or `ASTCHECK FAIL`.
 The tool was tested on commits that hide a code change inside a `docs:` or `msg:` commit, and catches them.
@@ -172,6 +178,18 @@ equivalent.
 | final `main` (`02f0b11`) with m22-m23 on the refactored helpers; tests from `tests-frozen`, 1089 tests | 22 / 23 = 96 % (m22 survived) | 22 / 23 = 96 % (m22 survived) | equivalent | MUTANTS FAIL (equiv below 100 %) |
 | final `main` (`02f0b11`), tests from `main` (1093 tests, incl. `test_proof_box_sum.py`) | 23 / 23 = 100 % | 23 / 23 | equivalent | MUTANTS PASS |
 | 0.1.1 `main` (`81e50b1`) with m24-m28 on the fixed code; tests from the new `tests-frozen` (1194 tests) | 28 / 28 = 100 % | 28 / 28 | equivalent | MUTANTS PASS |
+| 0.2.0 `main` (`1668231`) with m29-m33 on the disk path; tests from the new `tests-frozen` (1413 tests) | 31 / 33 = 94 % (m13 and m31 survived) | 33 / 33 | equivalent | MUTANTS PASS |
+
+m31 (FFT pixel counts not rounded to integers) changes the disk-path results only below the test tolerances
+(1e-9 m on the window mean, 1e-7 on DEV); equiv, which compares bits, kills it. m13 (the number of MSRM scales)
+survived because its first match had moved: 0.2.0 repeats the expression in `vis._msrm_radii` (disk path), and every
+disk MSRM test used feature sizes for which `ceil` and `floor` agree. The gap was closed with the new file
+`tests/test_disk_msrm_scales.py` (`685c920`) and the mutants m13 (scoped to `msrm`) and m34 (the same edit in
+`_msrm_radii`, `b691587`), before the second freeze:
+
+| run | killed by tests | killed by equiv | controls | result |
+|---|---|---|---|---|
+| 0.2.0 `main` (`0b218ad`) with m29-m34; tests from `tests-frozen` (1428 tests) | 33 / 34 = 97 % (m31 survived) | 34 / 34 | equivalent | MUTANTS PASS |
 
 The surviving mutant m21 led to `tests/test_char_e3e4_recipe.py` (commit `c341ec8`), added before the freeze.
 The surviving mutant m22 (the two subtractions of `_box_sum` in the other order) shows a limit of the frozen
@@ -227,7 +245,7 @@ Run from the repository root unless stated. Do not run plain `pytest` at the roo
 | tests, numpy fallback | `$env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL` | `RVT_NO_ACCEL=1 python -m pytest tests -q` |
 | tests, one thread | `$env:RVT_NUM_THREADS="1"; python -m pytest tests -q; Remove-Item Env:RVT_NUM_THREADS` | `RVT_NUM_THREADS=1 python -m pytest tests -q` |
 
-Expected last line: `1194 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
+Expected last line: `1428 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
 the numba path with the numpy path run too (they switch the accelerators on themselves), so nothing is skipped.
 Without numba installed, the tests that need it are skipped. In the development workspace, prefix with `pixi run`
 and pass the path of the checkout, e.g. `pixi run pytest rvt_py_llm/tests -q`.
@@ -362,3 +380,51 @@ section 6; copies in [release_evidence/0.1.1/](release_evidence/0.1.1/):
 | eval determinism | PASS | `check_determinism_20261024-121122_16772.json` |
 | e3mstp / e4mstp time, 0.1.1 against 0.1.0, medium 2048 x 2048 px, 1 thread, median of 3 | x0.872 / x1.030 (limit x1.05) | `timing.log` |
 | per commit: tests, astcheck, record comparison, eval checks, preview | see the summaries | `acceptance_summary.txt` |
+
+## 8. The 0.2.0 disk windows: default path unchanged, new path tested
+
+0.2.0 adds the keyword `kernel_shape` ([DISK_WINDOWS.md](DISK_WINDOWS.md)). The work ran in the parent development
+workspace under a written plan; the lists and scripts named below are in its `work/circ/` directory, not in this
+repository. The steps:
+
+1. **Lists written before any code changed.** An allow-list of functions whose records may differ from `v0.1.1`:
+   empty. A list of the frozen 0.1.1 nodes that pin the API the feature extends, found by a dry run of the frozen
+   tests against a stub of the new API (keyword, attributes, settings keys; no behaviour): 4 nodes in
+   `test_api_snapshot.py` and `test_char_default.py`, plus the helper `_changed_copy`. The same dry run showed the
+   only record differences: the hash of the settings json that two settings tests write (it gains the three keys;
+   a new test checks its content) and the records of the 4 retired nodes. These are listed by node and left out of
+   the comparison.
+2. **Tests first** (`450d49e`, `test:`): 219 tests in five files; on `v0.1.1` 213 fail (missing keyword or
+   attribute) and 6 pass (the default path). Their reference is a brute-force float64 disk window written in the
+   test file.
+3. **Retire** (`9a313f1`): the 4 nodes add the 0.2.0 entries to their expectation (`# 0.2.0: kernel_shape`); module
+   level literals unchanged. `RETIRE OK` (1194 base nodes, 4 retired, 1190 kept).
+4. **Tools** (`bcebe7e`): astcheck class `feat:` (section 3.1), mutants m29-m33.
+5. **Four `feat:` commits** (`202aa15`, `7468298`, `982d615`, `2ee3ecf`), then `docs:` and `meta:`. Every commit was
+   checked in its own worktree: the full tests with and without `RVT_NO_ACCEL=1` (a feat commit fails only tests of
+   the later steps); astcheck; the retire check; the record comparison with `v0.1.1` and `--self`; eval check
+   `dev` with and without numba (every row equal to the row of `v0.1.1`) and `--determinism`; from the second
+   commit on a determinism check of the disk path in fresh processes (default threading, every thread variable 1
+   and 2, `RVT_NO_ACCEL=1`; mstp, slrm, msrm, e3mstp, e4mstp in both disk shapes on the 8 `dev` tiles).
+6. **Freeze** (`1668231`), a mutant run that exposed the MSRM scale-count gap (section 3.3), the test
+   `test_disk_msrm_scales.py` (`685c920`), mutants m13 / m34 (`b691587`), and the second freeze (`0b218ad`): tag
+   `tests-frozen` on `b691587`, 29 files, 1428 nodes; the 0.1.1 freeze stays as tag `tests-frozen-0.1.1`.
+
+Results on the release candidate (`main` before the tag `v0.2.0`; the last commit under `rvt/` is `c073b10`),
+Windows 11; copies in
+[release_evidence/0.2.0/](release_evidence/0.2.0/):
+
+| check | result | report |
+|---|---|---|
+| tests, accel / `RVT_NO_ACCEL=1` | 1428 passed / 1428 passed | `frozen_check_main.log` |
+| `frozen_check.py` on `main` | FROZEN PASS | `frozen_check_main.log` |
+| `astcheck.py --range v0.1.1..main` | ASTCHECK PASS | `astcheck_main.log` |
+| retire check, 0.1.1 freeze against `main` | RETIRE OK | `retire_check_main.log` |
+| record comparison against `v0.1.1` (frozen 0.1.1 tests; accel, t1, noaccel) and `--self` | allowed 0, propagated 0, unexplained 0; 0 differing nodes between variants; EQUIV_DIFF OK | `equiv_diff_main.log` |
+| determinism of the disk path, fresh processes, 4 variants | DET OK (all 5 products, both shapes, different from square) | `det_check_main.log` |
+| `mutants.py` | MUTANTS PASS, tests 33 / 34, equiv 34 / 34 | `mutants_main.log` |
+| `doclint.py` | DOCLINT PASS | `doclint_main.log` |
+| eval check `dev` / `dev --no-accel` (88 rows) | every row equal to `v0.1.1` (e3mstp and e4mstp rows differ from the 0.1.0 reference since 0.1.1) | `acceptance_summary.txt` |
+| eval determinism | PASS | `acceptance_summary.txt` |
+| e3mstp / e4mstp time, 0.2.0 against 0.1.1, medium 2048 x 2048 px, 1 thread, median of 5 | x1.002 / x0.997 (limit x1.02) | `timing.log` |
+| comparison runs, square of 0.2.0 against `v0.1.1` (3 tiles of 1024 x 1024 px, 3 full DEMs, 5 products) | 30 / 30 bitwise equal | `compare_tiles.md`, `compare_full.md` |

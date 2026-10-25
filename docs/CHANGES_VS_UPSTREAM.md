@@ -1,6 +1,6 @@
 # Changes compared to upstream rvt_py
 
-rvt_py_llm 0.1.1 is the upstream Relief Visualization Toolbox Python library (rvt_py,
+rvt_py_llm 0.2.0 is the upstream Relief Visualization Toolbox Python library (rvt_py,
 https://github.com/EarthObservation/RVT_py, by Žiga Kokalj et al.) at master commit `bab109c` (tag `baseline`,
 `setup.py` version 2.2.3), plus:
 
@@ -10,11 +10,14 @@ https://github.com/EarthObservation/RVT_py, by Žiga Kokalj et al.) at master co
 3. the 0.1.0 pass: documentation, characterization tests, exception message corrections, three behaviour-neutral
    readability refactors proven bitwise identical, and packaging (`start..v0.1.0`);
 4. the 0.1.1 fixes: five defects of the blend path fixed on purpose (`v0.1.0..v0.1.1`, section "The 0.1.1 fixes"
-   below and [FIXES_0_1_1.md](FIXES_0_1_1.md)).
+   below and [FIXES_0_1_1.md](FIXES_0_1_1.md));
+5. the 0.2.0 disk windows: an opt-in keyword `kernel_shape` for the square-window functions (`v0.1.1..v0.2.0`,
+   section "The 0.2.0 disk windows" below and [DISK_WINDOWS.md](DISK_WINDOWS.md)).
 
 The import name stays `rvt`; the public API (names, signatures, defaults, `DefaultValues` attributes, settings files,
 return shapes and dtypes, exception types) is unchanged. In 0.1.1 `BlenderLayer.check_data` raises for an opacity
-outside [0, 100], which it accepted before.
+outside [0, 100], which it accepted before. 0.2.0 adds the keyword `kernel_shape="square"` to five functions, three
+`DefaultValues` attributes, their settings keys and two file-name suffixes; with the defaults nothing changes.
 
 ## What a user notices
 
@@ -46,7 +49,10 @@ outside [0, 100], which it accepted before.
   `RVT_NO_ACCEL=1`, the numpy code runs and gives the same bits. numba costs about 0.2 s to import and 0.24-0.40 s to
   compile per kernel, once per process.
 - **Documentation and tests.** Every public function has a numpy-style docstring with units, dtypes, edges and NaN
-  handling; the repository has architecture, testing and known-issue documents; 1093 tests in 0.1.0, 1194 in 0.1.1.
+  handling; the repository has architecture, testing and known-issue documents; 1093 tests in 0.1.0, 1194 in 0.1.1,
+  1428 in 0.2.0.
+- **Disk windows (0.2.0, opt-in).** `kernel_shape="disk"` or `"disk_equal_area"` makes the windows of r >= 8 px of
+  MSTP, SLRM and MSRM exact discrete disks; see the last section and [DISK_WINDOWS.md](DISK_WINDOWS.md).
 - **Exception texts.** 40 messages were corrected (module name `rvt.vis` instead of `rvt.visualization`, wrong
   function or bound named, typos); exception types are unchanged. The list is at the end of this file.
 
@@ -340,3 +346,29 @@ Every other public function returns the same bits as `v0.1.0` on the frozen test
 section 7) and on the evaluation sets (eval check `dev`, with and without numba). Time per call: e3MSTP 0.87 times,
 e4MSTP 1.03 times the 0.1.0 time (medium 2048 x 2048 px window, 1 thread); on the full DEMs e3MSTP 55-58 s against
 62-67 s, e4MSTP 79-96 s against 79-94 s.
+
+## The 0.2.0 disk windows (`v0.1.1..v0.2.0`)
+
+An opt-in keyword `kernel_shape` (`"square"` default, `"disk"`, `"disk_equal_area"`) for `rvt.vis.mean_filter`,
+`max_elevation_deviation`, `mstp`, `slrm` and `msrm`, three `DefaultValues` attributes passed by `get_slrm`,
+`get_msrm`, `get_mstp`, their settings keys, file-name suffixes and tile overlaps. Definition, threshold, algorithm,
+cost, measurements and open questions: [DISK_WINDOWS.md](DISK_WINDOWS.md). Commits, in order:
+
+| commit | class | content |
+|---|---|---|
+| `450d49e` | `test:` | 219 tests of the disk windows, written first (213 fail on `v0.1.1`) |
+| `9a313f1` | `retire:` | 4 frozen 0.1.1 nodes (API snapshot, `DefaultValues` attribute set, txt and json settings) list the 0.2.0 additions |
+| `bcebe7e` | `tool:` | astcheck class `feat:`; mutants m29-m33 |
+| `202aa15` | `feat:` | `_disk_window_sums` (FFT window sums of the mean-removed tile) and the disk path of `mean_filter` |
+| `7468298` | `feat:` | disk path of `max_elevation_deviation` and `mstp` |
+| `982d615` | `feat:` | `slrm` and `msrm` |
+| `2ee3ecf` | `feat:` | `DefaultValues` attributes, settings files, file names, `get_*`, tile overlap |
+| `b04fee4`, `c073b10` | `docs:` | module and function docstrings (KI-77 note) |
+| `d12e687`, `56457af`, `5b4f1f3` | `meta:` | ARCHITECTURE, CONVENTIONS, DISK_WINDOWS draft |
+| `1668231`, `685c920`, `b691587`, `0b218ad` | `meta:`, `test:`, `tool:`, `meta:` | freeze; test of the MSRM scale count on the disk path and mutants m13 / m34; second freeze |
+| later | `meta:` | version 0.2.0, documents, release evidence |
+
+Outputs of default calls: bitwise identical to `v0.1.1` (record comparison of the frozen 0.1.1 tests in three
+variants, eval check `dev` with and without numba, and the square runs of the comparison on three 1024 x 1024 px
+tiles and the three full test DEMs: 30 of 30 product / input pairs bitwise equal). Speed of default calls: e3MSTP
+1.002 times and e4MSTP 0.997 times the 0.1.1 time (medium 2048 x 2048 px window, 1 thread, median of 5).

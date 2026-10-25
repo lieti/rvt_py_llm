@@ -3,6 +3,33 @@
 All notable changes of rvt_py_llm. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). Details and evidence: [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md).
 
+## [0.2.0] - 2026-10-25
+
+Opt-in disk windows for MSTP, SLRM and MSRM. With the default `kernel_shape="square"` every public function returns
+the same bits as 0.1.1, with and without numba, for any thread count. Details, measurements and open questions:
+[docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md).
+
+### Added
+- Keyword `kernel_shape` (`"square"`, `"disk"`, `"disk_equal_area"`), last parameter of `rvt.vis.mean_filter`,
+  `max_elevation_deviation`, `mstp`, `slrm` and `msrm` (`202aa15`, `7468298`, `982d615`). Windows with
+  r >= 8 px = 2 m at 0.25 m/px become exact discrete disks (dx² + dy² <= r_w², r_w = r or (2r + 1) / √π); smaller
+  windows stay square; MSRM uses one shape for all its radii. Window sums by FFT (`scipy.fft`, float64,
+  `workers=1`) of the mean-removed elevations; no numba, no threads on this path.
+- `DefaultValues.slrm_kernel_shape`, `msrm_kernel_shape`, `mstp_kernel_shape` = `"square"`, json keys in the three
+  groups (files without them load as `"square"`), txt names equal to the attribute names; output file names get
+  `_disk` / `_diskea`; the tile overlap of SLRM and MSTP grows to floor(r_w) for `disk_equal_area` (`2ee3ecf`).
+- 234 tests written before the feature (`tests/test_disk_*.py`, brute-force float64 disk reference); 4 frozen
+  0.1.1 nodes that pinned the API (signatures, attribute set, settings keys) list the 0.2.0 additions. Tag
+  `tests-frozen` moved to the 0.2.0 test set (1428 tests); the 0.1.1 freeze is tag `tests-frozen-0.1.1`.
+- `astcheck.py` commit class `feat:`; mutants m29-m34 on the disk path; m13 scoped to `msrm`.
+- `docs/DISK_WINDOWS.md`, KNOWN_ISSUES KI-77 (MSTP with square windows depends on the absolute elevation in flat
+  terrain on large tiles; documented, not changed), `docs/release_evidence/0.2.0/`.
+
+### Changed
+- Nothing for default calls. Disk-path cost on the 10 000 x 8 000 px test DEMs, 1 thread: `get_mstp` 110-114 s
+  against 16-19 s, peak 9.4 GB against 3.8 GB; `e3mstp` 150-153 s against 54-57 s; `e4mstp` 173-176 s against
+  80-83 s. 2048 x 2048 px tile: MSTP 7.5-7.8 s against 1.5 s.
+
 ## [0.1.1] - 2026-10-24
 
 Five fixes of the blend path. The outputs of CRIM, e3MSTP and e4MSTP change on purpose; every other public function

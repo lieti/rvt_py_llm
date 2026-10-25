@@ -6,14 +6,20 @@ visualizations of digital elevation models (slope, hillshade, sky-view factor, o
 illumination, SLRM, MSRM, MSTP) and blends them into composites (VAT, e3MSTP, e4MSTP). The import name is still
 `rvt`, the API is unchanged, and the outputs are bitwise identical to the upstream code with one precision fix
 (tag `baseline-fixed`), except CRIM, e3MSTP and e4MSTP, which 0.1.1 changes on purpose by fixing five defects of the
-blend path ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)); against raw upstream MSTP differs as well. The code is
-faster, every function is documented, and 1194 tests guard the behaviour. The upstream README is kept in
-[docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
+blend path ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)); against raw upstream MSTP differs as well. 0.2.0 adds
+opt-in disk windows for MSTP, SLRM and MSRM (keyword `kernel_shape`, [docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md));
+the default stays the square window with unchanged outputs. The code is faster, every function is documented, and
+1428 tests guard the behaviour. The upstream README is kept in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 
 ## TL;DR (English)
 
 - What: upstream rvt_py (master `bab109c`, version 2.2.3) + one MSTP precision fix + 11 performance commits +
-  documentation and tests (0.1.0) + five fixes of the blend path (0.1.1). Package `rvt_py_llm` 0.1.1, import `rvt`.
+  documentation and tests (0.1.0) + five fixes of the blend path (0.1.1) + opt-in disk windows (0.2.0). Package
+  `rvt_py_llm` 0.2.0, import `rvt`.
+- 0.2.0: `kernel_shape="disk"` or `"disk_equal_area"` on `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
+  `mean_filter` (and the `*_kernel_shape` attributes of `DefaultValues`) makes windows of r >= 8 px round, which
+  removes the 15-19 % weaker DEV response of the square to diagonal features; default calls are bitwise unchanged.
+  Cost at one thread: MSTP about 7.5 s instead of 1.5 s per 2048 x 2048 px tile. See docs/DISK_WINDOWS.md.
 - 0.1.1: overlay and soft light honour their opacity, e4MSTP slope in degrees, blend operands clipped to [0, 1] with
   NaN kept, CRIM no longer changes the caller's `DefaultValues`, opacity outside 0..100 raises. CRIM, e3MSTP and
   e4MSTP change (e3MSTP up to 42 DN, e4MSTP p99.9 66-206 DN on the test DEMs); see docs/FIXES_0_1_1.md.
@@ -27,13 +33,17 @@ faster, every function is documented, and 1194 tests guard the behaviour. The up
 - numba is optional: if it is missing or fails, the numpy code runs with the same results; `RVT_NO_ACCEL=1` turns it off.
 - Proof: frozen tests, AST check per commit, bitwise comparison of every public call against tag `start`, mutants;
   the tools are in `tools/proof/`.
-- Read next: docs/FIXES_0_1_1.md, docs/CHANGES_VS_UPSTREAM.md, docs/ARCHITECTURE.md, docs/KNOWN_ISSUES.md,
-  docs/TESTING.md.
+- Read next: docs/DISK_WINDOWS.md, docs/FIXES_0_1_1.md, docs/CHANGES_VS_UPSTREAM.md, docs/ARCHITECTURE.md,
+  docs/KNOWN_ISSUES.md, docs/TESTING.md.
 
 ## TL;DR (slovensky)
 
 - Čo: pôvodná knižnica rvt_py (master `bab109c`, verzia 2.2.3) + oprava presnosti MSTP + 11 zrýchlení + dokumentácia
-  a testy (0.1.0) + päť opráv blendovania (0.1.1). Balík `rvt_py_llm` 0.1.1, import `rvt`.
+  a testy (0.1.0) + päť opráv blendovania (0.1.1) + voliteľné kruhové okná (0.2.0). Balík `rvt_py_llm` 0.2.0,
+  import `rvt`.
+- 0.2.0: `kernel_shape="disk"` alebo `"disk_equal_area"` v `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
+  `mean_filter` (a atribúty `*_kernel_shape` v `DefaultValues`) urobí okná s r >= 8 px kruhové; predvolené volania
+  sú bitovo nezmenené. MSTP s kruhom trvá asi 7,5 s namiesto 1,5 s na dlaždicu 2048 × 2048 px; `docs/DISK_WINDOWS.md`.
 - 0.1.1: overlay a soft light rešpektujú opacity, sklon v e4MSTP v stupňoch, vstupy blendu orezané do [0, 1] s
   NaN, CRIM nemení `DefaultValues` volajúceho, opacity mimo 0..100 vyvolá výnimku. Menia sa CRIM, e3MSTP a e4MSTP;
   podrobnosti v `docs/FIXES_0_1_1.md`.
@@ -45,7 +55,7 @@ faster, every function is documented, and 1194 tests guard the behaviour. The up
   (oprava presnosti).
 - Numba je voliteľná: bez nej beží numpy s rovnakým výsledkom; `RVT_NO_ACCEL=1` ju vypne.
 - Dôkaz: zmrazené testy, AST kontrola commitov, bitové porovnanie každého volania voči tagu `start`, mutačné testy.
-- Ďalej čítaj: `docs/FIXES_0_1_1.md`, `docs/CHANGES_VS_UPSTREAM.md`, `docs/ARCHITECTURE.md`, `docs/KNOWN_ISSUES.md`.
+- Ďalej čítaj: `docs/DISK_WINDOWS.md`, `docs/FIXES_0_1_1.md`, `docs/CHANGES_VS_UPSTREAM.md`, `docs/ARCHITECTURE.md`, `docs/KNOWN_ISSUES.md`.
 
 ## What changed compared to the original rvt_py, in plain words
 
@@ -69,6 +79,10 @@ faster, every function is documented, and 1194 tests guard the behaviour. The up
   0..55; the rescale of blend inputs outside [0, 1] was broken and filled no-data holes; CRIM changed the caller's
   `svf_r_max`; the opacity range check could never fail. All five are fixed as their docstrings state; CRIM, e3MSTP
   and e4MSTP change, everything else is bitwise identical to 0.1.0 ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)).
+- **Disk windows (0.2.0, opt-in).** A square window responds 15-19 % more weakly (DEV) to a linear feature that runs
+  diagonally than to the same feature along an axis. With `kernel_shape="disk"` or `"disk_equal_area"` the windows
+  of r >= 8 px of MSTP, SLRM and MSRM are exact discrete disks (within 2 % of isotropic in the bank test of DISK_WINDOWS.md), computed by FFT on the
+  elevations minus their tile mean. Without the keyword nothing changes ([docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md)).
 - **numba optional.** No new required dependency. numba costs about 0.2 s to import and 0.24-0.40 s to compile per
   kernel, once per process.
 - **Documentation.** Every public module, class and function has a numpy-style docstring (units, dtypes, edges,
@@ -76,11 +90,12 @@ faster, every function is documented, and 1194 tests guard the behaviour. The up
 - **Tests.** 223 equivalence tests of the optimized code and 866 tests that pin the current behaviour of every
   public function (859 characterization tests and 7 API-snapshot tests), frozen at 0.1.0 (1089, tag
   `tests-frozen-0.1.0`); 4 order-sensitive tests of `_box_sum` added after the release audit; 101 tests of the 0.1.1
-  fixes, written before the fixes; 1194 in total, frozen at tag `tests-frozen`.
+  fixes, written before the fixes; 234 tests of the 0.2.0 disk windows, written before the feature; 1428 in total,
+  frozen at tag `tests-frozen`.
 - **Messages.** 40 exception texts were corrected (they named the old module `rvt.visualization`, a wrong function or
   a wrong bound). Exception types are unchanged.
-- **Not changed.** API, defaults, settings files, file names and outputs (except the precision fix and the 0.1.1
-  fixes). Other behaviour that looks wrong is documented in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), not fixed.
+- **Not changed.** Defaults and outputs (except the precision fix and the 0.1.1 fixes); the API, settings files
+  and file names only gained the optional 0.2.0 keyword, attributes, keys and suffixes. Other behaviour that looks wrong is documented in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), not fixed.
 
 ## Install
 
@@ -139,12 +154,12 @@ From the repository root (always pass the `tests` path; the upstream scripts `te
 at the root are not part of the suite):
 
 ```
-python -m pytest tests -q                                   # 1194 passed
-RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1194 passed
+python -m pytest tests -q                                   # 1428 passed
+RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1428 passed
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-With `RVT_NO_ACCEL=1` all 1194 tests also pass and none is skipped: the tests that compare the numba path with the
+With `RVT_NO_ACCEL=1` all 1428 tests also pass and none is skipped: the tests that compare the numba path with the
 numpy path switch the accelerators on themselves. They are skipped only when numba is not installed.
 
 The proof tools (AST check, bitwise record comparison, frozen check, mutants, docstring lint) are in
@@ -158,8 +173,9 @@ The proof tools (AST check, bitwise record comparison, frozen check, mutants, do
 |---|---|
 | [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md) | every change against upstream: precision fix, each performance commit with its equivalence argument and measured gain, the 0.1.0 pass, all changed exception texts |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | module map, call graphs, data flow, accelerated paths, where to change what |
+| [docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md) | the 0.2.0 disk windows: motivation, definition, threshold, algorithm, cost, effect on real terrain, open questions |
 | [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md) | the five 0.1.1 fixes: defect, file:line, reading and question, evidence, patch, risk; open questions |
-| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 76 documented issues with repros (8 fixed in 0.1.1); tile buffers |
+| [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | 77 documented issues with repros (8 fixed in 0.1.1); tile buffers |
 | [docs/TESTING.md](docs/TESTING.md) | test suites, frozen-test rule, proof chain, commands, release evidence |
 | [tools/proof/README.md](tools/proof/README.md) | the proof tools: what each proves, commands, expected last lines |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | units, dtypes, NaN, edges; docstring and writing standard |
