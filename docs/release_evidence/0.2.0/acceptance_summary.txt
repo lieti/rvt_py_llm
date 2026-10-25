@@ -1,0 +1,99 @@
+acc-c1 202aa15 feat1-helper-mean_filter
+pytest_accel       exit 1: 148 failed, 1265 passed, 3 warnings in 12.46s
+pytest_noaccel     exit 1: 148 failed, 1265 passed, 3 warnings in 11.86s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261025-011827_23708.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261025-012114_25788.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261025-012316_3856.json
+affected           exit 0: AFFECTED msrm,e3mstp,slrm
+det_check          exit 1: DET FAIL
+check_vs_011       CHECK SAME AS v0.1.1
+
+acc-c2 7468298 feat2-mstp
+pytest_accel       exit 1: 71 failed, 1342 passed, 3 warnings in 13.74s
+pytest_noaccel     exit 1: 71 failed, 1342 passed, 3 warnings in 13.24s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261025-013015_19872.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261025-013259_15500.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261025-013506_10028.json
+affected           exit 0: AFFECTED msrm,mstp,e3mstp,e4mstp,slrm
+det_check          exit 0: DET OK
+check_vs_011       CHECK SAME AS v0.1.1
+
+acc-c3 982d615 feat3-slrm-msrm
+pytest_accel       exit 1: 31 failed, 1382 passed, 3 warnings in 13.70s
+pytest_noaccel     exit 1: 31 failed, 1382 passed, 3 warnings in 13.53s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261025-014233_29864.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261025-014522_31792.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261025-014728_23964.json
+affected           exit 0: AFFECTED msrm,mstp,e3mstp,e4mstp,slrm
+det_check          exit 0: DET OK
+check_vs_011       CHECK SAME AS v0.1.1
+
+acc-c4 2ee3ecf feat4-defaults
+pytest_accel       exit 0: 1413 passed, 3 warnings in 13.86s
+pytest_noaccel     exit 0: 1413 passed, 3 warnings in 13.62s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261025-015458_26352.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261025-015745_16428.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261025-015948_28116.json
+affected           exit 0: AFFECTED local_dominance,svf_asvf_opns,neg_opns,sky_illumination,msrm,mstp,e3mstp,e4mstp,slrm,slope,hillshade
+det_check          exit 0: DET OK
+check_vs_011       CHECK SAME AS v0.1.1
+
+acc-c5 b04fee4 docs-vis
+pytest_accel       exit 0: 1413 passed, 3 warnings in 13.66s
+pytest_noaccel     exit 0: 1413 passed, 3 warnings in 13.73s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+
+acc-c6 d12e687 meta-architecture
+pytest_accel       exit 0: 1413 passed, 3 warnings in 14.08s
+pytest_noaccel     exit 0: 1413 passed, 3 warnings in 13.49s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+
+acc-c7 56457af meta-conventions
+pytest_accel       exit 0: 1413 passed, 3 warnings in 14.08s
+pytest_noaccel     exit 0: 1413 passed, 3 warnings in 13.85s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+
+acc-c8 5b4f1f3 meta-disk-windows-head
+pytest_accel       exit 0: 1413 passed, 3 warnings in 13.80s
+pytest_noaccel     exit 0: 1413 passed, 3 warnings in 13.74s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261025-021910_25960.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261025-022157_30316.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261025-022401_13784.json
+affected           exit 0: AFFECTED local_dominance,svf_asvf_opns,neg_opns,sky_illumination,msrm,mstp,e3mstp,e4mstp,slrm,slope,hillshade
+det_check          exit 0: DET OK
+check_vs_011       CHECK SAME AS v0.1.1
+
+acc-c9 20852c9 release-candidate
+pytest_accel       exit 0: 1428 passed, 3 warnings in 14.38s
+pytest_noaccel     exit 0: 1428 passed, 3 warnings in 13.83s
+astcheck           exit 0: ASTCHECK PASS
+retire_check       exit 0: RETIRE OK
+equiv_diff         exit 0: EQUIV_DIFF OK
+check_dev          exit 1: CHECK dev FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_20261025-034643_34012.json
+check_dev_noaccel  exit 1: CHECK dev_noaccel FAIL  (approx)  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_dev_noaccel_20261025-034935_6328.json
+check_determinism  exit 0: CHECK determinism PASS  report: D:\_____TIBOR\26-10-22_RVT_py_Optimalisation\work\eval\check_determinism_20261025-035132_12100.json
+affected           exit 0: AFFECTED local_dominance,svf_asvf_opns,neg_opns,sky_illumination,msrm,mstp,e3mstp,e4mstp,slrm,slope,hillshade
+det_check          exit 0: DET OK
+check_vs_011       CHECK SAME AS v0.1.1
+

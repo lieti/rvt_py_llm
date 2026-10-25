@@ -1,0 +1,9 @@
+﻿round 1: A e3mstp 2.98 s, A e4mstp 4.39 s, B e3mstp 3.01 s, B e4mstp 4.38 s
+round 2: A e3mstp 2.98 s, A e4mstp 4.37 s, B e3mstp 3.00 s, B e4mstp 4.41 s
+round 3: A e3mstp 3.01 s, A e4mstp 4.37 s, B e3mstp 3.00 s, B e4mstp 4.38 s
+round 4: A e3mstp 2.99 s, A e4mstp 4.41 s, B e3mstp 3.00 s, B e4mstp 4.41 s
+round 5: A e3mstp 2.99 s, A e4mstp 4.39 s, B e3mstp 2.99 s, B e4mstp 4.35 s
+e3mstp: median A 2.99 s, B 3.00 s, ratio B/A 1.002 (limit 1.05)
+e4mstp: median A 4.39 s, B 4.38 s, ratio B/A 0.997 (limit 1.05)
+data eval/data/bench_final/real_2048_medium.npz, 1 thread, 5 rounds; A = wt/cmp-011, B = wt/acc-c8
+TIMING OK

@@ -1,0 +1,21 @@
+450d49ed ok          test: 0.2.0 tests first for the disk windows (kernel_shape)
+9a313f1d needs-retire_check retire: frozen nodes that pin the 0.1.1 API, for kernel_shape
+bcebe7e0 needs-selftest tool: astcheck class feat:, mutants m29-m33 on the disk path
+202aa15c needs-tests+equiv_diff+det feat: disk window sums by FFT and the disk path of mean_filter
+74682984 needs-tests+equiv_diff+det feat: disk path of max_elevation_deviation and mstp
+982d6151 needs-tests+equiv_diff+det feat: disk windows for slrm and msrm
+2ee3ecfe needs-tests+equiv_diff+det feat: kernel_shape in DefaultValues, settings, file names and tiling
+b04fee4f ok          docs: disk windows in the rvt.vis module docstring and e3/e4MSTP
+d12e687c ok          meta: ARCHITECTURE call graph and rows for the disk windows
+56457aff ok          meta: CONVENTIONS section 3 row for the window shape
+5b4f1f35 ok          meta: DISK_WINDOWS.md draft (definition, rules, algorithm, cost)
+16682312 ok          meta: freeze the 0.2.0 test set
+685c920d ok          test: msrm disk path, number of scales with non-integer powers
+b6915876 needs-selftest tool: mutants m13 scoped to msrm, m34 on _msrm_radii
+0b218ad3 ok          meta: freeze the 0.2.0 test set again, with the MSRM scale test
+c073b10f ok          docs: note KI-77 in max_elevation_deviation and mstp docstrings
+0a405073 ok          meta: KNOWN_ISSUES KI-77, elevation dependence of square MSTP
+cb80f068 ok          meta: DISK_WINDOWS.md with the comparison, figures and questions
+86830d01 ok          meta: version 0.2.0; README, CHANGELOG, AGENTS, TESTING, CHANGES
+20852c94 needs-selftest tool: proof README states the counts of the 0.2.0 freeze
+ASTCHECK PASS

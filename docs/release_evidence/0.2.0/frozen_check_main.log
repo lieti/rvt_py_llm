@@ -1,0 +1,4 @@
+﻿[accel] 1428 passed, 3 warnings in 14.31s; frozen nodes PASSED: 1428/1428
+[RVT_NO_ACCEL=1] 1428 passed, 3 warnings in 13.98s; frozen nodes PASSED: 1428/1428
+checked main (20852c9) against tests-frozen
+FROZEN PASS

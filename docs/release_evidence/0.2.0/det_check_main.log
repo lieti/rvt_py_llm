@@ -1,0 +1,15 @@
+[default] accel True, RVT_NUM_THREADS None, 120 arrays
+[t1] accel True, RVT_NUM_THREADS 1, 80 arrays
+[t2] accel True, RVT_NUM_THREADS 2, 80 arrays
+[noaccel] accel False, RVT_NUM_THREADS None, 80 arrays
+mstp    disk             8 tiles, variants identical: True, active: True
+mstp    disk_equal_area  8 tiles, variants identical: True, active: True
+slrm    disk             8 tiles, variants identical: True, active: True
+slrm    disk_equal_area  8 tiles, variants identical: True, active: True
+msrm    disk             8 tiles, variants identical: True, active: True
+msrm    disk_equal_area  8 tiles, variants identical: True, active: True
+e3mstp  disk             8 tiles, variants identical: True, active: True
+e3mstp  disk_equal_area  8 tiles, variants identical: True, active: True
+e4mstp  disk             8 tiles, variants identical: True, active: True
+e4mstp  disk_equal_area  8 tiles, variants identical: True, active: True
+DET OK

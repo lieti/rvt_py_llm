@@ -1,0 +1,14 @@
+A = rvt_py_llm@v0.1.1; B = wt/acc-c9; tests from 5b5cbad4
+[accel] A: 1194 passed, 3 warnings in 16.84s | B: 4 failed, 1190 passed, 3 warnings in 17.54s | allowed 0, propagated 0, unexplained 0
+[t1] A: 1194 passed, 3 warnings in 16.59s | B: 4 failed, 1190 passed, 3 warnings in 16.89s | allowed 0, propagated 0, unexplained 0
+[noaccel] A: 1194 passed, 3 warnings in 16.72s | B: 4 failed, 1190 passed, 3 warnings in 16.93s | allowed 0, propagated 0, unexplained 0
+differing functions, allowed: -
+differing functions, propagated: -
+differing functions, UNEXPLAINED: -
+[self accel] 1428 passed, 3 warnings in 21.00s
+[self t1] 1428 passed, 3 warnings in 20.42s
+[self noaccel] 1428 passed, 3 warnings in 20.67s
+[self accel vs t1] differing nodes: 0
+[self accel vs noaccel] differing nodes: 0
+log: work/circ/logs/equiv_diff_acc-c9_20261025-034041.log (9 lines)
+EQUIV_DIFF OK
