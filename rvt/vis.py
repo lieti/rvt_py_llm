@@ -3182,6 +3182,11 @@ def max_elevation_deviation(dem, minimum_radius, maximum_radius, step, kernel_sh
     ``topographic_dev`` returns the DEM), taken one pixel up and left of the centre (output (i, j) is
     ``z[i - 1, j - 1]``, with the symmetric padding at the border), not a deviation.
 
+    Known issue (see docs/KNOWN_ISSUES.md, KI-77): the square path sums raw elevations over the whole padded tile,
+    so ``var = S2/n - (S1/n)^2`` cancels in flat terrain on large tiles and the result depends on the absolute
+    elevation (2048 x 2048 px, 5 cm relief, +600 m: 1.4 % of the values change by more than 0.1). The disk path
+    removes the tile mean first and is not affected.
+
     Disk windows (``_max_elevation_deviation_disk``): the DEM is padded in symmetric mode by floor(r_w) of the
     largest window; the window sums of ``z - zbar`` and ``(z - zbar)^2`` (``zbar`` the float64 mean of the non-NaN
     padded pixels) and of the valid mask are FFT convolutions (``_disk_window_sums``, scipy.fft, float64,
@@ -3356,6 +3361,11 @@ def mstp(dem,
     is removed by ``abs``, so ``ve_factor`` changes the result only through that term (by about 2e-7 for
     ``ve_factor`` 5 on a 0-10 m test DEM). The lower ``ve_factor`` limit is -1000, unlike the -10000 of the
     other functions; known issue, see docs/KNOWN_ISSUES.md.
+
+    Known issue (see docs/KNOWN_ISSUES.md, KI-77): with square windows the variance of ``max_elevation_deviation``
+    cancels in flat terrain on large tiles, so the bands depend on the absolute elevation (full test DEMs: local
+    band up to 250 DN of the 8-bit display, meso up to 169 DN). With a disk ``kernel_shape`` the meso and broad
+    bands take the FFT path, which removes the tile mean and is not affected; the local band (1..5 px) stays square.
 
     See Also
     --------
