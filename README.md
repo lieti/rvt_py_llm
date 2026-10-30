@@ -99,6 +99,16 @@ the default stays the square window with unchanged outputs. The code is faster, 
 - **Not changed.** Defaults and outputs (except the precision fix and the 0.1.1 fixes); the API, settings files
   and file names only gained the optional 0.2.0 keyword, attributes, keys and suffixes. Other behaviour that looks wrong is documented in [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md), not fixed.
 
+## Versions
+
+| tag | what it is |
+|---|---|
+| `v0.1.0` | Speed: 11 performance commits, bitwise identical to upstream 2.2.3 after the float64 precision fix of MSTP; the 11 visualizations of a tiling pipeline run x11 faster; documentation and tests. |
+| `v0.1.1` | Five fixes of the blend path; only CRIM, e3MSTP and e4MSTP change ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)). |
+| `v0.2.0` | Opt-in disk windows, keyword `kernel_shape` of MSTP, SLRM and MSRM; the default path is unchanged ([docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md)). |
+
+The full history with commits and evidence is in [CHANGELOG.md](CHANGELOG.md).
+
 ## Install
 
 The package needs numpy, scipy, matplotlib and GDAL (`osgeo`); numba is optional. Tested only with Python 3.11.17,
