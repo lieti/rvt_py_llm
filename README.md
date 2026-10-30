@@ -103,11 +103,24 @@ the default stays the square window with unchanged outputs. The code is faster, 
 The package needs numpy, scipy, matplotlib and GDAL (`osgeo`); numba is optional. Tested only with Python 3.11.17,
 numpy 2.4.6, scipy 1.17.1, matplotlib 3.11.2, GDAL 3.12.3, numba 0.68.0 on Windows 11. `setup.py` allows Python >= 3.9.
 
-- Development workspace: the environment is pinned by `pixi.lock` in the parent workspace of this repository
-  (platforms win-64, linux-64, osx-arm64); `pixi install --locked`, then run Python through `pixi run`.
-- pip: install GDAL first (it is easiest from conda-forge), then
-  `pip install .` (or `pip install ".[accel]"` for numba, `pip install ".[test]"` for pytest and rasterio, which the
-  tests use).
+- Route A, the pinned environment (the exact environment everything was tested in): `pixi.toml` and `pixi.lock` at
+  the repository root pin every package for the platforms win-64, linux-64 and osx-arm64 (conda-forge). With
+  [pixi](https://pixi.sh) installed, from the repository root:
+
+  ```
+  pixi install --locked
+  pixi run python -m pytest tests -q
+  ```
+
+  `pixi run python ...` then runs any script with this `rvt` on the path of the checkout (the tests put the
+  repository root first on `sys.path`; a script does the same or runs from the repository root). The environment
+  is created in `.pixi/` (ignored by git).
+- Route B, pip: install GDAL first (it is easiest from conda-forge, e.g. `conda create -n rvt -c conda-forge
+  python=3.11 gdal`), then `pip install .` (or `pip install ".[accel]"` for numba, `pip install ".[test]"` for
+  pytest and rasterio, which the tests use). The `settings/` directory with the example settings files is not part
+  of the installed package; `rvt` never reads it on its own, every settings file is passed by path
+  (`DefaultValues.read_default_from_file`, `BlenderCombination.read_from_file`), so copy the files you need from
+  the repository.
 - conda: `environment.yml` lists the upstream environment; add `numba` for the accelerated paths.
 
 ## Quick start
