@@ -64,10 +64,12 @@ Tolerances: comparisons with the upstream transcription are bitwise unless the t
 
 ### Platform note
 
-`tests/test_char_default.py::test_json_default_path_is_settings_default_settings_json_in_cwd` pins the Windows
-behaviour of a path with a backslash (KNOWN_ISSUES KI-52) and is expected to fail on Linux and macOS;
-`tests/test_char_blend.py:94` is a Windows-only test for the same pattern (KI-35). The suite was run on Windows 11
-only.
+Until 0.2.1 the default settings paths were literals with a backslash (KNOWN_ISSUES KI-35, KI-52), so
+`tests/test_char_default.py::test_json_default_path_is_settings_default_settings_json_in_cwd` failed on Linux and
+macOS and `tests/test_char_blend.py:94` is skipped there. From 0.2.2 the paths are built with `os.path.join`, the
+frozen node passes on every OS (the Windows string is unchanged) and `tests/test_default_paths_posix.py` checks
+both default paths on any OS. The suite ran on Windows 11 here; the CI workflow (`.github/workflows/tests.yml`)
+runs it on Ubuntu and Windows.
 
 ## 2. The frozen-test rule
 

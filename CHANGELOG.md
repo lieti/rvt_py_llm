@@ -3,6 +3,15 @@
 All notable changes of rvt_py_llm. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). Details and evidence: [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md).
 
+## [0.2.2] - 2026-10-30
+
+### Fixed
+- `DefaultValues.save_default_to_file(None)` and `rvt.blend.create_blender_file_example(None)` build their default
+  path with `os.path.join("settings", ...)` instead of a literal with a backslash, so they work on Linux and macOS
+  (KNOWN_ISSUES KI-35, KI-52). On Windows the path string, the files written and every output are unchanged; proof
+  `refactor:` commit 5439c12 (full tests with and without numba, `equiv.py --a v0.2.1`). New test
+  `tests/test_default_paths_posix.py`; the frozen node of KI-52 now passes on every OS.
+
 ## [0.2.1] - 2026-10-30
 
 Repository hygiene only: no file under `rvt/` or `settings/` changes, every public function returns the same bits

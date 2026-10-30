@@ -591,8 +591,9 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
   import posixpath; p = posixpath.dirname(r"settings\blender_file_example.json"); repr(p)   # -> ''
   os.makedirs(p)                                                                       # -> FileNotFoundError
   ```
-- Pinned: `tests/test_char_blend.py:94` (Windows behaviour).
-- Status: documented, not changed in 0.1.0.
+- Pinned: `tests/test_char_blend.py:94` (Windows behaviour); `tests/test_default_paths_posix.py` (any OS, 0.2.2).
+- Status: fixed in 0.2.2 (`os.path.join("settings", "blender_file_example.json")`; the string is unchanged on
+  Windows).
 
 ### KI-36 BlenderLayer.check_data: the opacity check can never fail
 - Where: `rvt/blend.py:149` at `start` (`if 0 > self.opacity > 100`).
@@ -834,11 +835,12 @@ DEM = (np.sin(x / 7.0) * 5 + np.cos(y / 5.0) * 3 + 0.05 * x * y).astype(np.float
 - Now: `DefaultValues.save_default_to_file` (`rvt/default.py:687`, `:691-692`) (lines at `234b156`).
 - Description: on Windows this is `settings/default_settings.json`; on Linux and macOS the backslash is part of the
   file name, `dirname` is "" and `os.makedirs("")` raises FileNotFoundError when the file does not exist yet.
-- Impact: `save_default_to_file()` without a path fails on non-Windows systems. The frozen test that pins the Windows
-  behaviour is expected to fail on Linux and macOS for this reason (not run there in this project).
+- Impact (until 0.2.1): `save_default_to_file()` without a path failed on non-Windows systems, and the frozen test
+  that pins the Windows behaviour failed on Linux and macOS for this reason.
 - Repro: `posixpath.dirname(r"settings\default_settings.json")   # -> ''` (then `os.makedirs("")` -> FileNotFoundError)
-- Pinned: `tests/test_char_default.py::test_json_default_path_is_settings_default_settings_json_in_cwd`.
-- Status: documented, not changed in 0.1.0.
+- Pinned: `tests/test_char_default.py::test_json_default_path_is_settings_default_settings_json_in_cwd` (passes on
+  every OS from 0.2.2); `tests/test_default_paths_posix.py`.
+- Status: fixed in 0.2.2 (`os.path.join("settings", "default_settings.json")`; the string is unchanged on Windows).
 
 ### KI-53 .txt settings: "sun_elevation" is tested twice, mhs_sun_el cannot be set
 - Where: `rvt/default.py:607` (`hs_sun_el`) and `:613` (`mhs_sun_el`) at `start`, in one if/elif chain.
