@@ -451,18 +451,18 @@ class DefaultValues:
         Parameters
         ----------
         file_path : str or None
-            Path of the json file; an existing file is replaced. None writes ``settings\\default_settings.json``
-            relative to the current working directory and creates the ``settings`` directory if needed.
+            Path of the json file; an existing file is replaced. None writes ``settings/default_settings.json``
+            (``os.path.join``, so the separator of the operating system) relative to the current working
+            directory and creates the ``settings`` directory if needed.
 
         Notes
         -----
         Known issue: ``tile_size`` and ``tile_size_limit`` are not written (and not read), so they do not survive
         a settings round trip. See docs/KNOWN_ISSUES.md.
 
-        Known issue: the default path is the literal ``r"settings\\default_settings.json"`` with a backslash. On
-        Windows it is a path in the directory ``settings``; on Linux/macOS it is one file name with an empty
-        directory part, and ``os.makedirs("")`` raises FileNotFoundError when the file does not exist yet. See
-        docs/KNOWN_ISSUES.md.
+        Until 0.2.1 the default path was the literal ``r"settings\\default_settings.json"``, which on Linux/macOS
+        is one file name with an empty directory part, so ``os.makedirs("")`` raised FileNotFoundError (KI-52).
+        On Windows the string is the same as before.
 
         The file is opened with the platform default encoding; all texts written are ASCII.
         """
@@ -726,7 +726,7 @@ class DefaultValues:
 
         }}
         if file_path is None:
-            file_path = r"settings\default_settings.json"
+            file_path = os.path.join("settings", "default_settings.json")
             if os.path.isfile(file_path):
                 pass
             else:

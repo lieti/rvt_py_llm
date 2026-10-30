@@ -111,14 +111,15 @@ def create_blender_file_example(file_path=None):
     Parameters
     ----------
     file_path : str or None
-        Output path; an existing file is overwritten. None writes ``settings\\blender_file_example.json`` relative
-        to the current working directory and creates the directory ``settings`` if it is missing.
+        Output path; an existing file is overwritten. None writes ``settings/blender_file_example.json``
+        (``os.path.join``, so the separator of the operating system) relative to the current working directory
+        and creates the directory ``settings`` if it is missing.
 
     Notes
     -----
-    Known issue: the default path is written with a backslash. On POSIX ``os.path.dirname`` of it is "" and
-    ``os.makedirs("")`` raises FileNotFoundError, so ``file_path=None`` works on Windows only. See
-    docs/KNOWN_ISSUES.md.
+    Until 0.2.1 the default path was written with a backslash; on POSIX ``os.path.dirname`` of it was "" and
+    ``os.makedirs("")`` raised FileNotFoundError, so ``file_path=None`` worked on Windows only (KI-35). On
+    Windows the string is the same as before.
     """
     data = {"combination": {"name": "VAT - Archaeological",
                             "layers":
@@ -139,7 +140,7 @@ def create_blender_file_example(file_path=None):
                                 ]
                             }}
     if file_path is None:
-        file_path = r"settings\blender_file_example.json"
+        file_path = os.path.join("settings", "blender_file_example.json")
         if os.path.isfile(file_path):
             pass
         else:
