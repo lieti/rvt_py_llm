@@ -3,6 +3,23 @@
 All notable changes of rvt_py_llm. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). Details and evidence: [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md).
 
+## [0.2.3] - 2026-10-30
+
+Documents only: no file under `rvt/`, `settings/`, `tests/` or `tools/` changes.
+
+### Added
+- README: an opening section that says what this repository is (a personal experiment on top of upstream RVT_py,
+  public for convenience; the reference tool is upstream; credits to the upstream authors), how it was made and
+  who it is for, with the first paragraph also in Slovak.
+- `docs/CONTINUING.md`: how to continue the work on another machine, with Claude Code or by hand: setup with
+  `pixi install --locked`, the five things behind the rules, the four kinds of change with their commit classes
+  and checks, how to work with an LLM session, and the done checklist. Linked from CLAUDE.md, AGENTS.md and the
+  README Documents table.
+
+### Changed
+- Test counts in README, AGENTS.md, docs/TESTING.md and the CI workflow comment say `1430 passed` (1428 frozen
+  tests plus the 2 of `tests/test_default_paths_posix.py`); README Versions table in chronological order.
+
 ## [0.2.2] - 2026-10-30
 
 ### Fixed

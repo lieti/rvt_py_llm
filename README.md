@@ -1,5 +1,38 @@
 # rvt_py_llm — Relief Visualization Toolbox in Python, optimized and documented
 
+**What this is.** rvt_py_llm is a personal experiment of Tibor Lieskovský with rvt_py, the Python library of the
+Relief Visualization Toolbox, made public for convenience: so that the changes, their evidence and the documents
+can be read, cloned and tested from anywhere. It is not a release of RVT and not a competing project. The
+reference tool is upstream RVT_py, https://github.com/EarthObservation/RVT_py: use it for real work and report
+problems with the methods there, not here. All credit for the toolbox, its methods and the original code belongs
+to Žiga Kokalj and the co-authors at ZRC SAZU and the University of Ljubljana (see License and credits); they are
+informed about this repository. Apache License 2.0, as upstream.
+
+*Slovensky: rvt_py_llm je interný experiment Tibora Lieskovského s knižnicou rvt_py, zverejnený pre pohodlie, aby
+sa zmeny, ich dôkazy a dokumenty dali čítať, stiahnuť a otestovať odkiaľkoľvek. Nie je to vydanie RVT ani
+konkurenčný projekt. Referenčný nástroj je upstream RVT_py (odkaz vyššie); na reálnu prácu používaj ten. Všetky
+zásluhy za nástroj, metódy a pôvodný kód patria Žigovi Kokaljovi a spoluautorom zo ZRC SAZU a Univerzity v
+Ľubľane; o tomto repozitári sú informovaní. Licencia Apache 2.0 ako upstream.*
+
+**How it was made.** The author is a surveyor and geoinformatics specialist, not a software developer. The code
+changes, tests and documents were written by LLM agents (Claude) under fixed rules: a frozen set of tests that
+no change may touch, commit classes checked by a script, bitwise comparison of every public call against a
+reference tag, and an acceptance harness that judged speed and equivalence from outside the repository. The
+author reviewed the results and the documents, not every line of code; the tests and proofs in
+[docs/TESTING.md](docs/TESTING.md) are the line-level review. The rules are in [AGENTS.md](AGENTS.md).
+
+**What it adds** to upstream master `bab109c` (v2.2.3-117): a speed-up of the tiling pipeline by a factor of 11 with
+bitwise identical outputs (0.1.0), five fixes of the blend path that change CRIM, e3MSTP and e4MSTP on purpose
+(0.1.1), opt-in round windows for MSTP, SLRM and MSRM (0.2.0), and a pinned environment, CI and Linux paths
+(0.2.1, 0.2.2). Every change is documented with its evidence; the Versions table below lists the tags.
+
+**Who it is for.** Someone who wants to judge whether any of this is worth bringing into upstream: start with
+[docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md), [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md) and
+[docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md). Someone who wants to continue this kind of LLM-driven work on the
+library, with or without a developer's background: [docs/CONTINUING.md](docs/CONTINUING.md) says how.
+
+## In one paragraph
+
 rvt_py_llm is a drop-in replacement for rvt_py, the Relief Visualization Toolbox Python library by Žiga Kokalj and
 co-authors (ZRC SAZU and University of Ljubljana, https://github.com/EarthObservation/RVT_py). It computes relief
 visualizations of digital elevation models (slope, hillshade, sky-view factor, openness, local dominance, sky
@@ -15,7 +48,7 @@ the default stays the square window with unchanged outputs. The code is faster, 
 
 - What: upstream rvt_py (master `bab109c`, version 2.2.3) + one MSTP precision fix + 11 performance commits +
   documentation and tests (0.1.0) + five fixes of the blend path (0.1.1) + opt-in disk windows (0.2.0). Package
-  `rvt_py_llm` 0.2.2, import `rvt`.
+  `rvt_py_llm` 0.2.3, import `rvt`.
 - 0.2.0: `kernel_shape="disk"` or `"disk_equal_area"` on `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
   `mean_filter` (and the `*_kernel_shape` attributes of `DefaultValues`) makes windows of r >= 8 px round, which
   removes the 15-19 % weaker DEV response of the square to diagonal features; default calls are bitwise unchanged.
@@ -39,7 +72,7 @@ the default stays the square window with unchanged outputs. The code is faster, 
 ## TL;DR (slovensky)
 
 - Čo: pôvodná knižnica rvt_py (master `bab109c`, verzia 2.2.3) + oprava presnosti MSTP + 11 zrýchlení + dokumentácia
-  a testy (0.1.0) + päť opráv blendovania (0.1.1) + voliteľné kruhové okná (0.2.0). Balík `rvt_py_llm` 0.2.2,
+  a testy (0.1.0) + päť opráv blendovania (0.1.1) + voliteľné kruhové okná (0.2.0). Balík `rvt_py_llm` 0.2.3,
   import `rvt`.
 - 0.2.0: `kernel_shape="disk"` alebo `"disk_equal_area"` v `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
   `mean_filter` (a atribúty `*_kernel_shape` v `DefaultValues`) urobí okná s r >= 8 px kruhové; predvolené volania
@@ -104,10 +137,11 @@ the default stays the square window with unchanged outputs. The code is faster, 
 | tag | what it is |
 |---|---|
 | `v0.1.0` | Speed: 11 performance commits, bitwise identical to upstream master `bab109c` (v2.2.3-117) after the float64 precision fix of MSTP; the 11 visualizations of a tiling pipeline run x11 faster; documentation and tests. |
-| `v0.2.1` | Repository hygiene: pinned environment in the repository, CI workflow, shipped evidence; outputs unchanged from `v0.2.0`. |
-| `v0.2.2` | Default settings paths work on Linux and macOS (`os.path.join`); outputs unchanged. |
 | `v0.1.1` | Five fixes of the blend path; only CRIM, e3MSTP and e4MSTP change ([docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)). |
 | `v0.2.0` | Opt-in disk windows, keyword `kernel_shape` of MSTP, SLRM and MSRM; the default path is unchanged ([docs/DISK_WINDOWS.md](docs/DISK_WINDOWS.md)). |
+| `v0.2.1` | Repository hygiene: pinned environment in the repository, CI workflow, shipped evidence; outputs unchanged from `v0.2.0`. |
+| `v0.2.2` | Default settings paths work on Linux and macOS (`os.path.join`); outputs unchanged. |
+| `v0.2.3` | Documents only: the opening section of this README and [docs/CONTINUING.md](docs/CONTINUING.md). |
 
 The full history with commits and evidence is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -181,12 +215,12 @@ From the repository root (always pass the `tests` path; the upstream scripts `te
 at the root are not part of the suite):
 
 ```
-python -m pytest tests -q                                   # 1428 passed
-RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1428 passed
+python -m pytest tests -q                                   # 1430 passed (1428 frozen + 2 of 0.2.2)
+RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash: numpy fallback path; 1430 passed
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-With `RVT_NO_ACCEL=1` all 1428 tests also pass and none is skipped: the tests that compare the numba path with the
+With `RVT_NO_ACCEL=1` all 1430 tests also pass and none is skipped: the tests that compare the numba path with the
 numpy path switch the accelerators on themselves. They are skipped only when numba is not installed.
 
 The proof tools (AST check, bitwise record comparison, frozen check, mutants, docstring lint) are in
@@ -207,6 +241,7 @@ The proof tools (AST check, bitwise record comparison, frozen check, mutants, do
 | [tools/proof/README.md](tools/proof/README.md) | the proof tools: what each proves, commands, expected last lines |
 | [docs/CONVENTIONS.md](docs/CONVENTIONS.md) | units, dtypes, NaN, edges; docstring and writing standard |
 | [AGENTS.md](AGENTS.md) | rules for LLM sessions and other contributors |
+| [docs/CONTINUING.md](docs/CONTINUING.md) | how to continue the work on another machine, with Claude Code or by hand: setup, the four kinds of change, checks, release |
 | [CHANGELOG.md](CHANGELOG.md) | release history |
 | [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md) | the upstream README, unchanged |
 

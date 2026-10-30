@@ -248,7 +248,8 @@ Run from the repository root unless stated. Do not run plain `pytest` at the roo
 | tests, numpy fallback | `$env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL` | `RVT_NO_ACCEL=1 python -m pytest tests -q` |
 | tests, one thread | `$env:RVT_NUM_THREADS="1"; python -m pytest tests -q; Remove-Item Env:RVT_NUM_THREADS` | `RVT_NUM_THREADS=1 python -m pytest tests -q` |
 
-Expected last line: `1428 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
+Expected last line: `1430 passed` (3 warnings; 1428 frozen tests plus the 2 of `test_default_paths_posix.py`
+since 0.2.2) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
 the numba path with the numpy path run too (they switch the accelerators on themselves), so nothing is skipped.
 Without numba installed, the tests that need it are skipped. With the pinned pixi environment (README, Install,
 route A), prefix with `pixi run`: `pixi run python -m pytest tests -q`.

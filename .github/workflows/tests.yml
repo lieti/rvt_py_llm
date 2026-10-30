@@ -1,6 +1,6 @@
 # Runs the test suite of rvt_py_llm in the pinned pixi environment (pixi.lock at the repository root) on Linux and
 # Windows, once with the numba paths and once with the numpy fallback (RVT_NO_ACCEL=1). Expected last line of
-# every run: "1428 passed" (docs/TESTING.md, section 4).
+# every run: "1430 passed" (docs/TESTING.md, section 4).
 name: tests
 
 on:

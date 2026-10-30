@@ -12,7 +12,9 @@ purpose (0.1.1, [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md)), and opt-in disk win
 Tags: `baseline` (upstream `bab109c`), `baseline-fixed` (`03702f4`, + precision fix), `start` (`8413d3e`, optimized
 code + equivalence tests), `v0.1.0` (`74c63d0`), `tests-frozen` (annotated, on `b691587`, the frozen test set of
 0.2.0), `tests-frozen-0.1.0` (the 0.1.0 freeze, `c341ec8`), `tests-frozen-0.1.1` (the 0.1.1 freeze, `5b5cbad`),
-`v0.1.1`, `v0.2.0`.
+`v0.1.1`, `v0.2.0`, `v0.2.1` (hygiene), `v0.2.2` (POSIX default paths), `v0.2.3` (README intro, this
+document). How to set up a machine, which kind of change a task is, and what "done" means:
+[docs/CONTINUING.md](docs/CONTINUING.md).
 
 The reference for rule 1 below is `v0.2.0` from 0.2.0 on (`v0.1.1` for 0.1.1, `start` up to 0.1.0); the 0.1.1 fixes
 changed the outputs of the functions listed in [docs/FIXES_0_1_1.md](docs/FIXES_0_1_1.md) and nothing else, and
@@ -73,7 +75,7 @@ behaviour.
 From the repository root:
 
 ```
-python -m pytest tests -q                                   # 1428 passed
+python -m pytest tests -q                                   # 1430 passed (1428 frozen + 2 of 0.2.2)
 RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
