@@ -15,7 +15,7 @@ the default stays the square window with unchanged outputs. The code is faster, 
 
 - What: upstream rvt_py (master `bab109c`, version 2.2.3) + one MSTP precision fix + 11 performance commits +
   documentation and tests (0.1.0) + five fixes of the blend path (0.1.1) + opt-in disk windows (0.2.0). Package
-  `rvt_py_llm` 0.2.0, import `rvt`.
+  `rvt_py_llm` 0.2.1, import `rvt`.
 - 0.2.0: `kernel_shape="disk"` or `"disk_equal_area"` on `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
   `mean_filter` (and the `*_kernel_shape` attributes of `DefaultValues`) makes windows of r >= 8 px round, which
   removes the 15-19 % weaker DEV response of the square to diagonal features; default calls are bitwise unchanged.
@@ -39,7 +39,7 @@ the default stays the square window with unchanged outputs. The code is faster, 
 ## TL;DR (slovensky)
 
 - Čo: pôvodná knižnica rvt_py (master `bab109c`, verzia 2.2.3) + oprava presnosti MSTP + 11 zrýchlení + dokumentácia
-  a testy (0.1.0) + päť opráv blendovania (0.1.1) + voliteľné kruhové okná (0.2.0). Balík `rvt_py_llm` 0.2.0,
+  a testy (0.1.0) + päť opráv blendovania (0.1.1) + voliteľné kruhové okná (0.2.0). Balík `rvt_py_llm` 0.2.1,
   import `rvt`.
 - 0.2.0: `kernel_shape="disk"` alebo `"disk_equal_area"` v `mstp`, `slrm`, `msrm`, `max_elevation_deviation`,
   `mean_filter` (a atribúty `*_kernel_shape` v `DefaultValues`) urobí okná s r >= 8 px kruhové; predvolené volania

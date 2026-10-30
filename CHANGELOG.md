@@ -3,6 +3,32 @@
 All notable changes of rvt_py_llm. Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [Semantic Versioning](https://semver.org/). Details and evidence: [docs/CHANGES_VS_UPSTREAM.md](docs/CHANGES_VS_UPSTREAM.md).
 
+## [0.2.1] - 2026-10-30
+
+Repository hygiene only: no file under `rvt/` or `settings/` changes, every public function returns the same bits
+as 0.2.0. The repository can now be cloned, installed and tested on another machine without the workspace it was
+developed in.
+
+### Added
+- The pinned environment in the repository: `pixi.toml` and `pixi.lock` (conda-forge; win-64, linux-64,
+  osx-arm64), the exact environment every test and measurement of 0.1.0 to 0.2.0 ran in. README Install: route A
+  `pixi install --locked`, route B pip with GDAL from conda-forge.
+- `docs/release_evidence/0.1.0/bench/`: the 11 per-commit benchmark reports cited by docs/CHANGES_VS_UPSTREAM.md
+  and the final gate report of the optimization run, copied from the development workspace.
+- docs/TESTING.md section 9 (External evidence): what the acceptance harness did and why it and its DEM sets are
+  not shipped. Every citation of a path outside the repository now says "harness, not shipped" or points to a
+  shipped copy.
+- `.github/workflows/tests.yml`: the test suite on ubuntu-latest and windows-latest in the pinned environment,
+  with the numba paths and with `RVT_NO_ACCEL=1`.
+- README section Versions.
+
+### Open
+- The default paths of `DefaultValues.save_default_to_file()` and `create_blender_file_example()` without an
+  argument still carry a backslash (KNOWN_ISSUES KI-35, KI-52), so those two calls, and the frozen test
+  `tests/test_char_default.py::test_json_default_path_is_settings_default_settings_json_in_cwd`, fail on Linux and
+  macOS. The Linux job of the workflow is red until this is changed (a `refactor:` commit that builds the path with
+  `os.path.join`; on Windows the string is unchanged).
+
 ## [0.2.0] - 2026-10-25
 
 Opt-in disk windows for MSTP, SLRM and MSRM. With the default `kernel_shape="square"` every public function returns
