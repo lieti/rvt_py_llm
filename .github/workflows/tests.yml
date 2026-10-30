@@ -1,0 +1,30 @@
+# Runs the test suite of rvt_py_llm in the pinned pixi environment (pixi.lock at the repository root) on Linux and
+# Windows, once with the numba paths and once with the numpy fallback (RVT_NO_ACCEL=1). Expected last line of
+# every run: "1428 passed" (docs/TESTING.md, section 4).
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    name: pytest on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          locked: true
+      - name: tests, accelerated path
+        run: pixi run python -m pytest tests -q
+      - name: tests, numpy fallback (RVT_NO_ACCEL=1)
+        run: pixi run python -m pytest tests -q
+        env:
+          RVT_NO_ACCEL: "1"
