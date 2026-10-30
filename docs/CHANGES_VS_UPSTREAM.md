@@ -29,8 +29,9 @@ outside [0, 100], which it accepted before. 0.2.0 adds the keyword `kernel_shape
   SVF + openness 5.53 s -> 0.775 s (x7.1), negative openness x8.2, sky illumination x6.8, MSRM x4.8, SLRM x4.4; slope
   and hillshade are unchanged (x1.0). Peak memory added by a call is lower or equal (ratio 0.29-1.00).
   Source of these absolute times and ratios: the final gate of the optimization run on `opt/perf` (= tag `start`),
-  2026-10-23 08:20, idle machine, report `bench_final_1t_20261023-082005_12380.json` in `out/gate_final/` of the
-  optimization workspace (not in this repository). The release evidence of 0.1.0
+  2026-10-23 08:20, idle machine, report
+  [bench_final_1t_20261023-082005_12380.json](release_evidence/0.1.0/bench/bench_final_1t_20261023-082005_12380.json).
+  The release evidence of 0.1.0
   ([bench_final_1t_20261023-170737_32096.json](release_evidence/0.1.0/bench_final_1t_20261023-170737_32096.json))
   has the same ratios with absolute times about 2.4 times longer, e.g. local dominance 80.51 s -> 1.014 s (x79.4),
   pipeline x11.41 [11.32-11.43]; [TESTING.md](TESTING.md) section 6 explains the difference.
@@ -72,8 +73,8 @@ Each commit was accepted on its own against the branch as it was then: exact on 
 `bench_quick`, `dev` without accelerators, and determinism; affected-target pipeline speed-up >= 1.10 with its 95 %
 interval above 1 on `bench_quick` (1024 x 1024 px `medium` window, 5 rounds, 1 thread). "Incremental" is that
 speed-up over the affected targets, against the previous commit. Commit messages hold the full equivalence argument.
-Report paths are in the optimization workspace (`work/eval/...`), not in this repository; the final reports are
-copied to `out/gate_final/` there.
+The reports named below are copies in [release_evidence/0.1.0/bench/](release_evidence/0.1.0/bench/); the harness
+that wrote them is not shipped ([TESTING.md](TESTING.md), section 9).
 
 ### 21284eb K-01: MSTP box sums by slicing the integral images over the output window
 - What: `max_elevation_deviation` evaluates the 12 rolled tables per radius as slices of the output window; pixel
@@ -83,7 +84,7 @@ copied to `out/gate_final/` there.
   expression order ((b + a) - c - d, / n, - mean², abs, sqrt, + 1e-6, (z - mean) / std) is unchanged.
 - Exact. numpy, no threads. Affected: mstp, e3mstp, e4mstp.
 - Gain: incremental x1.63 [1.61-1.63] (mstp x8.02, e3mstp x2.17, e4mstp x1.26),
-  `work/eval/bench_quick_1t_20261023-002717_28020.json`.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-002717_28020.json`.
 
 ### 0ddb966 K-02: local_dominance by slices on the output window, masked float64 add into float32
 - What: the shifted DEM is a slice of the edge-padded DEM; only the output window is computed, in row blocks;
@@ -94,7 +95,7 @@ copied to `out/gate_final/` there.
   to float32); the accumulator starts as `dem * 0` (keeps NaN and -0.0).
 - Exact. numpy. Affected: local_dominance, e4mstp.
 - Gain: x3.06 [3.01-3.08] (local_dominance x12.10, e4mstp x2.14); terrain `high` x2.66;
-  `work/eval/bench_quick_1t_20261023-004625_24872.json`.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-004625_24872.json`.
 
 ### b816b26 K-05: sky_illumination horizon search by slicing, trig on the unpadded extent
 - What: the level-0 search runs on the unpadded extent (every level-0 shift is at most 20 px = 5 m at 0.25 m/px,
@@ -104,7 +105,7 @@ copied to `out/gate_final/` there.
   because the spline reads all of them; same ufuncs, operand order and dtypes; nothing tile-wide is taken before
   the crop.
 - Exact. numpy/scipy. Affected: sky_illumination.
-- Gain: x3.03 [2.97-3.04]; `high` x3.09; `work/eval/bench_quick_1t_20261023-010342_25868.json`.
+- Gain: x3.03 [2.97-3.04]; `high` x3.09; `release_evidence/0.1.0/bench/bench_quick_1t_20261023-010342_25868.json`.
 
 ### 47f22ab K-06: mean_filter by slicing integral images
 - What: the four `np.roll` shifts of the integral images are slices of the output window; constant pixel count
@@ -113,7 +114,7 @@ copied to `out/gate_final/` there.
   ((T1 + T2) - T3) - T4, same division, float32 cast and NaN restore.
 - Exact. numpy. Affected: slrm, msrm, e3mstp.
 - Gain: x1.13 [1.12-1.14] (msrm x4.67, slrm x4.42, e3mstp x1.01);
-  `work/eval/bench_quick_1t_20261023-020331_33172.json`.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-020331_33172.json`.
 
 ### 530ced9 K-03: sky_view_factor_compute horizon scan by slicing over the output window, in row blocks
 - What: the reflect-padded DEM is read by slices on the output window, in contiguous row blocks of about 32768
@@ -124,7 +125,7 @@ copied to `out/gate_final/` there.
 - Exact (bitwise equality of the blocked transcendentals verified on an AVX2 CPU). numpy. Affected: svf_asvf_opns,
   neg_opns, e3mstp, e4mstp.
 - Gain: x2.61 [2.60-2.63] (svf x4.42, neg_opns x4.34, e3mstp x2.02, e4mstp x2.60); `high` x2.58;
-  `work/eval/bench_quick_1t_20261023-021655_31124.json`.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-021655_31124.json`.
 
 ### 379177c K-05b: sky_illumination level search and directional terms in cached row blocks, fit-free spline
 - What: row blocks on every level (rows a multiple of 16); the floor at 0 applied once; for kx = ky = 1 on the
@@ -133,7 +134,7 @@ copied to `out/gate_final/` there.
   NaN (only a zero's sign may differ, which no output sees); the fitted coefficients of that linear spline equal the
   data exactly; non-finite data or other knots take the original `RectBivariateSpline` path.
 - Exact. numpy/scipy. Affected: sky_illumination.
-- Gain: x1.58 [1.55-1.63]; `high` x1.59; `work/eval/bench_quick_1t_20261023-022943_3752.json`.
+- Gain: x1.58 [1.55-1.63]; `high` x1.59; `release_evidence/0.1.0/bench/bench_quick_1t_20261023-022943_3752.json`.
 
 ### 8e81581 K-11: blend/render path of e3mstp/e4mstp in cache-sized blocks, no fancy indexing, reused range tests
 - What: `normalize_lin`, `blend_multi_dim_images`, `render_images`, `blend_overlay`, `blend_soft_light`,
@@ -142,7 +143,7 @@ copied to `out/gate_final/` there.
 - Why equivalent: elementwise expressions with the same operand dtypes and order; masks taken before any write;
   floating-point warnings reproduced; any other input runs the original code.
 - Exact. numpy. Affected: e3mstp, e4mstp.
-- Gain: x1.13 [1.10-1.14] (e3mstp x1.26, e4mstp x1.06); `work/eval/bench_quick_1t_20261023-035510_13668.json`.
+- Gain: x1.13 [1.10-1.14] (e3mstp x1.26, e4mstp x1.06); `release_evidence/0.1.0/bench/bench_quick_1t_20261023-035510_13668.json`.
 
 ### 0ddd8e0 K-08a: accel infrastructure (rvt/_accel.py) and numba local_dominance kernel
 - What: `rvt/_accel.py`: lazy numba import, automatic fallback, `RVT_NO_ACCEL=1`, `RVT_NUM_THREADS` /
@@ -151,7 +152,7 @@ copied to `out/gate_final/` there.
   compares False and is skipped as `where=mask` does; no FMA contraction without fastmath.
 - Exact (numba == numpy bitwise). numba, 1 thread. Affected: local_dominance, e4mstp.
 - Gain: x1.58 [1.55-1.64] (local_dominance x6.14, e4mstp x1.31); `high` x1.60;
-  `work/eval/bench_quick_1t_20261023-041009_28376.json`. One-off: import numba 0.22 s, compile 0.24 s.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-041009_28376.json`. One-off: import numba 0.22 s, compile 0.24 s.
 
 ### b8c9a9f K-08b: numba MSTP deviation kernel (max_elevation_deviation)
 - What: serial kernel for the per-radius loop of the K-01 path.
@@ -159,7 +160,7 @@ copied to `out/gate_final/` there.
   running maximum with the same NaN rule; inputs outside 0 < r_min <= r_max, step > 0, float32/float64 run numpy.
 - Exact. Affected: mstp, e3mstp, e4mstp.
 - Gain: x1.30 [1.29-1.31] (mstp x2.12, e3mstp x1.29, e4mstp x1.18);
-  `work/eval/bench_quick_1t_20261023-042037_16132.json`. Compile 0.35 s.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-042037_16132.json`. Compile 0.35 s.
 
 ### 87b49f6 K-08c: numba kernel for the SVF horizon search (max_slope per direction)
 - What: the radius loop of `_svf_compute_window` runs in a serial kernel; `np.arctan`, `np.sin` and the
@@ -168,7 +169,7 @@ copied to `out/gate_final/` there.
   the sign of a zero maximum on ties may differ, which every later operation maps to identical outputs.
 - Exact. Affected: svf_asvf_opns, neg_opns, e3mstp, e4mstp.
 - Gain: x1.43 [1.42-1.44] (svf x1.58, neg_opns x1.83, e3mstp x1.29, e4mstp x1.46); `high` x1.42;
-  `work/eval/bench_quick_1t_20261023-043041_2132.json`. Compile 0.27 s.
+  `release_evidence/0.1.0/bench/bench_quick_1t_20261023-043041_2132.json`. Compile 0.27 s.
 
 ### bd173ea K-08d: numba kernel for the sky_illumination level search
 - What: two serial kernels replace the numpy row-block loop of `_sky_illum_search_blocked` (floor-once sequence,
@@ -176,7 +177,7 @@ copied to `out/gate_final/` there.
 - Why equivalent: same operations per pixel and shift; `np.maximum` written out with numpy's NaN rule and its
   operand choice on +0/-0 ties (numpy 2.4); guards send other inputs to numpy before any write.
 - Exact. Affected: sky_illumination.
-- Gain: x1.38 [1.37-1.40]; `high` x1.39; `work/eval/bench_quick_1t_20261023-044042_26480.json`. Compile 0.40 s.
+- Gain: x1.38 [1.37-1.40]; `high` x1.39; `release_evidence/0.1.0/bench/bench_quick_1t_20261023-044042_26480.json`. Compile 0.40 s.
 
 ### 8413d3e tests: equivalence tests for the optimized code paths
 - What: `tests/` with 223 tests (about 5 s): each optimized function against a transcription of the
@@ -185,7 +186,8 @@ copied to `out/gate_final/` there.
 
 ### Result of the series
 
-Final gate of the optimization run on `start` (`out/gate_final/` of the optimization workspace): `GATE FINAL PASS`;
+Final gate of the optimization run on `start` (acceptance harness, not shipped; the speed report is
+`release_evidence/0.1.0/bench/bench_final_1t_20261023-082005_12380.json`): `GATE FINAL PASS`;
 outputs bitwise identical to `baseline-fixed` on `dev`, `dev` without accelerators, `holdout` and `bench_final`;
 determinism PASS; pipeline x11.44 [11.35-11.46] with 1 thread, x10.86 [9.86-11.27] with default threading
 (informative).

@@ -90,11 +90,11 @@ A failing frozen test means the code change is wrong, not the test.
 ## 3. The proof chain
 
 The proof tools are in [tools/proof/](../tools/proof/README.md) of this repository and run from the repository
-root (`python tools/proof/<tool>.py`, in the development workspace `pixi run python tools/proof/<tool>.py`). They
+root (`python tools/proof/<tool>.py`, with the pinned pixi environment `pixi run python tools/proof/<tool>.py`). They
 find the repository from their own location, read the git refs `start`, `main` and `tests-frozen` of this
 repository, and build their scratch trees in `.proof_scratch/` (ignored by git). They use the standard library,
-numpy and pytest only. The 0.1.0 work ran the same scripts from the parent workspace (`work/llm/` there) before
-they were copied into the repository; the copies differ only in paths (repository root, scratch directory) and
+numpy and pytest only. The 0.1.0 work ran the same scripts from a directory outside this repository before
+they were copied into it; the copies differ only in paths (repository root, scratch directory) and
 in pinning the pytest root directory of a scratch tree, so that node ids do not depend on its location.
 
 ### 3.1 astcheck: what a commit may change, proven without running code
@@ -228,10 +228,11 @@ Measured on `main` before the freeze, accelerators on. No public function or met
 
 ### 3.6 Evaluation harness of the optimization run
 
-The optimization run was judged by a frozen harness (`eval/` of the workspace): correctness of 11 visualizations
-on real DEM windows (`dev`, `holdout`, `bench_final`), also with numba made unimportable; determinism with default,
-1 and 2 threads; benchmarks with a fresh process per call. On `start` it reported `GATE FINAL PASS` with every output
-bitwise identical to `baseline-fixed` (`out/gate_final/` of the workspace). The 0.1.0 release reruns these checks on
+The optimization run was judged by a frozen acceptance harness (not shipped, section 9): correctness of 11
+visualizations on real DEM windows (`dev`, `holdout`, `bench_final`), also with numba made unimportable;
+determinism with default, 1 and 2 threads; benchmarks with a fresh process per call. On `start` it reported
+`GATE FINAL PASS` with every output bitwise identical to `baseline-fixed` (speed report
+`release_evidence/0.1.0/bench/bench_final_1t_20261023-082005_12380.json`). The 0.1.0 release reruns these checks on
 the final `main`; their results are recorded in section 6.
 
 ## 4. Commands
@@ -247,10 +248,10 @@ Run from the repository root unless stated. Do not run plain `pytest` at the roo
 
 Expected last line: `1428 passed` (3 warnings) in all three runs; with `RVT_NO_ACCEL=1` the tests that compare
 the numba path with the numpy path run too (they switch the accelerators on themselves), so nothing is skipped.
-Without numba installed, the tests that need it are skipped. In the development workspace, prefix with `pixi run`
-and pass the path of the checkout, e.g. `pixi run pytest rvt_py_llm/tests -q`.
+Without numba installed, the tests that need it are skipped. With the pinned pixi environment (README, Install,
+route A), prefix with `pixi run`: `pixi run python -m pytest tests -q`.
 
-Proof tools, from the repository root (PowerShell and bash are the same command; in the development workspace
+Proof tools, from the repository root (PowerShell and bash are the same command; with the pixi environment
 prefix `pixi run`). Expected last lines and runtimes: [tools/proof/README.md](../tools/proof/README.md).
 
 ```
@@ -265,8 +266,9 @@ python tools/proof/doclint.py                                    # DOCLINT PASS
 
 ## 5. Lesson: a helper script that shadowed a package
 
-The first line-coverage helper was saved as `work/llm/coverage.py` in the workspace. The proof tools put their own
-directory (then `work/llm`, now `tools/proof`) on `PYTHONPATH` so that pytest can load `equiv_plugin.py`; numba
+The first line-coverage helper was saved as `coverage.py` next to the other proof scripts (then outside this
+repository, see section 3). The proof tools put their own directory (now `tools/proof`) on `PYTHONPATH` so that
+pytest can load `equiv_plugin.py`; numba
 imports the `coverage` package when it is present, and found the helper script instead, so numba failed to import
 in those runs. The test suite then skipped the 20 tests
 that need numba, the accelerated paths fell back to numpy, and two mutants in numba kernels (m06, m07) survived
@@ -277,11 +279,12 @@ exercise (no skips, kernels actually ran), not only that nothing failed.
 
 ## 6. Release evidence
 
-The evaluation harness of the optimization run (`eval/` of the parent workspace, frozen, see section 3.6) is
+The acceptance harness of the optimization run (not shipped, see sections 3.6 and 9) is
 rerun on the release candidate of 0.1.0 (2026-10-23, Windows 11, Intel i9-14900K, 32 logical CPUs, Python 3.11.17,
 numpy 2.4.6). Copies of the reports are in [release_evidence/0.1.0/](release_evidence/0.1.0/).
 
-Measured commit: `3df56b7` (package content hash `5d053dca2dcf`, as computed by `eval/common.py` `impl_hash`).
+Measured commit: `3df56b7` (package content hash `5d053dca2dcf`: the first 12 hex digits of the SHA-256 over the
+relative path and the bytes of every file under `rvt/`, bytecode excluded, in path order, as the harness computes it).
 Later commits up to the tag `v0.1.0` change no file under `rvt/` (`git diff --stat 3df56b7 v0.1.0 -- rvt` is empty),
 so the package that was measured is the released one.
 
@@ -298,7 +301,7 @@ so the package that was measured is the released one.
 | final gate | all of the above | `GATE FINAL PASS` | `gate_final.log` |
 
 "exact" means that every output differs from `baseline-fixed` by at most 1e-5 in float with an identical NaN mask
-(`eval/common.py`); 0 DN difference in every 8-bit comparison.
+(the comparison of the harness, section 9); 0 DN difference in every 8-bit comparison.
 
 Incident during these measurements: a stray `python -` process left by a crashed Git Bash command (not related to
 rvt) occupied one CPU core from 12:03 to 17:38, so the bench quick run and most of the final gate ran with one core
@@ -308,7 +311,7 @@ with the opt/perf gate within 0.3 % (x11.41 against x11.44, intervals overlap), 
 The absolute times are not comparable with the opt/perf gate. In the release run (report
 `bench_final_1t_20261023-170737_32096.json`) baseline and candidate medians are both 2.30-2.45 times longer than in
 the final gate of the optimization run on an idle machine (2026-10-23 08:20, report
-`bench_final_1t_20261023-082005_12380.json` in `out/gate_final/` of the optimization workspace), for every one of
+`release_evidence/0.1.0/bench/bench_final_1t_20261023-082005_12380.json`), for every one of
 the 33 rows (11 targets x 3 windows); per-row speed-ups agree within 2.2 %, except slope on the synthetic window
 (x1.00 against x0.95, 4.6 %). Medians, `medium` window, opt/perf gate -> release run:
 
@@ -320,15 +323,14 @@ the 33 rows (11 targets x 3 windows); per-row speed-ups agree within 2.2 %, exce
 
 A uniform factor of about 2.4 on both sides is not what one busy core of 32 does to processes free to run
 elsewhere. The probable cause (not verified) is that the harness pins each timed 1-thread process to the first CPU
-of its affinity list (`eval/run_impl.py:88` of the workspace, `cpu_affinity(cpus[: max(1, a.threads)])`), and the stray
+of its affinity list (the runner of the harness, not shipped: `cpu_affinity(cpus[: max(1, a.threads)])`), and the stray
 process ran on that same CPU, so every timed process shared its CPU with it. Absolute times of this release are
 therefore quoted from the opt/perf gate, with that report named next to them.
 
 ## 7. The 0.1.1 fixes: changed outputs, proven scope
 
-0.1.1 fixes five defects of the blend path ([FIXES_0_1_1.md](FIXES_0_1_1.md)). The work ran in the parent
-development workspace under a written plan with fixed readings; the lists and scripts named below are in its
-`work/fix/` directory, not in this repository. The steps:
+0.1.1 fixes five defects of the blend path ([FIXES_0_1_1.md](FIXES_0_1_1.md)). The work ran under a written plan
+with fixed readings; the lists and scripts named below are not in this repository (section 9). The steps:
 
 1. **Lists written before any code changed.** An allow-list of the 15 public functions whose records may change
    (`blend_func.blend_overlay`, `blend_soft_light`, `equation_blend`, `blend_multi_dim_images`, `blend_images`,
@@ -347,8 +349,9 @@ development workspace under a written plan with fixed readings; the lists and sc
 5. **One `fix:` commit per defect** (`a37ab44` X5, `c72646c` X4, `33a2bd5` X2, `c2456b1` X1, `d09e45d` X3), then
    `docs:` and `meta:` commits. Every commit was checked in its own worktree: astcheck; the full tests with and
    without `RVT_NO_ACCEL=1` (a fix commit fails only the tests of the later fixes; from `d09e45d` on all pass);
-   a record comparison with `v0.1.0` (below); the evaluation harness `check` on `dev` with and without
-   accelerators and `--determinism`; `eval/preview.py` against the previous commit as per-fix attribution.
+   a record comparison with `v0.1.0` (below); the harness check on `dev` with and without
+   accelerators and its determinism check; the preview of the harness against the previous commit as per-fix
+   attribution.
 6. **Freeze** (`81e50b1`): tag `tests-frozen` moved to `5b5cbad` (23 files, 1194 nodes, all PASSED); the 0.1.0
    freeze stays as tag `tests-frozen-0.1.0`.
 
@@ -383,9 +386,8 @@ section 6; copies in [release_evidence/0.1.1/](release_evidence/0.1.1/):
 
 ## 8. The 0.2.0 disk windows: default path unchanged, new path tested
 
-0.2.0 adds the keyword `kernel_shape` ([DISK_WINDOWS.md](DISK_WINDOWS.md)). The work ran in the parent development
-workspace under a written plan; the lists and scripts named below are in its `work/circ/` directory, not in this
-repository. The steps:
+0.2.0 adds the keyword `kernel_shape` ([DISK_WINDOWS.md](DISK_WINDOWS.md)). The work ran under a written plan; the
+lists and scripts named below are not in this repository (section 9). The steps:
 
 1. **Lists written before any code changed.** An allow-list of functions whose records may differ from `v0.1.1`:
    empty. A list of the frozen 0.1.1 nodes that pin the API the feature extends, found by a dry run of the frozen
@@ -428,3 +430,33 @@ Windows 11; copies in
 | eval determinism | PASS | `acceptance_summary.txt` |
 | e3mstp / e4mstp time, 0.2.0 against 0.1.1, medium 2048 x 2048 px, 1 thread, median of 5 | x1.002 / x0.997 (limit x1.02) | `timing.log` |
 | comparison runs, square of 0.2.0 against `v0.1.1` (3 tiles of 1024 x 1024 px, 3 full DEMs, 5 products) | 30 / 30 bitwise equal | `compare_tiles.md`, `compare_full.md` |
+
+## 9. External evidence: the acceptance harness is not shipped
+
+Everything in this repository can be rerun from a clone: the tests, the proof tools of `tools/proof/` and the
+commands of section 4. Two things cannot, because they live in a private workspace outside this repository and are
+not shipped:
+
+- **The acceptance harness.** A set of scripts that judged every performance commit and every release against the
+  upstream code. `check.py` computes the 11 visualizations of a target list with the candidate and with the cached
+  baseline on a set of DEM windows and compares them; the tolerance is stated in DN of rvt's own 8-bit display
+  stretch of each output (p99.9 of the absolute difference at most 5 DN, maximum 13 DN, mean 0.5 DN; "exact" in the
+  tables above means a float difference of at most 1e-5 with an identical NaN mask, which every release met). Its
+  exit code is 0 for pass, 1 for a failing candidate and 2 for an error of the harness itself. With
+  `--determinism` it runs the candidate twice with default threading, once with 1 and once with 2 threads and
+  requires bitwise identical outputs. `bench.py` times baseline and candidate in a fresh process per call, alternating
+  the two in every round (so a change of machine load hits both), and reports medians and bootstrap intervals of
+  the ratio per target and for the pipeline. `gate.py` runs the checks and the benchmark in sequence and prints
+  `GATE ... PASS` or `FAIL`. The JSON reports and logs that these scripts wrote are copied into
+  `release_evidence/<version>/` (and `release_evidence/0.1.0/bench/` for the per-commit benchmarks of
+  [CHANGES_VS_UPSTREAM.md](CHANGES_VS_UPSTREAM.md)); the scripts are not.
+- **The DEM sets.** Real lidar DEMs at 0.25 m/px, cut into the windows `dev` (8 windows used during development),
+  `holdout` (never used during development), `bench_quick` (one 1024 x 1024 px window) and `bench_final` (three
+  2048 x 2048 px windows: two real, one synthetic at +300 m), plus three full DEMs of about 10 000 x 8 000 px.
+  They are not part of the repository.
+
+A reader without the harness can still check the two claims that matter for using the package: the test suite
+(section 4) proves the behaviour of every public function, and `tools/proof/equiv.py --a v0.2.0 --b-dir .` proves
+that a change keeps every public call bitwise identical to the tag `v0.2.0` on the inputs of the frozen tests.
+The absolute speed-ups are reproducible in order of magnitude on any DEM with the functions named in
+[CHANGES_VS_UPSTREAM.md](CHANGES_VS_UPSTREAM.md); the exact ratios depend on the DEM and the machine.

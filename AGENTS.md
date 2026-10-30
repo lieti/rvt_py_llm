@@ -78,8 +78,8 @@ RVT_NO_ACCEL=1 python -m pytest tests -q                    # bash
 $env:RVT_NO_ACCEL="1"; python -m pytest tests -q; Remove-Item Env:RVT_NO_ACCEL   # PowerShell
 ```
 
-Proof tools, also from the repository root (they are in [tools/proof/](tools/proof/README.md); in the development
-workspace, the parent directory with `pixi.toml`, prefix every command with `pixi run`):
+Proof tools, also from the repository root (they are in [tools/proof/](tools/proof/README.md); with the pinned pixi
+environment of `pixi.lock` (README, Install, route A), prefix every command with `pixi run`):
 
 ```
 python tools/proof/astcheck.py --repo . --range main..HEAD      # every commit against its class

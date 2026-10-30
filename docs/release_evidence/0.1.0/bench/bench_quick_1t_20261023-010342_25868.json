@@ -1,0 +1,93 @@
+{
+  "mode": "quick",
+  "threads": "1",
+  "rounds": 5,
+  "machine": {
+    "python": "3.11.17",
+    "platform": "Windows-10-10.0.26100-SP0",
+    "cpu": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+    "cpu_count": 32,
+    "numpy": "2.4.6",
+    "ram_gb": 191.7
+  },
+  "cand": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\wt\\try-K-05",
+  "cand_hash": "5ffd02706c59",
+  "cand_git": {
+    "commit": "13c04bcedfdf05ebbf69f27a5fd9957d2c281723",
+    "tree": "450963407822638a4aaa4169996fc789bb5644cb",
+    "dirty": false,
+    "branch": "try/K-05"
+  },
+  "ref": "D:\\_____TIBOR\\26-10-22_RVT_py_Optimalisation\\rvt",
+  "ref_hash": "c7c1ea33c018",
+  "targets": [
+    "sky_illumination"
+  ],
+  "pipeline": {
+    "speedup": 3.0315722020957634,
+    "ci95": [
+      2.9714193335354087,
+      3.0410231611229177
+    ],
+    "required": 1.1
+  },
+  "summary": {
+    "sky_illumination": {
+      "geomean_speedup": 3.031572202095764,
+      "weight": 1.0,
+      "regressed": false,
+      "max_mem_ratio": 1.008313885647608,
+      "mem_ok": true
+    }
+  },
+  "violations": [],
+  "rows": [
+    {
+      "target": "sky_illumination",
+      "data": "real_1024_medium",
+      "crop_size": [
+        1024,
+        1024
+      ],
+      "ref_s": [
+        21.07303700002376,
+        21.499635700020008,
+        21.409051200025715,
+        21.54955080000218,
+        21.50621249998221
+      ],
+      "cand_s": [
+        7.091909500013571,
+        7.094788299989887,
+        7.075254099967424,
+        7.11089670000365,
+        7.072031799994875
+      ],
+      "ref_wall_s": [
+        23.67917000001762,
+        23.9423105000169,
+        23.906676799990237,
+        24.05402519996278,
+        24.001848399988376
+      ],
+      "cand_wall_s": [
+        9.265901700011455,
+        9.274949799990281,
+        9.285027100006118,
+        9.35644839995075,
+        9.34318440000061
+      ],
+      "ref_median_s": 21.499635700020008,
+      "cand_median_s": 7.091909500013571,
+      "speedup": 3.0315722020957634,
+      "ci95": [
+        2.9714193335354087,
+        3.0410231611229177
+      ],
+      "cand_mpx_per_s": 0.14785524265333524,
+      "worst_round_dn_p999": 0.0,
+      "mem_ratio": 1.008313885647608
+    }
+  ],
+  "passed": true
+}

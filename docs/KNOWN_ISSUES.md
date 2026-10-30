@@ -1213,8 +1213,8 @@ Found in 0.2.0 (module `rvt.vis`; numbered after KI-76 because the list was alre
 
 ## Tiling facts (not defects)
 
-These facts were measured on the optimized code at tag `start` with the frozen evaluation harness of the
-optimization run (`eval/overlap.py`), and are identical for the upstream code at tag `baseline-fixed`.
+These facts were measured on the optimized code at tag `start` with the overlap script of the acceptance harness
+(not shipped; [TESTING.md](TESTING.md), section 9), and are identical for the upstream code at tag `baseline-fixed`.
 
 ### Minimum tile buffer per visualization
 

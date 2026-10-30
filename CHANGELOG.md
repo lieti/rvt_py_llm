@@ -107,7 +107,7 @@ which is bitwise identical to the upstream code with the precision fix (`baselin
 - At the freeze: `equiv.py` (accel, t1, noaccel; 153/153 public functions executed) and `mutants.py` (21/21 mutants
   killed by the tests and by equiv) PASS. For each refactor commit: tests (accel and `RVT_NO_ACCEL=1`) and
   `equiv.py` PASS. Every commit of `start..main` passes `astcheck.py` for its class (see docs/TESTING.md).
-- Evaluation harness (frozen `eval/`) on the measured commit `3df56b7`: GATE FINAL PASS; dev, dev without numba, holdout
+- Acceptance harness (not shipped, docs/TESTING.md section 9) on the measured commit `3df56b7`: GATE FINAL PASS; dev, dev without numba, holdout
   and bench_final exact against `baseline-fixed`; determinism PASS; pipeline x11.41 [11.32-11.43] on `bench_final`, 1
   thread; x1.00 [0.995-1.012] against `opt/perf`. Details: docs/TESTING.md, section 6 (Release evidence).
 

@@ -141,7 +141,8 @@ bitwise equal to v0.1.1.
 ### 8.2 Full test DEMs
 
 Crop 512 px = 128 m per side (8 976 x 6 976 px); p99.9 DN / pixels above 5 DN against the square result of v0.1.1.
-The p99.9 is taken over the values of all bands together (`eval/common.py compare_one`); for MSTP, whose local band
+The p99.9 is taken over the values of all bands together (the comparison of the acceptance harness, not shipped;
+[TESTING.md](TESTING.md), section 9); for MSTP, whose local band
 does not change, per band: broad 44 / 30 / 27 DN and meso 26 / 19 / 21 DN (disk; low / medium / high), broad
 29 / 13 / 13 DN and meso 19 / 12 / 12 DN (equal area).
 

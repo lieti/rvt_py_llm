@@ -61,8 +61,9 @@ the default stays the square window with unchanged outputs. The code is faster, 
 
 - **Speed.** Local dominance, MSTP, sky-view factor and openness, sky illumination, SLRM, MSRM, e3MSTP and e4MSTP
   run 4 to 79 times faster (local dominance on a 2048 x 2048 px window: 33.97 s -> 0.43 s in the final gate of the
-  optimization run, 2026-10-23 08:20, idle machine, report `bench_final_1t_20261023-082005_12380.json` of the
-  optimization workspace; 80.51 s -> 1.01 s, the same x79, in the release evidence
+  optimization run, 2026-10-23 08:20, idle machine, report
+  `docs/release_evidence/0.1.0/bench/bench_final_1t_20261023-082005_12380.json`; 80.51 s -> 1.01 s, the same x79,
+  in the release evidence
   `docs/release_evidence/0.1.0/bench_final_1t_20261023-170737_32096.json`, measured with one CPU shared by a stray
   process, see `docs/TESTING.md` section 6). Slope and hillshade are
   unchanged. Memory use per call is lower or equal.

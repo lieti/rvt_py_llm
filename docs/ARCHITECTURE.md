@@ -54,7 +54,8 @@ package.
 ## 2. Call graph of the evaluated entry points
 
 The optimization run measured eleven entry points, each called as a tile pipeline calls it: a `DefaultValues()`
-instance with its defaults, or the composite function (`eval/targets.py` of the optimization workspace). The
+instance with its defaults, or the composite function (the target list of the acceptance harness, not shipped;
+[TESTING.md](TESTING.md), section 9). The
 functions that hold the time are named; `[numba]` marks a kernel run through `rvt._accel.call`, with the numpy
 code next to it as the fallback. File names are relative to `rvt/`; a line is a `def` unless marked "(call)".
 
